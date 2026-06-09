@@ -23,8 +23,10 @@ public partial class FuseDestroyRoot : FuseAction
 [ParsedSection]
 public partial class FuseStartEffect : FuseAction //[start_effect]
 {
-    [Entry("effect", Required = true)]
-    public string Effect = null!;
+    [Entry("effect")]
+    public string? Effect;
+    [Entry("particles")]
+    public string? Particles;
     [Entry("hardpoint", Multiline = true)]
     public List<string> Hardpoints = [];
     [Entry("attached")]
@@ -87,4 +89,46 @@ public partial class FuseImpulse : FuseAction //[impulse]
     public float Damage;
     [Entry("force")]
     public float Force;
+}
+
+[ParsedSection]
+public partial class FuseDumpCargo : FuseAction //[dump_cargo]
+{
+    [Entry("origin_hardpoint")]
+    public string? OriginHardpoint;
+}
+
+[ParsedSection]
+public partial class FuseDamageRoot : FuseAction //[damage_root]
+{
+    [Entry("damage_type")]
+    public string? DamageType;
+    [Entry("hitpoints")]
+    public float Hitpoints;
+}
+
+[ParsedSection]
+public partial class FuseDamageGroup : FuseAction //[damage_group]
+{
+    [Entry("group_name")]
+    public string? GroupName;
+    [Entry("damage_type")]
+    public string? DamageType;
+    [Entry("hitpoints")]
+    public float Hitpoints;
+}
+
+[ParsedSection]
+public partial class FuseTumble : FuseAction //[tumble]
+{
+    [Entry("ang_drag_scale")]
+    public float AngDragScale;
+    [Entry("turn_throttle_x")]
+    public Vector2 TurnThrottleX;
+    [Entry("turn_throttle_y")]
+    public Vector2 TurnThrottleY;
+    [Entry("turn_throttle_z")]
+    public Vector2 TurnThrottleZ;
+    [Entry("throttle")]
+    public Vector2 Throttle;
 }

@@ -61,7 +61,8 @@ namespace LibreLancer.Thn.Events
                 }
                 else
                 {
-                    var ren = ((ParticleEffectRenderer)obj.Object?.RenderComponent!);
+                    var ren = obj.Object?.RenderComponent as ParticleEffectRenderer;
+                    if (ren == null) return;
                     startValue = ren.SParam;
                 }
 

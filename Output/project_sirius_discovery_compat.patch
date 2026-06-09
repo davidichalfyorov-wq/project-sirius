@@ -1,0 +1,1065 @@
+diff -ruN a/CHANGELOG.md b/CHANGELOG.md
+--- a/CHANGELOG.md	1970-01-01 00:00:00.000000000 +0000
++++ b/CHANGELOG.md	2026-06-09 07:56:01.446680280 +0000
+@@ -0,0 +1,69 @@
++# CHANGELOG — Project Sirius Discovery 4.86 compatibility pass
++
++## 2026-06-09
++
++### Discovery data loading
++- Added parsing for Discovery `WeaponModDB = equipment\\WeaponModDB.ini` from `[Data]` in `EXE/freelancer.ini`.
++- Added fallback loading for `DATA/EQUIPMENT/weaponmoddb.ini` when the key is absent.
++- Added parser for `commodities_per_faction.ini`:
++  - `[FactionGood]`
++  - `faction = ...`
++  - multiline `MarketGood = good, min, max`
++- Added fallback loading for `DATA/EQUIPMENT/commodities_per_faction.ini`, because Discovery 4.86 ships the file but does not reference it from `[Data]`.
++- Added runtime `FactionCommodityProfile` storage and linked profiles to `Faction` plus `BaseSoldGood` records.
++- Added Discovery-safe `librelancer.ini` for the Discovery root. It has an empty `[Resources]` section and direct `[Data]` paths, so Linux runs do not attempt to load `Discovery.dll`, `DsyAddition.dll`, or other Windows DLL resources.
++
++### Weapon/shield damage compatibility
++- Added runtime shield modifier storage to `MunitionEquip` and `MissileEquip`.
++- Applied `WeaponModDB` shield modifiers during equipment initialization.
++- Integrated shield damage modifiers into server projectile damage.
++- Integrated shield damage modifiers into missile explosion damage per affected target.
++
++### Discovery-specific equipment recognition
++- Added `DiscoverySpecialEquipmentKind` with `JumpDrive`, `DockingModule`, and `SurveyModule`.
++- Classified Discovery jump drives, survey modules, and docking modules in `ShieldEquipment` based on their Discovery nicknames. Discovery encodes these items as `[ShieldGenerator]` entries in `st_equip.ini`.
++
++### Fuse compatibility
++- Added parser support for Discovery/large-ship fuse child sections:
++  - `[dump_cargo]`
++  - `[damage_root]`
++  - `[damage_group]`
++  - `[tumble]`
++- Added `particles` alias support for `[start_effect]` and made runtime fuse effect spawning skip empty effect names safely.
++
++### Additional schema compatibility
++- Added Discovery/vanilla-extended fields found during the audit:
++  - `CollisionGroup.explosion_resistance`
++  - `Armor.category`
++  - `Munition.owner_safe_time`
++  - `NewCharPilot.thumb`
++  - `LightSource.color_curve`
++  - `SystemInfo.name`
++  - `EncounterFormation.longevity`
++  - `Asteroid.explosion_impulse`
++  - `Asteroid.phantom_physics`
++  - `DynamicAsteroid.particle_effect`
++  - `Simple.MinSpecLOD`
++- Added shiparch compatibility fields/handlers used by Discovery ship/solar-like ship entries:
++  - `solar_radius`
++  - `destructible`
++  - `shape_name`
++  - `loadout`
++  - `distance_render`
++  - `docking_camera`
++  - multiline `docking_sphere`
++
++### Audit result
++- Audited Discovery `EXE/freelancer.ini`: 97 `[Data]` entries.
++- Audited main referenced data groups and dependent universe graph files.
++- After the changes, the audit reports no unknown sections or entries in the covered Discovery schema groups.
++
++### Not completed in this pass
++- Full FLHook replacement gameplay systems are not implemented here:
++  - player-owned bases,
++  - full jump-drive activation/gameplay,
++  - full cloak detection/energy gameplay,
++  - player slash commands,
++  - mine control,
++  - complete dynamic faction economy simulation.
++- The changes add parser/runtime foundations and damage/economy data wiring needed before those gameplay systems can be implemented safely.
+diff -ruN a/TEST_REPORT.md b/TEST_REPORT.md
+--- a/TEST_REPORT.md	1970-01-01 00:00:00.000000000 +0000
++++ b/TEST_REPORT.md	2026-06-09 07:56:55.562778231 +0000
+@@ -0,0 +1,137 @@
++# TEST_REPORT — Project Sirius Discovery 4.86 compatibility pass
++
++Date: 2026-06-09
++
++## Environment
++
++- Work directory: `/mnt/data/project_sirius_work/src_bundle`
++- Discovery text data: `/mnt/data/project_sirius_work/discovery_text/Discovery Freelancer 4.86.0`
++- Binary Discovery assets are not present in the provided archive.
++- `.NET SDK / dotnet` is not installed in this execution environment.
++
++## Required documentation/data review
++
++- `PROJECT_SIRIUS_ARCHITECTURE.md`: read before code changes.
++- Discovery `EXE/freelancer.ini`: audited.
++- `discovery_data_text.tar.gz`: extracted and audited.
++
++## Discovery data audit
++
++### `EXE/freelancer.ini`
++
++- `[Data]` entries found: 97.
++- All valued `[Data]` paths exist in the provided text archive.
++- Discovery additions confirmed:
++  - `ships = ships\\rtc_shiparch.ini`
++  - 16 fuse files under `fx\\fuse*.ini`
++  - `loadouts_special.ini`
++  - `loadouts_utility.ini`
++  - `WeaponModDB = equipment\\WeaponModDB.ini`
++- `commodities_per_faction.ini` exists under `DATA/EQUIPMENT/` but is not referenced by `[Data]`, so the loader now detects it as a Discovery fallback.
++- `[Resources]` includes Windows DLL resources in the original `freelancer.ini`; a `librelancer.ini` with an empty `[Resources]` section was generated to avoid loading Windows DLLs on Linux.
++
++### Discovery-specific files
++
++- `commodities_per_faction.ini`:
++  - `[FactionGood]` sections: 97
++  - `MarketGood` lines: 1437
++  - observed min/max tuple set: `(0, 0)`
++- `weaponmoddb.ini`:
++  - `[WeaponType]` sections: 21
++  - `shield_mod` lines: 189
++
++### Referenced/dependent graph audit
++
++Command:
++
++```bash
++python3 audit_discovery_full.py
++```
++
++Result summary:
++
++- Main referenced data groups:
++  - unknown sections: none
++  - unknown entries: none
++- Dependent universe graph:
++  - systems: 155
++  - bases: 772
++  - rooms: 1552
++  - nebulas: 168
++  - asteroid fields: 511
++  - encounter files: 1781
++  - missing dependent paths: 0
++  - unknown dependent sections: none
++  - unknown dependent entries: none
++
++The full output is saved outside the source tree as `audit_discovery_full_output.txt`.
++
++## Build/test attempts
++
++### `dotnet build src/lancer/lancer.csproj`
++
++Command attempted from `/mnt/data/project_sirius_work/src_bundle`:
++
++```bash
++dotnet build src/lancer/lancer.csproj
++```
++
++Result: not executed successfully in this container because `dotnet` is unavailable.
++
++Captured output:
++
++```text
++bash: line 2: dotnet: command not found
++```
++
++
++### `./build.sh`
++
++Command attempted from `/mnt/data/project_sirius_work/src_bundle`:
++
++```bash
++./build.sh
++```
++
++Result: failed during dependency check because `dotnet` is unavailable.
++
++Captured output:
++
++```text
++Cannot find dotnet on PATH
++ERROR: Dependency check failed.
++```
++
++## Functional runtime tests
++
++Not verified in this environment:
++
++- `./build.sh`
++- launching `build/lancer`
++- loading LI01/New York in the running client
++- rendering ships/bases/asteroids
++- flight, shooting, docking
++- live trading UI/server transactions
++- dedicated server accepting clients
++
++Reasons:
++
++- no `.NET SDK / dotnet` in the container;
++- provided archive contains text data only, not the 4.4 GB binary asset set required for a real client run.
++
++## Current status
++
++Implemented and audited:
++
++- Discovery parser compatibility for the audited data groups;
++- `WeaponModDB` shield modifier loading and server-side damage integration;
++- `commodities_per_faction.ini` parser and runtime profile wiring;
++- Discovery fuse-section compatibility;
++- Discovery shiparch/system/encounter/asteroid schema additions;
++- Linux-safe `librelancer.ini` generation.
++
++Remaining before declaring full Discovery gameplay support:
++
++- run a real `dotnet build` on a machine with .NET 10 SDK;
++- run the client/server with the complete Discovery binary assets;
++- implement full C# replacements for the FLHook gameplay plugins listed in the technical assignment.
+diff -ruN a/src/LibreLancer/Server/Components/SFuseRunnerComponent.cs b/src/LibreLancer/Server/Components/SFuseRunnerComponent.cs
+--- a/src/LibreLancer/Server/Components/SFuseRunnerComponent.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer/Server/Components/SFuseRunnerComponent.cs	2026-06-09 07:35:45.119971436 +0000
+@@ -73,9 +73,15 @@
+ 
+                 if (act is FuseStartEffect fxact)
+                 {
++                    var effect = fxact.Effect ?? fxact.Particles;
++                    if (string.IsNullOrEmpty(effect))
++                    {
++                        continue;
++                    }
++
+                     Effects.Add(new SpawnedEffect()
+                     {
+-                        ID = fxID++, Effect = fxact.Effect,
++                        ID = fxID++, Effect = effect,
+                         Hardpoints = fxact.Hardpoints.ToArray(),
+                     });
+                     world.Server!.EffectSpawned(Parent);
+diff -ruN a/src/LibreLancer/Server/Components/SHealthComponent.cs b/src/LibreLancer/Server/Components/SHealthComponent.cs
+--- a/src/LibreLancer/Server/Components/SHealthComponent.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer/Server/Components/SHealthComponent.cs	2026-06-09 07:44:26.953654387 +0000
+@@ -183,7 +183,7 @@
+             }
+         }
+ 
+-        public void DamageExplosion(float hullDamage, float energyDamage, GameObject? attacker, Vector3 origin, float radius)
++        public void DamageExplosion(float hullDamage, float energyDamage, GameObject? attacker, Vector3 origin, float radius, float shieldDamageMultiplier = 1f)
+         {
+             if (energyDamage <= 0)
+             {
+@@ -192,7 +192,7 @@
+ 
+             var shield = Parent.GetFirstChildComponent<SShieldComponent>();
+ 
+-            if (shield is not null && shield.Damage(energyDamage))
++            if (shield is not null && shield.Damage(energyDamage * shieldDamageMultiplier))
+             {
+                 return;
+             }
+@@ -209,7 +209,7 @@
+             }
+         }
+ 
+-        public void Damage(float hullDamage, float energyDamage, GameObject? attacker, GameObject? child)
++        public void Damage(float hullDamage, float energyDamage, GameObject? attacker, GameObject? child, float shieldDamageMultiplier = 1f)
+         {
+             if (energyDamage <= 0)
+             {
+@@ -218,7 +218,7 @@
+ 
+             var shield = Parent.GetFirstChildComponent<SShieldComponent>();
+ 
+-            if (shield is not null && shield.Damage(energyDamage))
++            if (shield is not null && shield.Damage(energyDamage * shieldDamageMultiplier))
+             {
+                 return;
+             }
+diff -ruN a/src/LibreLancer/Server/ServerWorld.cs b/src/LibreLancer/Server/ServerWorld.cs
+--- a/src/LibreLancer/Server/ServerWorld.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer/Server/ServerWorld.cs	2026-06-09 07:44:26.955538517 +0000
+@@ -213,8 +213,12 @@
+             {
+                 if (other?.Tag is GameObject g && g.TryGetComponent<SHealthComponent>(out var health))
+                 {
++                    var shield = g.GetFirstChildComponent<SShieldComponent>();
++                    var shieldDamageModifier = shield is null
++                        ? 1f
++                        : missile.Missile.GetShieldDamageModifier(shield.Equip.Def.ShieldType);
+                     health.DamageExplosion(missile.Missile.Explosion.HullDamage, missile.Missile.Explosion.EnergyDamage,
+-                            missile.Owner, pos, missile.Missile.Explosion.Radius);
++                            missile.Owner, pos, missile.Missile.Explosion.Radius, shieldDamageModifier);
+                     health.OnProjectileHit(missile.Owner);
+                 }
+             }
+@@ -502,7 +506,11 @@
+         {
+             if (obj.TryGetComponent<SHealthComponent>(out var health))
+             {
+-                health.Damage(munition.Def.HullDamage, munition.Def.EnergyDamage, owner, child);
++                var shield = obj.GetFirstChildComponent<SShieldComponent>();
++                var shieldDamageModifier = shield is null
++                    ? 1f
++                    : munition.GetShieldDamageModifier(shield.Equip.Def.ShieldType);
++                health.Damage(munition.Def.HullDamage, munition.Def.EnergyDamage, owner, child, shieldDamageModifier);
+                 health.OnProjectileHit(owner);
+             }
+         }
+diff -ruN a/src/LibreLancer.Data/GameData/BaseSoldGood.cs b/src/LibreLancer.Data/GameData/BaseSoldGood.cs
+--- a/src/LibreLancer.Data/GameData/BaseSoldGood.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/BaseSoldGood.cs	2026-06-09 07:31:37.895806642 +0000
+@@ -13,4 +13,5 @@
+     public required float Rep;
+     public required ulong Price;
+     public required bool ForSale;
++    public FactionCommodityRule? FactionRule;
+ }
+diff -ruN a/src/LibreLancer.Data/GameData/Faction.cs b/src/LibreLancer.Data/GameData/Faction.cs
+--- a/src/LibreLancer.Data/GameData/Faction.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/Faction.cs	2026-06-09 07:31:34.026949481 +0000
+@@ -27,6 +27,7 @@
+ 
+     public List<Voice> NpcVoices = [];
+     public List<ShipArch> NpcShips = [];
++    public FactionCommodityProfile? CommodityProfile;
+ 
+     public Dictionary<string, List<ShipArch>> ShipsByClass = new(StringComparer.OrdinalIgnoreCase);
+     public Dictionary<string, FormationDef> Formations = new(StringComparer.OrdinalIgnoreCase);
+diff -ruN a/src/LibreLancer.Data/GameData/FactionCommodityProfile.cs b/src/LibreLancer.Data/GameData/FactionCommodityProfile.cs
+--- a/src/LibreLancer.Data/GameData/FactionCommodityProfile.cs	1970-01-01 00:00:00.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/FactionCommodityProfile.cs	2026-06-09 07:31:30.817254424 +0000
+@@ -0,0 +1,15 @@
++using System;
++using System.Collections.Generic;
++using LibreLancer.Data.GameData.Items;
++
++namespace LibreLancer.Data.GameData;
++
++public class FactionCommodityProfile
++{
++    public required Faction Faction;
++    public Dictionary<string, FactionCommodityRule> Commodities = new(StringComparer.OrdinalIgnoreCase);
++
++    public bool Allows(string nickname) => Commodities.ContainsKey(nickname);
++}
++
++public readonly record struct FactionCommodityRule(ResolvedGood Good, int Min, int Max);
+diff -ruN a/src/LibreLancer.Data/GameData/Items/DiscoverySpecialEquipmentKind.cs b/src/LibreLancer.Data/GameData/Items/DiscoverySpecialEquipmentKind.cs
+--- a/src/LibreLancer.Data/GameData/Items/DiscoverySpecialEquipmentKind.cs	1970-01-01 00:00:00.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/Items/DiscoverySpecialEquipmentKind.cs	2026-06-09 07:31:30.836339495 +0000
+@@ -0,0 +1,9 @@
++namespace LibreLancer.Data.GameData.Items;
++
++public enum DiscoverySpecialEquipmentKind
++{
++    None,
++    JumpDrive,
++    DockingModule,
++    SurveyModule
++}
+diff -ruN a/src/LibreLancer.Data/GameData/Items/MissileEquip.cs b/src/LibreLancer.Data/GameData/Items/MissileEquip.cs
+--- a/src/LibreLancer.Data/GameData/Items/MissileEquip.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/Items/MissileEquip.cs	2026-06-09 07:44:26.949416314 +0000
+@@ -1,3 +1,6 @@
++using System;
++using System.Collections.Generic;
++
+ namespace LibreLancer.Data.GameData.Items;
+ 
+ public class MissileEquip : Equipment
+@@ -6,4 +9,15 @@
+     public required Data.Schema.Equipment.Motor? Motor;
+     public required Data.Schema.Equipment.Explosion Explosion;
+     public ResolvedFx? ExplodeFx;
++    public Dictionary<string, float> ShieldDamageModifiers = new(StringComparer.OrdinalIgnoreCase);
++
++    public float GetShieldDamageModifier(string? shieldType)
++    {
++        if (string.IsNullOrWhiteSpace(shieldType))
++        {
++            return 1f;
++        }
++
++        return ShieldDamageModifiers.TryGetValue(shieldType, out var modifier) ? modifier : 1f;
++    }
+ }
+diff -ruN a/src/LibreLancer.Data/GameData/Items/MunitionEquip.cs b/src/LibreLancer.Data/GameData/Items/MunitionEquip.cs
+--- a/src/LibreLancer.Data/GameData/Items/MunitionEquip.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/Items/MunitionEquip.cs	2026-06-09 07:31:56.134096097 +0000
+@@ -1,4 +1,7 @@
+-﻿namespace LibreLancer.Data.GameData.Items;
++﻿using System;
++using System.Collections.Generic;
++
++namespace LibreLancer.Data.GameData.Items;
+ 
+ public class MunitionEquip : Equipment
+ {
+@@ -7,4 +10,15 @@
+     //Fx Stuff
+     public Schema.Effects.BeamSpear? ConstEffect_Spear;
+     public Schema.Effects.BeamBolt? ConstEffect_Bolt;
++    public Dictionary<string, float> ShieldDamageModifiers = new(StringComparer.OrdinalIgnoreCase);
++
++    public float GetShieldDamageModifier(string? shieldType)
++    {
++        if (string.IsNullOrWhiteSpace(shieldType))
++        {
++            return 1f;
++        }
++
++        return ShieldDamageModifiers.TryGetValue(shieldType, out var modifier) ? modifier : 1f;
++    }
+ }
+diff -ruN a/src/LibreLancer.Data/GameData/Items/ShieldEquipment.cs b/src/LibreLancer.Data/GameData/Items/ShieldEquipment.cs
+--- a/src/LibreLancer.Data/GameData/Items/ShieldEquipment.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameData/Items/ShieldEquipment.cs	2026-06-09 07:31:41.473779749 +0000
+@@ -7,4 +7,5 @@
+ public class ShieldEquipment : Equipment
+ {
+     public required Data.Schema.Equipment.ShieldGenerator Def;
++    public DiscoverySpecialEquipmentKind DiscoveryKind;
+ }
+diff -ruN a/src/LibreLancer.Data/GameItemDb.cs b/src/LibreLancer.Data/GameItemDb.cs
+--- a/src/LibreLancer.Data/GameItemDb.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/GameItemDb.cs	2026-06-09 07:44:26.952521256 +0000
+@@ -72,6 +72,7 @@
+     public GameItemCollection<Equipment> Equipment = [];
+     public readonly GameItemCollection<Explosion> Explosions = [];
+     public readonly GameItemCollection<Faction> Factions = [];
++    public Dictionary<string, FactionCommodityProfile> FactionCommodityProfiles = new(StringComparer.OrdinalIgnoreCase);
+     public GameItemCollection<ResolvedGood> Goods = [];
+     public List<IntroScene> IntroScenes = [];
+     public IEnumerable<ObjectLoadout> Loadouts => _loadouts.Values;
+@@ -566,13 +567,20 @@
+                 }
+                 else if (Goods.TryGetValue(gd.Good, out var good))
+                 {
++                    FactionCommodityRule? factionRule = null;
++                    if (@base.LocalFaction?.CommodityProfile?.Commodities.TryGetValue(good.Nickname, out var rule) == true)
++                    {
++                        factionRule = rule;
++                    }
++
+                     @base.SoldGoods.Add(new BaseSoldGood()
+                     {
+                         Rep = gd.Rep,
+                         Rank = gd.Rank,
+                         Good = good!,
+                         Price = (ulong)((double)good!.Ini.Price * gd.Multiplier),
+-                        ForSale = gd.Max > 0
++                        ForSale = gd.Max > 0,
++                        FactionRule = factionRule
+                     });
+                 }
+             }
+@@ -581,6 +589,48 @@
+         flData.Markets = null; //Free memory
+     }
+ 
++    private void InitFactionCommodityProfiles()
++    {
++        FactionCommodityProfiles = new Dictionary<string, FactionCommodityProfile>(StringComparer.OrdinalIgnoreCase);
++
++        if (flData.CommoditiesPerFaction == null)
++        {
++            return;
++        }
++
++        FLLog.Info("Game", $"Initing {flData.CommoditiesPerFaction.FactionGoods.Count} faction commodity profiles");
++
++        foreach (var fg in flData.CommoditiesPerFaction.FactionGoods)
++        {
++            if (!Factions.TryGetValue(fg.Faction, out var faction))
++            {
++                FLLog.Warning("Economy", $"FactionGood references nonexistent faction {fg.Faction}");
++                continue;
++            }
++
++            var profile = new FactionCommodityProfile
++            {
++                Faction = faction
++            };
++
++            foreach (var marketGood in fg.MarketGoods)
++            {
++                if (!Goods.TryGetValue(marketGood.Good, out var good))
++                {
++                    FLLog.Warning("Economy", $"FactionGood {fg.Faction} references nonexistent good {marketGood.Good}");
++                    continue;
++                }
++
++                profile.Commodities[good.Nickname] = new FactionCommodityRule(good, marketGood.Min, marketGood.Max);
++            }
++
++            faction.CommodityProfile = profile;
++            FactionCommodityProfiles[faction.Nickname] = profile;
++        }
++
++        flData.CommoditiesPerFaction = null; //Free memory
++    }
++
+     public FormationDef? GetFormation(string form) =>
+         string.IsNullOrWhiteSpace(form)
+             ? null
+@@ -851,9 +901,10 @@
+         }, baseTask);
+         var goodsTask = tasks.Begin(InitGoods, equipmentTask);
+         var archetypesTask = tasks.Begin(InitArchetypes, loadoutsTask, debrisTask);
++        var factionCommodityTask = tasks.Begin(InitFactionCommodityProfiles, factionsTask, goodsTask);
+         var starsTask = tasks.Begin(InitStars);
+         var astsTask = tasks.Begin(InitAsteroids);
+-        tasks.Begin(InitMarkets, baseTask, goodsTask, archetypesTask);
++        tasks.Begin(InitMarkets, baseTask, goodsTask, archetypesTask, factionCommodityTask);
+         tasks.Begin(InitNews, baseTask);
+         tasks.Begin(() => InitSystems(tasks),
+             baseTask,
+@@ -948,6 +999,15 @@
+     {
+         FLLog.Info("Game", $"Initing {flData.Equipment!.Equip.Count} equipments");
+         Dictionary<string, LightInheritHelper> lights = new(StringComparer.OrdinalIgnoreCase);
++        Dictionary<string, LibreLancer.Data.Schema.Equipment.WeaponType> weaponMods = new(StringComparer.OrdinalIgnoreCase);
++
++        if (flData.WeaponModDb != null)
++        {
++            foreach (var weaponType in flData.WeaponModDb.WeaponTypes)
++            {
++                weaponMods[weaponType.Nickname] = weaponType;
++            }
++        }
+ 
+         void SetCommonFields(Equipment equip, AbstractEquipment val)
+         {
+@@ -960,6 +1020,26 @@
+             equip.Volume = val.Volume;
+         }
+ 
++        void ApplyWeaponMods(Munition munition, IDictionary<string, float> shieldDamageModifiers)
++        {
++            if (string.IsNullOrWhiteSpace(munition.WeaponType) ||
++                !weaponMods.TryGetValue(munition.WeaponType, out var weaponType))
++            {
++                return;
++            }
++
++            foreach (var shieldMod in weaponType.ShieldMods)
++            {
++                shieldDamageModifiers[shieldMod.ShieldType] = shieldMod.Multiplier;
++            }
++        }
++
++        void ApplyWeaponMods(MunitionEquip equip) =>
++            ApplyWeaponMods(equip.Def, equip.ShieldDamageModifiers);
++
++        void ApplyWeaponMods(MissileEquip equip) =>
++            ApplyWeaponMods(equip.Def, equip.ShieldDamageModifiers);
++
+         //Process munitions first
+         foreach (var mn in flData.Equipment.Munitions)
+         {
+@@ -982,6 +1062,7 @@
+                     mequip.ExplodeFx = Effects.Get(mequip.Explosion.Effect);
+                 }
+ 
++                ApplyWeaponMods(mequip);
+                 equip = mequip;
+             }
+             else
+@@ -993,6 +1074,7 @@
+                     ConstEffect_Spear = effect?.Spear,
+                     ConstEffect_Bolt = effect?.Bolt,
+                 };
++                ApplyWeaponMods(mequip);
+                 equip = mequip;
+             }
+ 
+@@ -1130,6 +1212,7 @@
+                 {
+                     HpType = sh.HpType,
+                     Def = sh,
++                    DiscoveryKind = ClassifyDiscoveryShield(sh),
+                     ModelFile = ResolveDrawable(sh.MaterialLibrary, sh.DaArchetype)
+                 };
+                 equip = eqp;
+@@ -1255,9 +1338,32 @@
+             eq.LootAppearance = Equipment.Get(val.LootAppearance) as LootCrateEquipment;
+         }
+ 
++        flData.WeaponModDb = null; //Free memory
+         flData.Equipment = null; //Free memory
+     }
+ 
++    private static DiscoverySpecialEquipmentKind ClassifyDiscoveryShield(ShieldGenerator shield)
++    {
++        var nickname = shield.Nickname ?? "";
++
++        if (nickname.StartsWith("dsy_hspace_jump_drive_", StringComparison.OrdinalIgnoreCase))
++        {
++            return DiscoverySpecialEquipmentKind.JumpDrive;
++        }
++
++        if (nickname.StartsWith("dsy_hspace_survey_module_", StringComparison.OrdinalIgnoreCase))
++        {
++            return DiscoverySpecialEquipmentKind.SurveyModule;
++        }
++
++        if (nickname.StartsWith("dsy_docking_module_", StringComparison.OrdinalIgnoreCase))
++        {
++            return DiscoverySpecialEquipmentKind.DockingModule;
++        }
++
++        return DiscoverySpecialEquipmentKind.None;
++    }
++
+     private Vector3 GetQuadratic(string attenCurve)
+     {
+         if (quadratics.TryGetValue(attenCurve, out var q))
+@@ -2567,14 +2673,16 @@
+                     continue;
+                 }
+ 
+-                if (string.IsNullOrEmpty(fza.Effect))
++                var effect = fza.Effect ?? fza.Particles;
++
++                if (string.IsNullOrEmpty(effect))
+                 {
+                     continue;
+                 }
+ 
+-                if (!fr.Fx.ContainsKey(fza.Effect))
++                if (!fr.Fx.ContainsKey(effect))
+                 {
+-                    fr.Fx[fza.Effect] = Effects.Get(fza.Effect)!;
++                    fr.Fx[effect] = Effects.Get(effect)!;
+                 }
+             }
+ 
+diff -ruN a/src/LibreLancer.Data/Schema/Equipment/Armor.cs b/src/LibreLancer.Data/Schema/Equipment/Armor.cs
+--- a/src/LibreLancer.Data/Schema/Equipment/Armor.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Equipment/Armor.cs	2026-06-09 07:31:10.147673559 +0000
+@@ -10,4 +10,5 @@
+ public partial class Armor : AbstractEquipment
+ {
+     [Entry("hit_pts_scale")] public float HitPtsScale;
++    [Entry("category")] public string? Category;
+ }
+\ No newline at end of file
+diff -ruN a/src/LibreLancer.Data/Schema/Equipment/Munition.cs b/src/LibreLancer.Data/Schema/Equipment/Munition.cs
+--- a/src/LibreLancer.Data/Schema/Equipment/Munition.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Equipment/Munition.cs	2026-06-09 07:31:13.362404315 +0000
+@@ -50,4 +50,6 @@
+     public string? MunitionHitEffect;
+     [Entry("cruise_disruptor")]
+     public bool CruiseDisruptor;
++    [Entry("owner_safe_time")]
++    public float OwnerSafeTime;
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Equipment/WeaponModDbIni.cs b/src/LibreLancer.Data/Schema/Equipment/WeaponModDbIni.cs
+--- a/src/LibreLancer.Data/Schema/Equipment/WeaponModDbIni.cs	1970-01-01 00:00:00.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Equipment/WeaponModDbIni.cs	2026-06-09 07:29:57.738014050 +0000
+@@ -0,0 +1,30 @@
++using System.Collections.Generic;
++using LibreLancer.Data.Ini;
++using LibreLancer.Data.IO;
++
++namespace LibreLancer.Data.Schema.Equipment;
++
++[ParsedIni]
++public partial class WeaponModDbIni
++{
++    [Section("weapontype")]
++    public List<WeaponType> WeaponTypes = [];
++
++    public void AddFile(string filename, FileSystem vfs, IniStringPool? stringPool = null) =>
++        ParseIni(filename, vfs, stringPool);
++}
++
++[ParsedSection]
++public partial class WeaponType
++{
++    [Entry("nickname", Required = true)]
++    public string Nickname = null!;
++
++    public List<ShieldModifier> ShieldMods = [];
++
++    [EntryHandler("shield_mod", MinComponents = 2, Multiline = true)]
++    private void HandleShieldMod(Entry e) =>
++        ShieldMods.Add(new ShieldModifier(e[0].ToString(), e[1].ToSingle()));
++}
++
++public readonly record struct ShieldModifier(string ShieldType, float Multiplier);
+diff -ruN a/src/LibreLancer.Data/Schema/FreelancerData.cs b/src/LibreLancer.Data/Schema/FreelancerData.cs
+--- a/src/LibreLancer.Data/Schema/FreelancerData.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/FreelancerData.cs	2026-06-09 07:30:13.412820513 +0000
+@@ -45,6 +45,7 @@
+     public ExplosionsIni Explosions = null!;
+     public FuseIni Fuses = null!;
+     public EquipmentIni? Equipment;
++    public WeaponModDbIni? WeaponModDb;
+     public HpTypesIni HpTypes = null!;
+     public LoadoutsIni Loadouts = null!;
+     public SolararchIni Solar = null!;
+@@ -56,6 +57,7 @@
+     public AudioIni Audio = null!;
+     public GoodsIni? Goods;
+     public MarketsIni? Markets;
++    public CommoditiesPerFactionIni? CommoditiesPerFaction;
+     public GraphIni Graphs = null!;
+     public TexturePanels EffectShapes = null!;
+     public MouseIni Mouse = null!;
+@@ -147,6 +149,25 @@
+         });
+         Run(() =>
+         {
++            WeaponModDb = new WeaponModDbIni();
++            if (Freelancer.WeaponModDbPaths.Count > 0)
++            {
++                foreach (var wm in Freelancer.WeaponModDbPaths)
++                {
++                    WeaponModDb.AddFile(wm, VFS, stringPool);
++                }
++            }
++            else
++            {
++                var weaponModDb = Freelancer.DataPath + "equipment\\weaponmoddb.ini";
++                if (VFS.FileExists(weaponModDb))
++                {
++                    WeaponModDb.AddFile(weaponModDb, VFS, stringPool);
++                }
++            }
++        });
++        Run(() =>
++        {
+             Solar = new SolararchIni();
+             foreach (var file in Freelancer.SolarPaths)
+             {
+@@ -336,6 +357,25 @@
+         });
+         Run(() =>
+         {
++            CommoditiesPerFaction = new CommoditiesPerFactionIni();
++            if (Freelancer.CommoditiesPerFactionPaths.Count > 0)
++            {
++                foreach (var cpf in Freelancer.CommoditiesPerFactionPaths)
++                {
++                    CommoditiesPerFaction.AddFile(cpf, VFS, stringPool);
++                }
++            }
++            else
++            {
++                var commoditiesPerFaction = Freelancer.DataPath + "equipment\\commodities_per_faction.ini";
++                if (VFS.FileExists(commoditiesPerFaction))
++                {
++                    CommoditiesPerFaction.AddFile(commoditiesPerFaction, VFS, stringPool);
++                }
++            }
++        });
++        Run(() =>
++        {
+             if (VFS.FileExists(Freelancer.DataPath + "missions\\npcships.ini"))
+                 NPCShips = new NPCShipIni(Freelancer.DataPath + "missions\\npcships.ini", VFS, stringPool);
+         });
+diff -ruN a/src/LibreLancer.Data/Schema/FreelancerIni.cs b/src/LibreLancer.Data/Schema/FreelancerIni.cs
+--- a/src/LibreLancer.Data/Schema/FreelancerIni.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/FreelancerIni.cs	2026-06-09 07:29:43.603241032 +0000
+@@ -29,6 +29,8 @@
+     public List<string> ShiparchPaths { get; private set; }
+     public List<string> GoodsPaths { get; private set; }
+     public List<string> MarketsPaths { get; private set; }
++    public List<string> CommoditiesPerFactionPaths { get; private set; }
++    public List<string> WeaponModDbPaths { get; private set; }
+     public List<string> SoundPaths { get; private set; }
+     public List<string> GraphPaths { get; private set; }
+     public List<string> EffectPaths { get; private set; }
+@@ -119,6 +121,8 @@
+         StartupMovies = [];
+         GoodsPaths = [];
+         MarketsPaths = [];
++        CommoditiesPerFactionPaths = [];
++        WeaponModDbPaths = [];
+         FusePaths = [];
+         NewCharDBPaths = [];
+         VoicePaths = [];
+@@ -279,6 +283,13 @@
+                             case "markets":
+                                 MarketsPaths.Add(DataPath + e[0]);
+                                 break;
++                            case "commodities_per_faction":
++                            case "commodity_per_faction":
++                                CommoditiesPerFactionPaths.Add(DataPath + e[0]);
++                                break;
++                            case "weaponmoddb":
++                                WeaponModDbPaths.Add(DataPath + e[0]);
++                                break;
+                             case "fuses":
+                                 FusePaths.Add(DataPath + e[0]);
+                                 break;
+diff -ruN a/src/LibreLancer.Data/Schema/Fuses/Fuse.cs b/src/LibreLancer.Data/Schema/Fuses/Fuse.cs
+--- a/src/LibreLancer.Data/Schema/Fuses/Fuse.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Fuses/Fuse.cs	2026-06-09 07:30:41.934904385 +0000
+@@ -25,5 +25,9 @@
+     [Section("ignite_fuse", Child = true)]
+     [Section("impulse", Child = true)]
+     [Section("destroy_root", Child = true)]
++    [Section("dump_cargo", Child = true)]
++    [Section("damage_root", Child = true)]
++    [Section("damage_group", Child = true)]
++    [Section("tumble", Child = true)]
+     public List<FuseAction> Actions = [];
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Fuses/FuseAction.cs b/src/LibreLancer.Data/Schema/Fuses/FuseAction.cs
+--- a/src/LibreLancer.Data/Schema/Fuses/FuseAction.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Fuses/FuseAction.cs	2026-06-09 07:35:04.429284429 +0000
+@@ -23,8 +23,10 @@
+ [ParsedSection]
+ public partial class FuseStartEffect : FuseAction //[start_effect]
+ {
+-    [Entry("effect", Required = true)]
+-    public string Effect = null!;
++    [Entry("effect")]
++    public string? Effect;
++    [Entry("particles")]
++    public string? Particles;
+     [Entry("hardpoint", Multiline = true)]
+     public List<string> Hardpoints = [];
+     [Entry("attached")]
+@@ -88,3 +90,45 @@
+     [Entry("force")]
+     public float Force;
+ }
++
++[ParsedSection]
++public partial class FuseDumpCargo : FuseAction //[dump_cargo]
++{
++    [Entry("origin_hardpoint")]
++    public string? OriginHardpoint;
++}
++
++[ParsedSection]
++public partial class FuseDamageRoot : FuseAction //[damage_root]
++{
++    [Entry("damage_type")]
++    public string? DamageType;
++    [Entry("hitpoints")]
++    public float Hitpoints;
++}
++
++[ParsedSection]
++public partial class FuseDamageGroup : FuseAction //[damage_group]
++{
++    [Entry("group_name")]
++    public string? GroupName;
++    [Entry("damage_type")]
++    public string? DamageType;
++    [Entry("hitpoints")]
++    public float Hitpoints;
++}
++
++[ParsedSection]
++public partial class FuseTumble : FuseAction //[tumble]
++{
++    [Entry("ang_drag_scale")]
++    public float AngDragScale;
++    [Entry("turn_throttle_x")]
++    public Vector2 TurnThrottleX;
++    [Entry("turn_throttle_y")]
++    public Vector2 TurnThrottleY;
++    [Entry("turn_throttle_z")]
++    public Vector2 TurnThrottleZ;
++    [Entry("throttle")]
++    public Vector2 Throttle;
++}
+diff -ruN a/src/LibreLancer.Data/Schema/Fuses/FuseIni.cs b/src/LibreLancer.Data/Schema/Fuses/FuseIni.cs
+--- a/src/LibreLancer.Data/Schema/Fuses/FuseIni.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Fuses/FuseIni.cs	2026-06-09 07:30:38.714400471 +0000
+@@ -19,6 +19,10 @@
+     [Section("ignite_fuse", Type = typeof(FuseIgniteFuse), Child = true)]
+     [Section("impulse", Type = typeof(FuseImpulse), Child = true)]
+     [Section("destroy_root", Type = typeof(FuseDestroyRoot), Child = true)]
++    [Section("dump_cargo", Type = typeof(FuseDumpCargo), Child = true)]
++    [Section("damage_root", Type = typeof(FuseDamageRoot), Child = true)]
++    [Section("damage_group", Type = typeof(FuseDamageGroup), Child = true)]
++    [Section("tumble", Type = typeof(FuseTumble), Child = true)]
+     public List<Fuse> Fuses = [];
+     public void AddFuseIni(string path, FileSystem vfs, IniStringPool? stringPool = null)
+     {
+diff -ruN a/src/LibreLancer.Data/Schema/Goods/CommoditiesPerFactionIni.cs b/src/LibreLancer.Data/Schema/Goods/CommoditiesPerFactionIni.cs
+--- a/src/LibreLancer.Data/Schema/Goods/CommoditiesPerFactionIni.cs	1970-01-01 00:00:00.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Goods/CommoditiesPerFactionIni.cs	2026-06-09 07:29:57.717060740 +0000
+@@ -0,0 +1,45 @@
++using System.Collections.Generic;
++using LibreLancer.Data.Ini;
++using LibreLancer.Data.IO;
++
++namespace LibreLancer.Data.Schema.Goods;
++
++[ParsedIni]
++public partial class CommoditiesPerFactionIni
++{
++    [Section("factiongood")]
++    public List<FactionGood> FactionGoods = [];
++
++    public void AddFile(string filename, FileSystem vfs, IniStringPool? stringPool = null) =>
++        ParseIni(filename, vfs, stringPool);
++}
++
++[ParsedSection]
++public partial class FactionGood
++{
++    [Entry("faction", Required = true)]
++    public string Faction = null!;
++
++    public List<FactionMarketGood> MarketGoods = [];
++
++    [EntryHandler("marketgood", MinComponents = 3, Multiline = true)]
++    private void HandleMarketGood(Entry e) => MarketGoods.Add(new FactionMarketGood(e));
++}
++
++public class FactionMarketGood
++{
++    public string Good = null!;
++    public int Min;
++    public int Max;
++
++    public FactionMarketGood()
++    {
++    }
++
++    public FactionMarketGood(Entry e)
++    {
++        Good = e[0].ToString();
++        Min = e[1].ToInt32();
++        Max = e[2].ToInt32();
++    }
++}
+diff -ruN a/src/LibreLancer.Data/Schema/Missions/EncounterFormation.cs b/src/LibreLancer.Data/Schema/Missions/EncounterFormation.cs
+--- a/src/LibreLancer.Data/Schema/Missions/EncounterFormation.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Missions/EncounterFormation.cs	2026-06-09 07:43:05.396040961 +0000
+@@ -19,6 +19,8 @@
+     public bool AllowSimultaneousCreation;
+     [Entry("times_to_create")]
+     public string? TimesToCreate; //Unused, usually "infinite". Can be integer also
++    [Entry("longevity")]
++    public float? Longevity;
+ 
+     public List<EncounterShipDefinition> Ships = new();
+ 
+diff -ruN a/src/LibreLancer.Data/Schema/NewCharDB/NewCharPilot.cs b/src/LibreLancer.Data/Schema/NewCharDB/NewCharPilot.cs
+--- a/src/LibreLancer.Data/Schema/NewCharDB/NewCharPilot.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/NewCharDB/NewCharPilot.cs	2026-06-09 07:31:16.890552093 +0000
+@@ -22,4 +22,6 @@
+     public string? BodyAnim;
+     [Entry("comm.anim")]
+     public string[]? CommAnim;
++    [Entry("thumb")]
++    public string? Thumb;
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Ships/Ship.cs b/src/LibreLancer.Data/Schema/Ships/Ship.cs
+--- a/src/LibreLancer.Data/Schema/Ships/Ship.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Ships/Ship.cs	2026-06-09 07:50:08.059058313 +0000
+@@ -123,7 +123,20 @@
+ 
+     [Entry("explosion_resistance")]
+     public float ExplosionResistance;
++    [Entry("solar_radius")]
++    public float? SolarRadius;
++    [Entry("destructible")]
++    public bool? Destructible;
++    [Entry("shape_name")]
++    public string? ShapeName;
++    [Entry("loadout")]
++    public string? LoadoutName;
++    [Entry("distance_render")]
++    public float? DistanceRender;
++    [Entry("docking_camera")]
++    public int? DockingCamera;
+ 
++    public List<DockSphere> DockingSpheres = [];
+     public List<ObjectFuse> Fuses = [];
+ 
+     public List<ShipHpDef> HardpointTypes = [];
+@@ -146,6 +159,18 @@
+ 
+     [EntryHandler("shield_link", MinComponents = 3)]
+     private void HandleShieldLink(Entry e) => ShieldLink = new ShieldLink(e);
++
++    [EntryHandler("docking_sphere", MinComponents = 3, Multiline = true)]
++    private void HandleDockingSphere(Entry e)
++    {
++        string? scr = e.Count >= 4 ? e[3].ToString() : null;
++        if (!Enum.TryParse<DockSphereType>(e[0].ToString(), true, out var type))
++        {
++            IniDiagnostic.InvalidEnum(e, e.Section);
++        }
++
++        DockingSpheres.Add(new DockSphere(type, e[1].ToString(), e[2].ToInt32(), scr));
++    }
+ }
+ 
+ public class ShieldLink
+diff -ruN a/src/LibreLancer.Data/Schema/Simple.cs b/src/LibreLancer.Data/Schema/Simple.cs
+--- a/src/LibreLancer.Data/Schema/Simple.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Simple.cs	2026-06-09 07:50:08.060058391 +0000
+@@ -18,4 +18,6 @@
+     public float Mass;
+     [Entry("LODranges")]
+     public float[]? LODranges;
++    [Entry("minspeclod")]
++    public int? MinSpecLod;
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Solar/Asteroid.cs b/src/LibreLancer.Data/Schema/Solar/Asteroid.cs
+--- a/src/LibreLancer.Data/Schema/Solar/Asteroid.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Solar/Asteroid.cs	2026-06-09 07:51:21.286649160 +0000
+@@ -24,6 +24,10 @@
+     public int ExplosionOffset;
+     [Entry("recharge_time")]
+     public float RechargeTime;
++    [Entry("explosion_impulse")]
++    public float? ExplosionImpulse;
++    [Entry("phantom_physics")]
++    public bool? PhantomPhysics;
+ 
+     public bool IsMine;
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Solar/CollisionGroup.cs b/src/LibreLancer.Data/Schema/Solar/CollisionGroup.cs
+--- a/src/LibreLancer.Data/Schema/Solar/CollisionGroup.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Solar/CollisionGroup.cs	2026-06-09 07:31:06.366456136 +0000
+@@ -28,6 +28,8 @@
+     public bool RootHealthProxy;
+     [Entry("parent_impulse")]
+     public float ParentImpulse;
++    [Entry("explosion_resistance")]
++    public float ExplosionResistance;
+     //TODO: See how many of these are valid in vanilla
+     [Entry("group_dmg_hp")]
+     public string? GroupDmgHp;
+diff -ruN a/src/LibreLancer.Data/Schema/Solar/DynamicAsteroid.cs b/src/LibreLancer.Data/Schema/Solar/DynamicAsteroid.cs
+--- a/src/LibreLancer.Data/Schema/Solar/DynamicAsteroid.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Solar/DynamicAsteroid.cs	2026-06-09 07:51:21.287638871 +0000
+@@ -13,4 +13,6 @@
+     public string? MaterialLibrary;
+     [Entry("explosion_arch")]
+     public string? ExplosionArch;
++    [Entry("particle_effect")]
++    public string? ParticleEffect;
+ }
+diff -ruN a/src/LibreLancer.Data/Schema/Universe/LightSource.cs b/src/LibreLancer.Data/Schema/Universe/LightSource.cs
+--- a/src/LibreLancer.Data/Schema/Universe/LightSource.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Universe/LightSource.cs	2026-06-09 07:43:05.394182938 +0000
+@@ -23,6 +23,8 @@
+     public LightType? Type;
+     [Entry("atten_curve")]
+     public string? AttenCurve;
++    [Entry("color_curve")]
++    public string? ColorCurve;
+     [Entry("attenuation")]
+     public Vector3? Attenuation;
+     [Entry("direction")]
+diff -ruN a/src/LibreLancer.Data/Schema/Universe/SystemInfo.cs b/src/LibreLancer.Data/Schema/Universe/SystemInfo.cs
+--- a/src/LibreLancer.Data/Schema/Universe/SystemInfo.cs	2026-06-08 10:19:35.000000000 +0000
++++ b/src/LibreLancer.Data/Schema/Universe/SystemInfo.cs	2026-06-09 07:43:05.395204965 +0000
+@@ -5,6 +5,8 @@
+ [ParsedSection]
+ public partial class SystemInfo
+ {
++    [Entry("name")]
++    public string? Name;
+     [Entry("space_color")]
+     public Color4 SpaceColor = Color4.Black;
+     [Entry("local_faction")]

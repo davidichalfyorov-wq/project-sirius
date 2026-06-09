@@ -90,7 +90,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnDoubleClick(MouseEventArgs e)
         {
-            if (game!.Debug.CaptureMouse)
+            if (game!.Debug != null && game!.Debug.CaptureMouse)
             {
                 return;
             }
@@ -115,7 +115,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnMouseUp(MouseEventArgs e)
         {
-            if (game!.Debug.CaptureMouse)
+            if (game?.Debug?.CaptureMouse == true)
             {
                 return;
             }
@@ -129,7 +129,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnMouseDown(MouseEventArgs e)
         {
-            if (game!.Debug.CaptureMouse)
+            if (game?.Debug?.CaptureMouse == true)
             {
                 return;
             }

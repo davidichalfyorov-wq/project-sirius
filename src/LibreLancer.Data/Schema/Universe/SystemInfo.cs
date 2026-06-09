@@ -5,6 +5,8 @@ namespace LibreLancer.Data.Schema.Universe;
 [ParsedSection]
 public partial class SystemInfo
 {
+    [Entry("name")]
+    public string? Name;
     [Entry("space_color")]
     public Color4 SpaceColor = Color4.Black;
     [Entry("local_faction")]

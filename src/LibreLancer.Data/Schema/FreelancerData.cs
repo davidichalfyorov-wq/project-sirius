@@ -45,6 +45,7 @@ public class FreelancerData
     public ExplosionsIni Explosions = null!;
     public FuseIni Fuses = null!;
     public EquipmentIni? Equipment;
+    public WeaponModDbIni? WeaponModDb;
     public HpTypesIni HpTypes = null!;
     public LoadoutsIni Loadouts = null!;
     public SolararchIni Solar = null!;
@@ -56,6 +57,7 @@ public class FreelancerData
     public AudioIni Audio = null!;
     public GoodsIni? Goods;
     public MarketsIni? Markets;
+    public CommoditiesPerFactionIni? CommoditiesPerFaction;
     public GraphIni Graphs = null!;
     public TexturePanels EffectShapes = null!;
     public MouseIni Mouse = null!;
@@ -144,6 +146,25 @@ public class FreelancerData
         {
             Equipment = new EquipmentIni();
             Equipment.ParseAllInis(Freelancer.EquipmentPaths, this, stringPool);
+        });
+        Run(() =>
+        {
+            WeaponModDb = new WeaponModDbIni();
+            if (Freelancer.WeaponModDbPaths.Count > 0)
+            {
+                foreach (var wm in Freelancer.WeaponModDbPaths)
+                {
+                    WeaponModDb.AddFile(wm, VFS, stringPool);
+                }
+            }
+            else
+            {
+                var weaponModDb = Freelancer.DataPath + "equipment\\weaponmoddb.ini";
+                if (VFS.FileExists(weaponModDb))
+                {
+                    WeaponModDb.AddFile(weaponModDb, VFS, stringPool);
+                }
+            }
         });
         Run(() =>
         {
@@ -333,6 +354,25 @@ public class FreelancerData
             Markets = new MarketsIni();
             foreach (var mkt in Freelancer.MarketsPaths)
                 Markets.AddMarketsIni(mkt, VFS, stringPool);
+        });
+        Run(() =>
+        {
+            CommoditiesPerFaction = new CommoditiesPerFactionIni();
+            if (Freelancer.CommoditiesPerFactionPaths.Count > 0)
+            {
+                foreach (var cpf in Freelancer.CommoditiesPerFactionPaths)
+                {
+                    CommoditiesPerFaction.AddFile(cpf, VFS, stringPool);
+                }
+            }
+            else
+            {
+                var commoditiesPerFaction = Freelancer.DataPath + "equipment\\commodities_per_faction.ini";
+                if (VFS.FileExists(commoditiesPerFaction))
+                {
+                    CommoditiesPerFaction.AddFile(commoditiesPerFaction, VFS, stringPool);
+                }
+            }
         });
         Run(() =>
         {

@@ -488,10 +488,8 @@ void TextEditor::renderCursors() {
         if (!readOnly) {
             auto context = ImGui::GetCurrentContext();
             context->PlatformImeData.WantVisible = true;
-            context->PlatformImeData.WantTextInput = true;
             context->PlatformImeData.InputPos = ImVec2(cursorScreenPos.x - 1.0f, cursorScreenPos.y - context->FontSize);
             context->PlatformImeData.InputLineHeight = context->FontSize;
-            context->PlatformImeData.ViewportId = ImGui::GetCurrentWindow()->Viewport->ID;
         }
     }
 }

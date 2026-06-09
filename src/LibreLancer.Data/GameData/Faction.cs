@@ -27,6 +27,7 @@ public class Faction : NamedItem
 
     public List<Voice> NpcVoices = [];
     public List<ShipArch> NpcShips = [];
+    public FactionCommodityProfile? CommodityProfile;
 
     public Dictionary<string, List<ShipArch>> ShipsByClass = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, FormationDef> Formations = new(StringComparer.OrdinalIgnoreCase);

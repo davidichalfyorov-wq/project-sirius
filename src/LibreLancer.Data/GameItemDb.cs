@@ -72,6 +72,7 @@ public class GameItemDb
     public GameItemCollection<Equipment> Equipment = [];
     public readonly GameItemCollection<Explosion> Explosions = [];
     public readonly GameItemCollection<Faction> Factions = [];
+    public Dictionary<string, FactionCommodityProfile> FactionCommodityProfiles = new(StringComparer.OrdinalIgnoreCase);
     public GameItemCollection<ResolvedGood> Goods = [];
     public List<IntroScene> IntroScenes = [];
     public IEnumerable<ObjectLoadout> Loadouts => _loadouts.Values;
@@ -566,19 +567,68 @@ public class GameItemDb
                 }
                 else if (Goods.TryGetValue(gd.Good, out var good))
                 {
+                    FactionCommodityRule? factionRule = null;
+                    if (@base.LocalFaction?.CommodityProfile?.Commodities.TryGetValue(good.Nickname, out var rule) == true)
+                    {
+                        factionRule = rule;
+                    }
+
                     @base.SoldGoods.Add(new BaseSoldGood()
                     {
                         Rep = gd.Rep,
                         Rank = gd.Rank,
                         Good = good!,
                         Price = (ulong)((double)good!.Ini.Price * gd.Multiplier),
-                        ForSale = gd.Max > 0
+                        ForSale = gd.Max > 0,
+                        FactionRule = factionRule
                     });
                 }
             }
         }
 
         flData.Markets = null; //Free memory
+    }
+
+    private void InitFactionCommodityProfiles()
+    {
+        FactionCommodityProfiles = new Dictionary<string, FactionCommodityProfile>(StringComparer.OrdinalIgnoreCase);
+
+        if (flData.CommoditiesPerFaction == null)
+        {
+            return;
+        }
+
+        FLLog.Info("Game", $"Initing {flData.CommoditiesPerFaction.FactionGoods.Count} faction commodity profiles");
+
+        foreach (var fg in flData.CommoditiesPerFaction.FactionGoods)
+        {
+            if (!Factions.TryGetValue(fg.Faction, out var faction))
+            {
+                FLLog.Warning("Economy", $"FactionGood references nonexistent faction {fg.Faction}");
+                continue;
+            }
+
+            var profile = new FactionCommodityProfile
+            {
+                Faction = faction
+            };
+
+            foreach (var marketGood in fg.MarketGoods)
+            {
+                if (!Goods.TryGetValue(marketGood.Good, out var good))
+                {
+                    FLLog.Warning("Economy", $"FactionGood {fg.Faction} references nonexistent good {marketGood.Good}");
+                    continue;
+                }
+
+                profile.Commodities[good.Nickname] = new FactionCommodityRule(good, marketGood.Min, marketGood.Max);
+            }
+
+            faction.CommodityProfile = profile;
+            FactionCommodityProfiles[faction.Nickname] = profile;
+        }
+
+        flData.CommoditiesPerFaction = null; //Free memory
     }
 
     public FormationDef? GetFormation(string form) =>
@@ -851,9 +901,10 @@ public class GameItemDb
         }, baseTask);
         var goodsTask = tasks.Begin(InitGoods, equipmentTask);
         var archetypesTask = tasks.Begin(InitArchetypes, loadoutsTask, debrisTask);
+        var factionCommodityTask = tasks.Begin(InitFactionCommodityProfiles, factionsTask, goodsTask);
         var starsTask = tasks.Begin(InitStars);
         var astsTask = tasks.Begin(InitAsteroids);
-        tasks.Begin(InitMarkets, baseTask, goodsTask, archetypesTask);
+        tasks.Begin(InitMarkets, baseTask, goodsTask, archetypesTask, factionCommodityTask);
         tasks.Begin(InitNews, baseTask);
         tasks.Begin(() => InitSystems(tasks),
             baseTask,
@@ -948,6 +999,15 @@ public class GameItemDb
     {
         FLLog.Info("Game", $"Initing {flData.Equipment!.Equip.Count} equipments");
         Dictionary<string, LightInheritHelper> lights = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, LibreLancer.Data.Schema.Equipment.WeaponType> weaponMods = new(StringComparer.OrdinalIgnoreCase);
+
+        if (flData.WeaponModDb != null)
+        {
+            foreach (var weaponType in flData.WeaponModDb.WeaponTypes)
+            {
+                weaponMods[weaponType.Nickname] = weaponType;
+            }
+        }
 
         void SetCommonFields(Equipment equip, AbstractEquipment val)
         {
@@ -959,6 +1019,26 @@ public class GameItemDb
             equip.IdsInfo = val.IdsInfo;
             equip.Volume = val.Volume;
         }
+
+        void ResolveWeaponMods(Munition munition, IDictionary<string, float> shieldDamageModifiers)
+        {
+            if (string.IsNullOrWhiteSpace(munition.WeaponType) ||
+                !weaponMods.TryGetValue(munition.WeaponType, out var weaponType))
+            {
+                return;
+            }
+
+            foreach (var shieldMod in weaponType.ShieldMods)
+            {
+                shieldDamageModifiers[shieldMod.ShieldType] = shieldMod.Multiplier;
+            }
+        }
+
+        void ApplyWeaponModsToMunition(MunitionEquip equip) =>
+            ResolveWeaponMods(equip.Def, equip.ShieldDamageModifiers);
+
+        void ApplyWeaponModsToMissile(MissileEquip equip) =>
+            ResolveWeaponMods(equip.Def, equip.ShieldDamageModifiers);
 
         //Process munitions first
         foreach (var mn in flData.Equipment.Munitions)
@@ -982,6 +1062,7 @@ public class GameItemDb
                     mequip.ExplodeFx = Effects.Get(mequip.Explosion.Effect);
                 }
 
+                ApplyWeaponModsToMissile(mequip);
                 equip = mequip;
             }
             else
@@ -993,6 +1074,7 @@ public class GameItemDb
                     ConstEffect_Spear = effect?.Spear,
                     ConstEffect_Bolt = effect?.Bolt,
                 };
+                ApplyWeaponModsToMunition(mequip);
                 equip = mequip;
             }
 
@@ -1130,6 +1212,7 @@ public class GameItemDb
                 {
                     HpType = sh.HpType,
                     Def = sh,
+                    DiscoveryKind = ClassifyDiscoveryShield(sh),
                     ModelFile = ResolveDrawable(sh.MaterialLibrary, sh.DaArchetype)
                 };
                 equip = eqp;
@@ -1255,7 +1338,30 @@ public class GameItemDb
             eq.LootAppearance = Equipment.Get(val.LootAppearance) as LootCrateEquipment;
         }
 
+        flData.WeaponModDb = null; //Free memory
         flData.Equipment = null; //Free memory
+    }
+
+    private static DiscoverySpecialEquipmentKind ClassifyDiscoveryShield(ShieldGenerator shield)
+    {
+        var nickname = shield.Nickname ?? "";
+
+        if (nickname.StartsWith("dsy_hspace_jump_drive_", StringComparison.OrdinalIgnoreCase))
+        {
+            return DiscoverySpecialEquipmentKind.JumpDrive;
+        }
+
+        if (nickname.StartsWith("dsy_hspace_survey_module_", StringComparison.OrdinalIgnoreCase))
+        {
+            return DiscoverySpecialEquipmentKind.SurveyModule;
+        }
+
+        if (nickname.StartsWith("dsy_docking_module_", StringComparison.OrdinalIgnoreCase))
+        {
+            return DiscoverySpecialEquipmentKind.DockingModule;
+        }
+
+        return DiscoverySpecialEquipmentKind.None;
     }
 
     private Vector3 GetQuadratic(string attenCurve)
@@ -2567,14 +2673,16 @@ public class GameItemDb
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(fza.Effect))
+                var effect = fza.Effect ?? fza.Particles;
+
+                if (string.IsNullOrEmpty(effect))
                 {
                     continue;
                 }
 
-                if (!fr.Fx.ContainsKey(fza.Effect))
+                if (!fr.Fx.ContainsKey(effect))
                 {
-                    fr.Fx[fza.Effect] = Effects.Get(fza.Effect)!;
+                    fr.Fx[effect] = Effects.Get(effect)!;
                 }
             }
 

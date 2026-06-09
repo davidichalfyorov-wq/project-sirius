@@ -18,4 +18,6 @@ public partial class Simple
     public float Mass;
     [Entry("LODranges")]
     public float[]? LODranges;
+    [Entry("minspeclod")]
+    public int? MinSpecLod;
 }

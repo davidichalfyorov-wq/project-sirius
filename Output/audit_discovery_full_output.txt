@@ -1,0 +1,20 @@
+Data entries: 97
+recognized audited data keys: asteroids, commodities_per_faction, effects, equipment, explosions, fonts, fuses, goods, hud, igraph, loadouts, markets, newchardb, petaldb, rich_fonts, ships, solar, stars, voices, weaponmoddb
+
+Referenced path existence:
+all valued [Data] paths in text archive exist
+
+Unknown sections in main referenced data groups:
+none
+
+Unknown entries in main referenced data groups:
+none
+
+dependent file counts: systems 155 bases 772 rooms 1552 nebulas 168 asteroids 511 encounters 1781
+missing dependent paths: 0
+
+Unknown dependent sections:
+none
+
+Unknown dependent entries:
+none

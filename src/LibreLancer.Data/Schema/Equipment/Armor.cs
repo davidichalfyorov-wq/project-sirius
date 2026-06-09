@@ -10,4 +10,5 @@ namespace LibreLancer.Data.Schema.Equipment;
 public partial class Armor : AbstractEquipment
 {
     [Entry("hit_pts_scale")] public float HitPtsScale;
+    [Entry("category")] public string? Category;
 }

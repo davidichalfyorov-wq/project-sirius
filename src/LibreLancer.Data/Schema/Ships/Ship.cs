@@ -123,7 +123,20 @@ public partial class Ship
 
     [Entry("explosion_resistance")]
     public float ExplosionResistance;
+    [Entry("solar_radius")]
+    public float? SolarRadius;
+    [Entry("destructible")]
+    public bool? Destructible;
+    [Entry("shape_name")]
+    public string? ShapeName;
+    [Entry("loadout")]
+    public string? LoadoutName;
+    [Entry("distance_render")]
+    public float? DistanceRender;
+    [Entry("docking_camera")]
+    public int? DockingCamera;
 
+    public List<DockSphere> DockingSpheres = [];
     public List<ObjectFuse> Fuses = [];
 
     public List<ShipHpDef> HardpointTypes = [];
@@ -146,6 +159,18 @@ public partial class Ship
 
     [EntryHandler("shield_link", MinComponents = 3)]
     private void HandleShieldLink(Entry e) => ShieldLink = new ShieldLink(e);
+
+    [EntryHandler("docking_sphere", MinComponents = 3, Multiline = true)]
+    private void HandleDockingSphere(Entry e)
+    {
+        string? scr = e.Count >= 4 ? e[3].ToString() : null;
+        if (!Enum.TryParse<DockSphereType>(e[0].ToString(), true, out var type))
+        {
+            IniDiagnostic.InvalidEnum(e, e.Section);
+        }
+
+        DockingSpheres.Add(new DockSphere(type, e[1].ToString(), e[2].ToInt32(), scr));
+    }
 }
 
 public class ShieldLink

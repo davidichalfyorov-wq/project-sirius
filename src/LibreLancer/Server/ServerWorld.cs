@@ -213,8 +213,12 @@ namespace LibreLancer.Server
             {
                 if (other?.Tag is GameObject g && g.TryGetComponent<SHealthComponent>(out var health))
                 {
+                    var shield = g.GetFirstChildComponent<SShieldComponent>();
+                    var shieldDamageModifier = shield is null
+                        ? 1f
+                        : missile.Missile.GetShieldDamageModifier(shield.Equip.Def.ShieldType);
                     health.DamageExplosion(missile.Missile.Explosion.HullDamage, missile.Missile.Explosion.EnergyDamage,
-                            missile.Owner, pos, missile.Missile.Explosion.Radius);
+                            missile.Owner, pos, missile.Missile.Explosion.Radius, shieldDamageModifier);
                     health.OnProjectileHit(missile.Owner);
                 }
             }
@@ -502,7 +506,11 @@ namespace LibreLancer.Server
         {
             if (obj.TryGetComponent<SHealthComponent>(out var health))
             {
-                health.Damage(munition.Def.HullDamage, munition.Def.EnergyDamage, owner, child);
+                var shield = obj.GetFirstChildComponent<SShieldComponent>();
+                var shieldDamageModifier = shield is null
+                    ? 1f
+                    : munition.GetShieldDamageModifier(shield.Equip.Def.ShieldType);
+                health.Damage(munition.Def.HullDamage, munition.Def.EnergyDamage, owner, child, shieldDamageModifier);
                 health.OnProjectileHit(owner);
             }
         }

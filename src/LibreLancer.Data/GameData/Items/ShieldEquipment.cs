@@ -7,4 +7,5 @@ namespace LibreLancer.Data.GameData.Items;
 public class ShieldEquipment : Equipment
 {
     public required Data.Schema.Equipment.ShieldGenerator Def;
+    public DiscoverySpecialEquipmentKind DiscoveryKind;
 }

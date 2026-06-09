@@ -13,4 +13,5 @@ public struct BaseSoldGood
     public required float Rep;
     public required ulong Price;
     public required bool ForSale;
+    public FactionCommodityRule? FactionRule;
 }

@@ -29,6 +29,8 @@ public class FreelancerIni
     public List<string> ShiparchPaths { get; private set; }
     public List<string> GoodsPaths { get; private set; }
     public List<string> MarketsPaths { get; private set; }
+    public List<string> CommoditiesPerFactionPaths { get; private set; }
+    public List<string> WeaponModDbPaths { get; private set; }
     public List<string> SoundPaths { get; private set; }
     public List<string> GraphPaths { get; private set; }
     public List<string> EffectPaths { get; private set; }
@@ -119,6 +121,8 @@ public class FreelancerIni
         StartupMovies = [];
         GoodsPaths = [];
         MarketsPaths = [];
+        CommoditiesPerFactionPaths = [];
+        WeaponModDbPaths = [];
         FusePaths = [];
         NewCharDBPaths = [];
         VoicePaths = [];
@@ -278,6 +282,13 @@ public class FreelancerIni
                                 break;
                             case "markets":
                                 MarketsPaths.Add(DataPath + e[0]);
+                                break;
+                            case "commodities_per_faction":
+                            case "commodity_per_faction":
+                                CommoditiesPerFactionPaths.Add(DataPath + e[0]);
+                                break;
+                            case "weaponmoddb":
+                                WeaponModDbPaths.Add(DataPath + e[0]);
                                 break;
                             case "fuses":
                                 FusePaths.Add(DataPath + e[0]);

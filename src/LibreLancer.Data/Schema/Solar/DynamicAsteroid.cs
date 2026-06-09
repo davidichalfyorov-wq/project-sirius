@@ -13,4 +13,6 @@ public partial class DynamicAsteroid
     public string? MaterialLibrary;
     [Entry("explosion_arch")]
     public string? ExplosionArch;
+    [Entry("particle_effect")]
+    public string? ParticleEffect;
 }

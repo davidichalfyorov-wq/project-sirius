@@ -24,6 +24,10 @@ public partial class Asteroid
     public int ExplosionOffset;
     [Entry("recharge_time")]
     public float RechargeTime;
+    [Entry("explosion_impulse")]
+    public float? ExplosionImpulse;
+    [Entry("phantom_physics")]
+    public bool? PhantomPhysics;
 
     public bool IsMine;
 }

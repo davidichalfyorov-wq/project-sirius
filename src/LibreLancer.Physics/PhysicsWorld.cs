@@ -251,7 +251,7 @@ namespace LibreLancer.Physics
             out Vector3 contactPoint, out PhysicsObject? didHit, out object? childTag)
         {
             HitHandler handler = new HitHandler(this, me);
-            Simulation.RayCast(origin, direction, maxDist, ref handler);
+            Simulation.RayCast(origin, direction, maxDist, BufferPool, ref handler);
             contactPoint = handler.ContactPoint;
             didHit = handler.Result;
             childTag = handler.ResultTag;

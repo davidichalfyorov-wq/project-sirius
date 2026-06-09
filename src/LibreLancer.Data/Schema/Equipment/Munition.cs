@@ -50,4 +50,6 @@ public partial class Munition : AbstractEquipment
     public string? MunitionHitEffect;
     [Entry("cruise_disruptor")]
     public bool CruiseDisruptor;
+    [Entry("owner_safe_time")]
+    public float OwnerSafeTime;
 }

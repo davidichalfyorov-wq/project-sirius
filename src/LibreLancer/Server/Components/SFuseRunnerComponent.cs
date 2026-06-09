@@ -73,9 +73,15 @@ namespace LibreLancer.Server.Components
 
                 if (act is FuseStartEffect fxact)
                 {
+                    var effect = fxact.Effect ?? fxact.Particles;
+                    if (string.IsNullOrEmpty(effect))
+                    {
+                        continue;
+                    }
+
                     Effects.Add(new SpawnedEffect()
                     {
-                        ID = fxID++, Effect = fxact.Effect,
+                        ID = fxID++, Effect = effect,
                         Hardpoints = fxact.Hardpoints.ToArray(),
                     });
                     world.Server!.EffectSpawned(Parent);

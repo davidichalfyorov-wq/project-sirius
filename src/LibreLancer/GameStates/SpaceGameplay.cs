@@ -1377,7 +1377,7 @@ World Time: {12:F2}
                 return;
             }
 
-            if (!(Game.Debug.CaptureMouse) && !ui.MouseWanted(Game.Mouse.X, Game.Mouse.Y))
+            if ((Game.Debug == null || !Game.Debug.CaptureMouse) && !ui.MouseWanted(Game.Mouse.X, Game.Mouse.Y))
             {
                 var newSelection = GetMouseSelection();
 
@@ -2085,18 +2085,20 @@ World Time: {12:F2}
             }
 
             ui.RenderWidget(delta);
-            session.SetDebug(Game.Debug.Enabled);
-            Game.Debug.Draw(delta, () =>
+            if (Game.Debug != null)
             {
-                ImGui.Checkbox("Object List", ref showObjectList);
-                ImGui.Text($"Object Count: {world.Objects.Count}");
-                string selObj = "None";
-
-                if (Selection.Selected != null)
+                session.SetDebug(Game.Debug.Enabled);
+                Game.Debug.Draw(delta, () =>
                 {
-                    if (Selection.Selected.Name == null)
+                    ImGui.Checkbox("Object List", ref showObjectList);
+                    ImGui.Text($"Object Count: {world.Objects.Count}");
+                    string selObj = "None";
+
+                    if (Selection.Selected != null)
                     {
-                        selObj = "unknown object";
+                        if (Selection.Selected.Name == null)
+                        {
+                            selObj = "unknown object";
                     }
                     else
                     {
@@ -2194,8 +2196,10 @@ World Time: {12:F2}
                     Game.Debug.ObjectsWindow(world.Objects);
                 }
             });
+            }
 
-            if ((!IsSpecialCamera() && ShowHud) || Game.Debug.Enabled || ui.HasModal)
+            if ((!IsSpecialCamera() && ShowHud) || ui.HasModal || (Game.Debug != null && Game.Debug.Enabled))
+
             {
                 var dlist = Game.RenderContext.Renderer2D.CreateDrawList();
                 current_cur.Draw(dlist, Game.Mouse, Game.TotalTime);

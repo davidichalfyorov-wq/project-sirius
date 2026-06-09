@@ -28,6 +28,8 @@ public partial class CollisionGroup
     public bool RootHealthProxy;
     [Entry("parent_impulse")]
     public float ParentImpulse;
+    [Entry("explosion_resistance")]
+    public float ExplosionResistance;
     //TODO: See how many of these are valid in vanilla
     [Entry("group_dmg_hp")]
     public string? GroupDmgHp;

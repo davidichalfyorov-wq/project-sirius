@@ -19,6 +19,8 @@ public partial class EncounterFormation
     public bool AllowSimultaneousCreation;
     [Entry("times_to_create")]
     public string? TimesToCreate; //Unused, usually "infinite". Can be integer also
+    [Entry("longevity")]
+    public float? Longevity;
 
     public List<EncounterShipDefinition> Ships = new();
 

@@ -150,10 +150,16 @@ namespace LibreLancer
             Services.Add(GameData);
             Services.Add(Sound);
             Services.Add(Typewriter);
-            Debug = new DebugView(this)
+            try
             {
-                Enabled = Config.Settings.Debug
-            };
+            try { Debug = new DebugView(this) { Enabled = Config.Settings.Debug }; }
+            catch (Exception ex) { FLLog.Warning("Game", $"DebugView unavailable: {ex.Message}"); }
+            }
+            catch (Exception e)
+            {
+                FLLog.Warning("Game", $"DebugView init failed (cimgui missing): {e.Message}");
+                Debug = null;
+            }
             ChangeState(new LoadingDataState(this));
         }
 

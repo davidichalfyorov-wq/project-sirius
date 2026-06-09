@@ -237,6 +237,7 @@ namespace LibreLancer.Utf.Mat
                     case "NebulaTwo":
                     case "AtmosphereMaterial":
                     case "DetailMapMaterial":
+                    case "DcDtBt":
                     case "DetailMap2Dm1Msk2PassMaterial":
                     case "IllumDetailMapMaterial":
                     case "Masked2DetailMapMaterial":

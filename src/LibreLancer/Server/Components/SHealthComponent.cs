@@ -183,7 +183,7 @@ namespace LibreLancer.Server.Components
             }
         }
 
-        public void DamageExplosion(float hullDamage, float energyDamage, GameObject? attacker, Vector3 origin, float radius)
+        public void DamageExplosion(float hullDamage, float energyDamage, GameObject? attacker, Vector3 origin, float radius, float shieldDamageMultiplier = 1f)
         {
             if (energyDamage <= 0)
             {
@@ -192,7 +192,7 @@ namespace LibreLancer.Server.Components
 
             var shield = Parent.GetFirstChildComponent<SShieldComponent>();
 
-            if (shield is not null && shield.Damage(energyDamage))
+            if (shield is not null && shield.Damage(energyDamage * shieldDamageMultiplier))
             {
                 return;
             }
@@ -209,7 +209,7 @@ namespace LibreLancer.Server.Components
             }
         }
 
-        public void Damage(float hullDamage, float energyDamage, GameObject? attacker, GameObject? child)
+        public void Damage(float hullDamage, float energyDamage, GameObject? attacker, GameObject? child, float shieldDamageMultiplier = 1f)
         {
             if (energyDamage <= 0)
             {
@@ -218,7 +218,7 @@ namespace LibreLancer.Server.Components
 
             var shield = Parent.GetFirstChildComponent<SShieldComponent>();
 
-            if (shield is not null && shield.Damage(energyDamage))
+            if (shield is not null && shield.Damage(energyDamage * shieldDamageMultiplier))
             {
                 return;
             }

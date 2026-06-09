@@ -23,6 +23,8 @@ public partial class LightSource : NamedObject
     public LightType? Type;
     [Entry("atten_curve")]
     public string? AttenCurve;
+    [Entry("color_curve")]
+    public string? ColorCurve;
     [Entry("attenuation")]
     public Vector3? Attenuation;
     [Entry("direction")]

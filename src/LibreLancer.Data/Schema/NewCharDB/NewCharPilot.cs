@@ -22,4 +22,6 @@ public partial class NewCharPilot
     public string? BodyAnim;
     [Entry("comm.anim")]
     public string[]? CommAnim;
+    [Entry("thumb")]
+    public string? Thumb;
 }

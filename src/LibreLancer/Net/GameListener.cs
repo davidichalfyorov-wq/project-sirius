@@ -3,11 +3,14 @@
 // LICENSE, which is part of this source code package
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using LiteNetLib;
+using LiteNetLib.Utils;
 using LibreLancer.Net.Protocol;
 using LibreLancer.Net.Protocol.RpcPackets;
 using LibreLancer.Server;
@@ -263,7 +266,9 @@ namespace LibreLancer.Net
             };
             hpids.OnAddString += s =>
             {
-                foreach (var p in Server.ConnectedPeerList.ToArray())
+                var peers = new List<NetPeer>();
+                Server.GetConnectedPeers(peers);
+                foreach (var p in peers)
                 {
                     if (p.Tag is Player player)
                     {
