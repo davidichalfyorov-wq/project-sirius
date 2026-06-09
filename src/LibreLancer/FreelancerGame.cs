@@ -6,13 +6,16 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using LibreLancer.Graphics;
+using LibreLancer.ImageLib;
 using LibreLancer.Input;
 using LibreLancer.Interface;
 using LibreLancer.Media;
 using LibreLancer.Render;
+using StbImageSharp;
 using LibreLancer.Sounds;
 using LibreLancer.Data;
 using LibreLancer.Data.IO;
@@ -82,9 +85,10 @@ namespace LibreLancer
                 LuaContext.Initialize();
             });
 			// Move to stop _TSGetMainThread error on OSX
-			MinimumWindowSize = new Point(640, 480);
-			SetFullScreen(Config.Settings.FullScreen);
-			SetVSync(Config.Settings.VSync);
+            MinimumWindowSize = new Point(640, 480);
+            SetFullScreen(Config.Settings.FullScreen);
+            SetVSync(Config.Settings.VSync);
+            SetAppIcon();
             Config.Settings.RenderContext = RenderContext;
             Config.Settings.Validate();
             // Cache
@@ -210,7 +214,7 @@ namespace LibreLancer
 			VertexBuffer.TotalDrawcalls = 0;
         }
 
-        private void FreelancerGame_ScreenshotSave(string? filename, int width, int height, Bgra8[] data)
+		private void FreelancerGame_ScreenshotSave(string? filename, int width, int height, Bgra8[] data)
 		{
             if (filename is null)
             {
@@ -219,5 +223,27 @@ namespace LibreLancer
 
 			Screenshots.Save(filename, width, height, data);
 		}
+
+        private void SetAppIcon()
+        {
+            try
+            {
+                using var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("LibreLancer.icon.png");
+                if (stream == null) return;
+                var image = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
+                var pixels = new Bgra8[image.Width * image.Height];
+                for (int i = 0; i < image.Data.Length; i += 4)
+                {
+                    pixels[i / 4] = new Bgra8(image.Data[i], image.Data[i + 1],
+                        image.Data[i + 2], image.Data[i + 3]);
+                }
+                SetWindowIcon(image.Width, image.Height, pixels);
+            }
+            catch (Exception e)
+            {
+                FLLog.Warning("Game", $"Failed to load application icon: {e.Message}");
+            }
+        }
     }
 }

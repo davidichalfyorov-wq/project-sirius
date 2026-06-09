@@ -57,6 +57,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Interface\Default\interface.json" />
+    <EmbeddedResource Include="..\Common\icon.png" />
   </ItemGroup>
 
   <ItemGroup>
