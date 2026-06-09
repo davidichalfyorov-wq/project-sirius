@@ -1,0 +1,38 @@
+# Audio files
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+
+# Freelancer model/texture files
+*.cmp filter=lfs diff=lfs merge=lfs -text
+*.3db filter=lfs diff=lfs merge=lfs -text
+*.mat filter=lfs diff=lfs merge=lfs -text
+*.txm filter=lfs diff=lfs merge=lfs -text
+*.dfm filter=lfs diff=lfs merge=lfs -text
+*.sph filter=lfs diff=lfs merge=lfs -text
+*.vms filter=lfs diff=lfs merge=lfs -text
+
+# Textures
+*.dds filter=lfs diff=lfs merge=lfs -text
+*.tga filter=lfs diff=lfs merge=lfs -text
+*.bmp filter=lfs diff=lfs merge=lfs -text
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+
+# Freelancer-specific data
+*.utf filter=lfs diff=lfs merge=lfs -text
+*.thn filter=lfs diff=lfs merge=lfs -text
+*.ale filter=lfs diff=lfs merge=lfs -text
+
+# Fonts and databases
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.db filter=lfs diff=lfs merge=lfs -text
+
+# Binaries (EXE/DLL)
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.dll filter=lfs diff=lfs merge=lfs -text
+
+# Videos
+*.wmv filter=lfs diff=lfs merge=lfs -text

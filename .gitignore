@@ -1,0 +1,80 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+*.DotSettings.user
+
+# NuGet
+**/packages/*
+!**/packages/repositories.config
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+*.cmake
+!scripts/*.cmake
+!extern/**/CMakeLists.txt
+build/
+
+# CI packaging output
+packaging/
+
+# Auto-generated version file
+src/CommonVersion.props
+
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+*.dbmdl
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# MonoDevelop
+*.pidb
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs and temp
+*.log
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
