@@ -32,7 +32,8 @@ namespace LibreLancer.Utf.Ale
                         NodeLib = new AlchemyNodeLibrary(((node as IntermediateNode)!.Children[0] as LeafNode)!);
                         break;
                     default:
-                        throw new NotImplementedException(node.Name);
+                        FLLog.Warning("Ale", $"Ignoring unsupported ALE node '{node.Name}'");
+                        break;
                 }
             }
 

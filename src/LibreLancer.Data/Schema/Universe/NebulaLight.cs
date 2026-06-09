@@ -12,8 +12,12 @@ public partial class NebulaLight
 {
     [Entry("ambient")]
     public Color4? Ambient;
-    [Entry("sun_burnthrough_intensity")]
     public float? SunBurnthroughIntensity;
-    [Entry("sun_burnthrough_scaler")]
     public float? SunBurnthroughScaler;
+
+    [EntryHandler("sun_burnthrough_intensity", Multiline = true)]
+    private void HandleSunBurnthroughIntensity(Entry e) => SunBurnthroughIntensity = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("sun_burnthrough_scaler", Multiline = true)]
+    private void HandleSunBurnthroughScaler(Entry e) => SunBurnthroughScaler = e.Count > 0 ? e[0].ToSingle() : null;
 }

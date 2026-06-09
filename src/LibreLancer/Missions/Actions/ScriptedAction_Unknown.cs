@@ -159,6 +159,15 @@ public class Act_RandomPop : ScriptedAction
     }
 }
 
+static class MissionActionTargets
+{
+    public static bool IsPlayerTarget(string? target) =>
+        string.IsNullOrWhiteSpace(target) ||
+        target.Equals("Player", StringComparison.OrdinalIgnoreCase) ||
+        target.Equals("Trent", StringComparison.OrdinalIgnoreCase) ||
+        target.Equals("player", StringComparison.OrdinalIgnoreCase);
+}
+
 public class Act_LockDock : ScriptedAction
 {
     public string Target = string.Empty;
@@ -179,6 +188,30 @@ public class Act_LockDock : ScriptedAction
     public override void Write(IniBuilder.IniSectionBuilder section)
     {
         section.Entry("Act_LockDock", Target, Object, Lock ? "lock" : "unlock");
+    }
+
+    public override void Invoke(MissionRuntime runtime, MissionScript script)
+    {
+        if (!MissionActionTargets.IsPlayerTarget(Target))
+        {
+            FLLog.Debug("Missions", $"Act_LockDock target '{Target}' is not the local player; ignoring");
+            return;
+        }
+
+        var hash = unchecked((int)FLHash.CreateID(Object));
+        if (Lock)
+        {
+            if (!runtime.Player.MPlayer.LockedGates.Contains(hash))
+            {
+                runtime.Player.MPlayer.LockedGates.Add(hash);
+            }
+        }
+        else
+        {
+            runtime.Player.MPlayer.LockedGates.RemoveAll(x => x == hash);
+        }
+
+        runtime.Player.AllowedDockUpdate();
     }
 }
 
@@ -679,6 +712,41 @@ public class Act_SetRep : ScriptedAction
 
         section.Entry("Act_SetRep", entries.ToArray());
     }
+
+    private static float VibeToRep(VibeSet vibe) => vibe switch
+    {
+        VibeSet.REP_FRIEND_MAXIMUM => 1f,
+        VibeSet.REP_FRIEND_THRESHOLD => LibreLancer.Data.GameData.Faction.FriendlyThreshold,
+        VibeSet.REP_NEUTRAL_FRIENDLY => 0.25f,
+        VibeSet.REP_NEUTRAL => 0f,
+        VibeSet.REP_NEUTRAL_HOSTILE => -0.25f,
+        VibeSet.REP_HOSTILE_THRESHOLD => LibreLancer.Data.GameData.Faction.HostileThreshold,
+        VibeSet.REP_HOSTILE_MAXIMUM => -1f,
+        _ => 0f
+    };
+
+    public override void Invoke(MissionRuntime runtime, MissionScript script)
+    {
+        if (!MissionActionTargets.IsPlayerTarget(Object))
+        {
+            FLLog.Debug("Missions", $"Act_SetRep target '{Object}' is not the local player; ignoring");
+            return;
+        }
+
+        var faction = runtime.Player.Game.GameData.Items.Factions.Get(Faction);
+        if (faction == null)
+        {
+            FLLog.Warning("Missions", $"Act_SetRep could not find faction '{Faction}'");
+            return;
+        }
+
+        var value = VibeSet is not VibeSet.None ? VibeToRep(VibeSet) : MathHelper.Clamp(NewValue, -1f, 1f);
+        using (var tx = runtime.Player.Character!.BeginTransaction())
+        {
+            tx.UpdateReputation(faction, value);
+        }
+        runtime.Player.UpdateCurrentReputations();
+    }
 }
 
 public class Act_GcsClamp : ScriptedAction
@@ -697,6 +765,14 @@ public class Act_GcsClamp : ScriptedAction
     public override void Write(IniBuilder.IniSectionBuilder section)
     {
         section.Entry("Act_GCSClamp", Clamp ? "true" : "false");
+    }
+
+    public override void Invoke(MissionRuntime runtime, MissionScript script)
+    {
+        // GCS clamp controls the vanilla conversation system. LibreLancer does not expose
+        // a separate global GCS state yet, but the action is intentionally accepted so
+        // story triggers do not spam warnings or abort. Dialog/nag actions still execute.
+        FLLog.Debug("Missions", $"Act_GCSClamp {(Clamp ? "enabled" : "disabled")}");
     }
 }
 

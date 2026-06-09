@@ -218,17 +218,38 @@ namespace LibreLancer.Sounds
 
         private LoadedSound LoadVoiceLineAsync(string voice, uint hash)
         {
+            var loaded = new LoadedSound();
             var path = data.GetVoicePath(voice);
-            if (path == null)
+            if (path != null)
             {
-                return new LoadedSound() { Entry = NullEntry($"{voice}.0x{hash:X}") };
+                try
+                {
+                    var v = voiceUtfs.GetOrAdd(path, (s) => new VoiceUtf(s, data.VFS.Open(path)));
+                    if (v.AudioFiles.TryGetValue(hash, out var file))
+                    {
+                        loaded.Entry = new AudioEntry()
+                        {
+                            Nickname = $"{voice}.0x{hash:X}",
+                            Type = AudioType.Voice,
+                            Attenuation = (int)LineAttenuation(voice, hash)
+                        };
+                        loaded.Data = new SoundData();
+                        loaded.LoadTask = Task.Run(() =>
+                        {
+                            using var ms = new MemoryStream(file);
+                            loaded.Data.LoadStream(ms);
+                        });
+                        return loaded;
+                    }
+                }
+                catch (Exception e)
+                {
+                    FLLog.Warning("Voices", $"Unable to load voice UTF '{path}': {e.Message}");
+                }
             }
 
-            var v = voiceUtfs.GetOrAdd(path, (s) => new VoiceUtf(s, data.VFS.Open(path)));
-
-            var loaded = new LoadedSound();
-
-            if (v.AudioFiles.TryGetValue(hash, out var file))
+            var loose = data.GetVoiceLineStream(voice, hash);
+            if (loose != null)
             {
                 loaded.Entry = new AudioEntry()
                 {
@@ -239,12 +260,13 @@ namespace LibreLancer.Sounds
                 loaded.Data = new SoundData();
                 loaded.LoadTask = Task.Run(() =>
                 {
-                    using var ms = new MemoryStream(file);
-                    loaded.Data.LoadStream(ms);
+                    using var stream = loose;
+                    loaded.Data.LoadStream(stream);
                 });
+                return loaded;
             }
 
-            return loaded;
+            return new LoadedSound() { Entry = NullEntry($"{voice}.0x{hash:X}") };
         }
 
 

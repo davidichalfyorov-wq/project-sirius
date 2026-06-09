@@ -570,7 +570,14 @@ public partial class CGameSession : IClientPlayer
         }
         else if (str.TrimEnd() == "/debug")
         {
-            Game.Debug.Enabled = !Game.Debug.Enabled;
+            if (Game.Debug != null)
+            {
+                Game.Debug.Enabled = !Game.Debug.Enabled;
+            }
+            else
+            {
+                ((IClientPlayer)this).OnConsoleMessage("Debug view is unavailable in this build.");
+            }
         }
         else if (str.TrimEnd() == "/pos")
         {

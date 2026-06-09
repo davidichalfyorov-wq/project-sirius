@@ -19,6 +19,20 @@ public class CloakComponent(GameObject parent, CloakEquipment equipment, bool wi
         Off
     }
 
+    public bool IsActive => currentState is CloakState.Cloaking or CloakState.Cloaked;
+
+    public void Toggle(GameWorld world)
+    {
+        if (IsActive)
+        {
+            Uncloak(world);
+        }
+        else
+        {
+            Cloak(world);
+        }
+    }
+
     public void Cloak(GameWorld world)
     {
         if (currentState == CloakState.Cloaking ||

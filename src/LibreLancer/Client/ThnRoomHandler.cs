@@ -56,7 +56,22 @@ public static class ThnRoomHandler
 
     public static RoomNpcSpot[] GetSpots(BaseRoom currentRoom)
     {
-        var script = currentRoom.SetScript.LoadScript();
+        if (currentRoom.SetScript?.DataPath == null)
+        {
+            return [];
+        }
+
+        ThnScript script;
+        try
+        {
+            script = currentRoom.SetScript.LoadScript();
+        }
+        catch (Exception e)
+        {
+            FLLog.Warning("Room", $"Unable to inspect NPC spots for {currentRoom.Nickname}: {e.Message}");
+            return [];
+        }
+
         //HashSet<int> indices = new();
         List<RoomNpcSpot> allSpots = new();
         foreach (var e in script.Entities.Values.Where(e => e.Type == EntityTypes.Marker))

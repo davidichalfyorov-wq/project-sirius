@@ -23,8 +23,10 @@ public partial class Band
     public int? OffsetDist;
     [Entry("fade")]
     public float[]? Fade;
-    [Entry("texture_aspect")]
     public float? TextureAspect;
+
+    [EntryHandler("texture_aspect", Multiline = true)]
+    private void HandleTextureAspect(Entry e) => TextureAspect = e.Count > 0 ? e[0].ToSingle() : null;
     [Entry("color_shift")]
     public Vector3? ColorShift;
     [Entry("ambient_intensity")]

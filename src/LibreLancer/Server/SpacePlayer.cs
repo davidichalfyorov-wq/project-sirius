@@ -118,6 +118,45 @@ public class SpacePlayer : ISpacePlayer
         });
     }
 
+    public void ToggleCloak()
+    {
+        world.EnqueueAction(() =>
+        {
+            var obj = world.Players[player];
+            if (obj.TryGetComponent<CloakComponent>(out var cloak))
+            {
+                cloak.Toggle(world.GameWorld);
+            }
+            else
+            {
+                player.RpcClient.OnConsoleMessage("No cloaking device installed.");
+            }
+        });
+    }
+
+    public void ActivateJumpDrive()
+    {
+        world.EnqueueAction(() =>
+        {
+            if (!world.Players.ContainsKey(player))
+            {
+                return;
+            }
+
+            player.RpcClient.OnConsoleMessage("Jump drive command received; Discovery jump-drive routing is not configured yet.");
+        });
+    }
+
+    public void SelfDestruct()
+    {
+        world.EnqueueAction(() =>
+        {
+            var obj = world.Players[player];
+            player.RpcClient.OnConsoleMessage("Self-destruct activated.");
+            obj.GetComponent<SHealthComponent>()?.Damage(float.MaxValue / 4f, float.MaxValue / 4f, obj, null);
+        });
+    }
+
     public void StopScan()
     {
         world.EnqueueAction(() => { World.Players[player].GetComponent<SPlayerComponent>()!.StopScan(); });

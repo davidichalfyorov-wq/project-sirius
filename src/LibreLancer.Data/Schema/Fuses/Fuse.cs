@@ -17,6 +17,8 @@ public partial class Fuse
     public float Lifetime = 1;
     [Entry("death_fuse")]
     public bool DeathFuse;
+    [Entry("LODranges")]
+    public float[] LodRanges = [];
 
     [Section("start_effect", Child = true)]
     [Section("destroy_group", Child = true)]
@@ -29,5 +31,6 @@ public partial class Fuse
     [Section("damage_root", Child = true)]
     [Section("damage_group", Child = true)]
     [Section("tumble", Child = true)]
+    [Section("make_invincible", Child = true)]
     public List<FuseAction> Actions = [];
 }

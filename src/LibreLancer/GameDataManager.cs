@@ -20,6 +20,8 @@ public class GameDataManager
     public ResourceManager Resources;
     private GameResourceManager? glResource;
     public GameItemDb Items;
+    private Dictionary<string, string>? voicePathMap;
+    private Dictionary<(string Voice, uint Hash), string>? looseVoiceLineMap;
 
     public FileSystem VFS => Items.VFS;
 
@@ -95,6 +97,16 @@ public class GameDataManager
             ActiveModel = m.ActiveModel,
             InactiveModel = m.InactiveModel,
         });
+    }
+
+    public ResolvedFx? ResolveEffect(string? nickname)
+    {
+        if (string.IsNullOrWhiteSpace(nickname))
+        {
+            return null;
+        }
+
+        return Items.ResolveFx(nickname);
     }
 
     public Texture2D? GetSplashScreen()
@@ -267,9 +279,81 @@ public class GameDataManager
 
     }
 
+    private void BuildVoicePathMap()
+    {
+        if (voicePathMap != null && looseVoiceLineMap != null)
+        {
+            return;
+        }
+
+        voicePathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        looseVoiceLineMap = new Dictionary<(string Voice, uint Hash), string>();
+        var audioRoot = Items.Ini.Freelancer.DataPath + "AUDIO";
+
+        void Scan(string folder, string? voiceFolder)
+        {
+            foreach (var file in Items.VFS.GetFiles(folder))
+            {
+                var relativePath = folder + "\\" + file;
+                var ext = Path.GetExtension(file);
+                if (ext.Equals(".utf", StringComparison.OrdinalIgnoreCase))
+                {
+                    voicePathMap[Path.GetFileNameWithoutExtension(file)] = relativePath;
+                }
+                else if (voiceFolder != null && ext.Equals(".wav", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(file);
+                    if (TryParseVoiceHash(fileName, out var hash))
+                    {
+                        looseVoiceLineMap[(voiceFolder, hash)] = relativePath;
+                    }
+                }
+            }
+
+            foreach (var dir in Items.VFS.GetDirectories(folder))
+            {
+                var child = folder + "\\" + dir;
+                Scan(child, voiceFolder ?? dir);
+            }
+        }
+
+        Scan(audioRoot, null);
+    }
+
+    private static bool TryParseVoiceHash(string fileName, out uint hash)
+    {
+        if (fileName.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return uint.TryParse(fileName[2..], System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out hash);
+        }
+
+        return uint.TryParse(fileName, out hash);
+    }
+
     public string? GetVoicePath(string id)
     {
-        return Items.DataPath("AUDIO\\" + id + ".utf");
+        var direct = Items.Ini.Freelancer.DataPath + "AUDIO\\" + id + ".utf";
+        if (Items.VFS.FileExists(direct))
+        {
+            return direct;
+        }
+
+        BuildVoicePathMap();
+        if (voicePathMap!.TryGetValue(id, out var mapped))
+        {
+            return mapped;
+        }
+
+        return null;
+    }
+
+    public Stream? GetVoiceLineStream(string voice, uint hash)
+    {
+        BuildVoicePathMap();
+        return looseVoiceLineMap!.TryGetValue((voice, hash), out var path) && Items.VFS.FileExists(path)
+            ? Items.VFS.Open(path)
+            : null;
     }
 
     public string? GetInfocardText(int id, FontManager fonts)

@@ -15,6 +15,8 @@ public struct PacketReader
     public NetHpidReader? HpidReader => hpids;
 
     public int Size => reader.RawDataSize;
+    public int AvailableBytes => reader.AvailableBytes;
+    public bool IsEOF => reader.AvailableBytes <= 0;
 
     public PacketReader(NetDataReader reader, NetHpidReader? hpids = null)
     {

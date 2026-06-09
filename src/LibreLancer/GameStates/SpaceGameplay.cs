@@ -20,6 +20,7 @@ using LibreLancer.Infocards;
 using LibreLancer.Input;
 using LibreLancer.Interface;
 using LibreLancer.Net;
+using LibreLancer.Net.Protocol;
 using LibreLancer.Physics;
 using LibreLancer.Render;
 using LibreLancer.Render.Cameras;
@@ -363,7 +364,24 @@ World Time: {12:F2}
                     UseRepairKits();
                     break;
                 case InputAction.USER_REPAIR_SHIELD:
+                case InputAction.USER_SHIELDS:
                     UseShieldBatteries();
+                    break;
+                case InputAction.USER_CLOAK:
+                    session.SpaceRpc.ToggleCloak();
+                    break;
+                case InputAction.USER_ACTIVATE_JUMPDRIVE:
+                    session.SpaceRpc.ActivateJumpDrive();
+                    break;
+                case InputAction.USER_SELF_DESTRUCT:
+                    session.SpaceRpc.SelfDestruct();
+                    break;
+                case InputAction.USER_HUD:
+                    ShowHud = !ShowHud;
+                    ui.Visible = ShowHud;
+                    break;
+                case InputAction.USER_PLAYER_INFO:
+                    ((IClientPlayer)session).OnConsoleMessage($"System: {sys.Nickname}; position: {player.WorldTransform.Position}");
                     break;
                 case InputAction.USER_CHAT:
                     ui.ChatboxEvent();

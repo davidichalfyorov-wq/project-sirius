@@ -90,7 +90,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnDoubleClick(MouseEventArgs e)
         {
-            if (game!.Debug != null && game!.Debug.CaptureMouse)
+            if (game?.Debug?.CaptureMouse == true)
             {
                 return;
             }

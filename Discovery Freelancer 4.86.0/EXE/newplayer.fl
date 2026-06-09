@@ -9,8 +9,9 @@ voice = trent_voice
 costume = trent
 com_costume = trent
 
-system = FP7_system
-pos = 3216,1314,-21775
+system = Li01
+base = Li01_01_Base
+pos = -36345,0,-26650
 rotate = 175,-15,179.8
 
 log = 1553, 0
@@ -134,8 +135,8 @@ locked_gate = 2544154759   ;Iw05_to_Li03
 locked_gate = 2449127296   ;Iw05_to_Li03_hole
 locked_gate = 2549660557   ;Iw06_to_Li03
 locked_gate = 2906296192   ;Iw06_to_Li03_hole
-locked_gate = 3141298564   ;Br02_to_Iw03_hole
-locked_gate = 2313479565   ;Iw03_to_Br02_hole
-locked_gate = 3078400647   ;Iw03_to_Li02
-locked_gate = 2965534223   ;Li02_to_Iw03
+locked_gate = 3141298564ï¿½ï¿½ï¿½;Br02_to_Iw03_hole
+locked_gate = 2313479565ï¿½ï¿½ï¿½;Iw03_to_Br02_hole
+locked_gate = 3078400647ï¿½ï¿½ï¿½;Iw03_to_Li02
+locked_gate = 2965534223ï¿½ï¿½ï¿½;Li02_to_Iw03
 

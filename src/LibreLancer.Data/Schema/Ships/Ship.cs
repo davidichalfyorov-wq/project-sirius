@@ -20,6 +20,8 @@ public enum ShipType
     Transport,
     Capital,
     Mining,
+    WEAPONS_PLATFORM,
+    MISSION_SATELLITE,
 }
 
 [ParsedSection]

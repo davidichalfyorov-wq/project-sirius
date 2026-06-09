@@ -123,13 +123,13 @@ namespace LibreLancer.World
 
                 if (gunDef.Munition.Def.MunitionHitEffect != null)
                 {
-                    pdata.HitEffect = res.Items.Effects.Get(gunDef.Munition.Def.MunitionHitEffect)?
+                    pdata.HitEffect = res.ResolveEffect(gunDef.Munition.Def.MunitionHitEffect)?
                         .GetEffect(world.Renderer.ResourceManager);
                 }
 
                 if (gunDef.Munition.Def.ConstEffect != null)
                 {
-                    pdata.TravelEffect = res.Items.Effects.Get(gunDef.Munition.Def.ConstEffect)?
+                    pdata.TravelEffect = res.ResolveEffect(gunDef.Munition.Def.ConstEffect)?
                         .GetEffect(world.Renderer.ResourceManager);
                 }
             }

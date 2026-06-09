@@ -934,6 +934,9 @@ public partial class CGameSession
         if (allowedDocking == null)
             return true;
 
+        if (allowedDocking.LockedDockables.Contains(gameObject.NicknameCRC))
+            return false;
+
         if (!allowedDocking.CanTl)
         {
             if (allowedDocking.TlExceptions.Contains(gameObject.NicknameCRC))
@@ -1208,7 +1211,7 @@ public partial class CGameSession
 
             if (mn.Def.ConstEffect != null)
             {
-                var fx = Game.GameData.Items.Effects.Get(mn.Def.ConstEffect)?
+                var fx = Game.GameData.ResolveEffect(mn.Def.ConstEffect)?
                     .GetEffect(Game.ResourceManager);
                 var ren = new ParticleEffectRenderer(fx) { Attachment = go.GetHardpoint(mn.Def.HpTrailParent) };
                 go.ExtraRenderers.Add(ren);

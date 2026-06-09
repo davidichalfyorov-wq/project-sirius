@@ -10,6 +10,9 @@ public interface ISpacePlayer
     void LeaveFormation();
     void UseRepairKits();
     void UseShieldBatteries();
+    void ToggleCloak();
+    void ActivateJumpDrive();
+    void SelfDestruct();
     void Tractor(ObjNetId target);
     void RunDirectiveIndex(int index);
 

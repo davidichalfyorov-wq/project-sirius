@@ -855,18 +855,20 @@ public class Cnd_JumpInComplete : ScriptedCondition
 
 public class Cnd_JumpgateAct : ScriptedCondition
 {
+    public List<string> Arguments = [];
+
     public Cnd_JumpgateAct()
     {
-        throw new NotImplementedException();
     }
 
     public Cnd_JumpgateAct(Entry entry)
     {
-        throw new NotImplementedException();
+        Arguments = entry.Select(x => x.ToString()).ToList();
     }
 
     public override void Write(IniBuilder.IniSectionBuilder section)
     {
+        section.Entry("Cnd_JumpgateAct", Arguments.ToArray());
     }
 }
 
@@ -1353,18 +1355,20 @@ public class Cnd_Destroyed :
 
 public class Cnd_CmpToPlane : ScriptedCondition
 {
+    public List<string> Arguments = [];
+
     public Cnd_CmpToPlane()
     {
-        throw new NotImplementedException();
     }
 
     public Cnd_CmpToPlane(Entry entry)
     {
-        throw new NotImplementedException();
+        Arguments = entry.Select(x => x.ToString()).ToList();
     }
 
     public override void Write(IniBuilder.IniSectionBuilder section)
     {
+        section.Entry("Cnd_CmpToPlane", Arguments.ToArray());
     }
 }
 

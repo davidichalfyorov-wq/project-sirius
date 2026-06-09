@@ -226,7 +226,17 @@ namespace LibreLancer.Utf.Dfm
                     weights.W = BoneWeightChain[first + 3];
                 }
 
-                if (count > 4) throw new NotImplementedException();
+                if (count > 4)
+                {
+                    // The renderer packs skinning into four weights. Older/modified DFM
+                    // exporters can emit more influences; keep the first four and
+                    // renormalize instead of aborting model loading.
+                    var sum = weights.X + weights.Y + weights.Z + weights.W;
+                    if (sum > 0)
+                    {
+                        weights /= sum;
+                    }
+                }
 
                 if (id1 < 0 || id2 < 0 || id3 < 0 || id4 < 0 | id1 > 255 || id2 > 255 || id3 > 255 || id4 > 255)
                 {

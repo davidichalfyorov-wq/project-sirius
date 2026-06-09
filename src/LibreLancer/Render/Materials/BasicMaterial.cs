@@ -112,8 +112,11 @@ namespace LibreLancer.Render.Materials
                 caps |= ShaderFeatures.VERTEX_LIGHTING;
             if (EtEnabled || BtEnabled)
                 caps |= ShaderFeatures.TEX2_ENABLED;
-            if (EtEnabled && BtEnabled)
-                throw new NotSupportedException("Bt + Et");
+            // Discovery contains several combined basic material token sets (e.g.
+            // DcDtBtEc and DcDtEcEt). The fixed-function Freelancer material
+            // model permits these flags to coexist; the renderer uses the second
+            // texture slot for Et when present and otherwise Bt, so do not fail
+            // hard on the combination.
             if (Fade)
                 caps |= ShaderFeatures.FADE_ENABLED;
             if (useEnvMapping)
@@ -301,7 +304,7 @@ namespace LibreLancer.Render.Materials
                 var param = new BasicParameters()
                 {
                     Dc = dcValue, Ec = Ec, FadeRange = new Vector2(FadeNear, FadeFar), Oc = Oc * OpacityMultiplier,
-                    Tex2Type = BtEnabled ? 1 : 0
+                    Tex2Type = BtEnabled && !EtEnabled ? 1 : 0
                 };
                 shader.SetUniformBlock(3, ref param);
                 SetTextureCoordinates(shader, DtFlags, EtFlags, NmFlags, BtFlags);

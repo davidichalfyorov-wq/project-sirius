@@ -9,6 +9,7 @@ public class AllowedDocking
     public bool CanTl = true;
     public HashSet<uint> DockExceptions = [];
     public HashSet<uint> TlExceptions = [];
+    public HashSet<uint> LockedDockables = [];
 
     public void Put(PacketWriter message)
     {
@@ -27,8 +28,18 @@ public class AllowedDocking
         }
         if (TlExceptions is { Count: > 0 })
         {
-            message.PutVariableUInt32((uint)DockExceptions.Count);
+            message.PutVariableUInt32((uint)TlExceptions.Count);
             foreach (var e in TlExceptions)
+                message.Put(e);
+        }
+        else
+        {
+            message.PutVariableUInt32(0);
+        }
+        if (LockedDockables is { Count: > 0 })
+        {
+            message.PutVariableUInt32((uint)LockedDockables.Count);
+            foreach (var e in LockedDockables)
                 message.Put(e);
         }
         else
@@ -52,13 +63,23 @@ public class AllowedDocking
         {
             tl.Add(message.GetUInt());
         }
+        var locked = new HashSet<uint>();
+        if (!message.IsEOF)
+        {
+            var countLocked = message.GetVariableUInt32();
+            for (int i = 0; i < countLocked; i++)
+            {
+                locked.Add(message.GetUInt());
+            }
+        }
 
         return new()
         {
             CanDock = (flags & (1 << 0)) != 0,
             CanTl = (flags & (1 << 1)) != 0,
             DockExceptions = de,
-            TlExceptions = tl
+            TlExceptions = tl,
+            LockedDockables = locked
         };
     }
 

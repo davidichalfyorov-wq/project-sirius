@@ -43,11 +43,23 @@ public class CTradelaneComponent : GameComponent
         Parent?.ExtraRenderers.Add(rightLane);
     }
 
-    public void ActivateLeft() => leftLane.Active = true;
+    public void ActivateLeft()
+    {
+        if (leftLane != null) leftLane.Active = true;
+    }
 
-    public void ActivateRight() => rightLane.Active = true;
+    public void ActivateRight()
+    {
+        if (rightLane != null) rightLane.Active = true;
+    }
 
-    public void DeactivateLeft() => leftLane.Active = false;
+    public void DeactivateLeft()
+    {
+        if (leftLane != null) leftLane.Active = false;
+    }
 
-    public void DeactivateRight() => rightLane.Active = false;
+    public void DeactivateRight()
+    {
+        if (rightLane != null) rightLane.Active = false;
+    }
 }

@@ -42,7 +42,9 @@ namespace LibreLancer.Utf
         }
         public override void Update(ChannelFloat distance, Quaternion quat)
         {
-            throw new NotImplementedException();
+            // Fixed constructs do not animate. Discovery assets can still route
+            // them through the generic animation updater, so this is a safe no-op.
+            fixtransform = new Transform3D(Origin, Rotation);
         }
     }
 }

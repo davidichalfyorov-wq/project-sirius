@@ -19,16 +19,22 @@ public partial class NebulaExterior
     public int? PlaneSlices;
     [Entry("bit_radius")]
     public int? BitRadius;
-    [Entry("bit_radius_random_variation")]
     public int? BitRadiusRandomVariation;
     [Entry("min_bits")]
     public int? MinBits;
     [Entry("max_bits")]
     public int? MaxBits;
-    [Entry("move_bit_percent")]
     public float? MoveBitPercent;
-    [Entry("equator_bias")]
     public float? EquatorBias;
+
+    [EntryHandler("bit_radius_random_variation", Multiline = true)]
+    private void HandleBitRadiusRandomVariation(Entry e) => BitRadiusRandomVariation = e.Count > 0 ? e[0].ToInt32() : null;
+
+    [EntryHandler("move_bit_percent", Multiline = true)]
+    private void HandleMoveBitPercent(Entry e) => MoveBitPercent = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("equator_bias", Multiline = true)]
+    private void HandleEquatorBias(Entry e) => EquatorBias = e.Count > 0 ? e[0].ToSingle() : null;
     [Entry("color")]
     public Color4? Color;
     [Entry("opacity")]

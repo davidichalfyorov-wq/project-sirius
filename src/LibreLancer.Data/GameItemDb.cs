@@ -136,6 +136,16 @@ public class GameItemDb
         return null;
     }
 
+    public ResolvedFx? ResolveFx(string? nickname)
+    {
+        if (string.IsNullOrWhiteSpace(nickname))
+        {
+            return null;
+        }
+
+        return Effects.Get(nickname) ?? VisEffects.Get(nickname);
+    }
+
     private bool TryResolveThn(string path, out ResolvedThn? r)
     {
         r = null;
@@ -368,6 +378,24 @@ public class GameItemDb
 
             Dictionary<string, BaseNpc> freeNpcs = new(StringComparer.OrdinalIgnoreCase);
 
+            BaseNpc CreateFallbackFixedNpc(string nickname)
+            {
+                var costume = Costumes.FirstOrDefault();
+                var faction = b.LocalFaction ?? b.BaseFactions.Select(x => x.Faction).FirstOrDefault(x => x != null);
+                var npc = new BaseNpc(nickname)
+                {
+                    BaseAppr = costume,
+                    Body = costume?.Body,
+                    Head = costume?.Head,
+                    LeftHand = costume?.LeftHand,
+                    RightHand = costume?.RightHand,
+                    Affiliation = faction,
+                    Voice = faction?.NpcVoices.FirstOrDefault()?.Nickname,
+                };
+                b.Npcs.Add(npc);
+                return npc;
+            }
+
             foreach (var npc in mBase.Npcs)
             {
                 var n = new BaseNpc(npc.Nickname)
@@ -404,6 +432,8 @@ public class GameItemDb
                     }).ToList(),
                     Mission = npc.Mission,
                 };
+
+                b.Npcs.Add(n);
 
                 if (!string.IsNullOrEmpty(npc.Room))
                 {
@@ -458,8 +488,9 @@ public class GameItemDb
                     }
                     if (npc == null)
                     {
-                        FLLog.Error("MRoom", $"Unable to create fixed npc '{n.Npc}' for {b.Nickname}_{room.Nickname}");
-                        continue;
+                        npc = CreateFallbackFixedNpc(n.Npc);
+                        room.Npcs.Add(npc);
+                        FLLog.Warning("MRoom", $"Synthesised fixed npc '{n.Npc}' for {b.Nickname}_{room.Nickname}; original GF_NPC record was not found");
                     }
                     npc.Placement = new(n.StandMarker, ResolveThn(n.Script), n.Action ?? "");
                 }
@@ -1059,7 +1090,7 @@ public class GameItemDb
 
                 if (!string.IsNullOrEmpty(mequip.Explosion.Effect))
                 {
-                    mequip.ExplodeFx = Effects.Get(mequip.Explosion.Effect);
+                    mequip.ExplodeFx = ResolveFx(mequip.Explosion.Effect);
                 }
 
                 ApplyWeaponModsToMissile(mequip);
@@ -1067,7 +1098,7 @@ public class GameItemDb
             }
             else
             {
-                var effect = Effects.Get(mn.ConstEffect);
+                var effect = ResolveFx(mn.ConstEffect);
                 var mequip = new MunitionEquip()
                 {
                     Def = mn,
@@ -1169,7 +1200,7 @@ public class GameItemDb
                         HpType = gn.HpGunType,
                         Munition = mn,
                         Def = gn,
-                        FlashEffect = Effects.Get(gn.FlashParticleName)
+                        FlashEffect = ResolveFx(gn.FlashParticleName)
                     };
                     equip = eqp;
                     equip.ModelFile = ResolveDrawable(gn.MaterialLibrary, gn.DaArchetype);
@@ -1202,7 +1233,7 @@ public class GameItemDb
                     HpType = "hp_thruster"
                 };
                 equip = eqp;
-                eqp.Particles = Effects.Get(th.Particles);
+                eqp.Particles = ResolveFx(th.Particles);
                 equip.ModelFile = ResolveDrawable(th.MaterialLibrary, th.DaArchetype);
             }
 
@@ -1240,8 +1271,8 @@ public class GameItemDb
             {
                 var eq = new CloakEquipment()
                 {
-                    CloakInFx = clk.CloakInFx == null ? null : Effects.Get(clk.CloakInFx),
-                    CloakOutFx = clk.CloakOutFx == null ? null : Effects.Get(clk.CloakOutFx),
+                    CloakInFx = clk.CloakInFx == null ? null : ResolveFx(clk.CloakInFx),
+                    CloakOutFx = clk.CloakOutFx == null ? null : ResolveFx(clk.CloakOutFx),
                     CloakInTime = clk.CloakInTime,
                     CloakOutTime = clk.CloakOutTime
                 };
@@ -1286,7 +1317,7 @@ public class GameItemDb
             {
                 var tlequip = new TradelaneEquipment
                 {
-                    RingActive = Effects.Get(tl.TlRingActive)
+                    RingActive = ResolveFx(tl.TlRingActive)
                 };
                 equip = tlequip;
             }
@@ -2264,7 +2295,7 @@ public class GameItemDb
         {
             var ex = new Explosion() { Nickname = orig.Nickname };
             ex.CRC = CrcTool.FLModelCrc(ex.Nickname);
-            ex.Effect = Effects.Get(orig.Effect);
+            ex.Effect = ResolveFx(orig.Effect);
 
             Explosions.Add(ex);
         }
@@ -2682,7 +2713,15 @@ public class GameItemDb
 
                 if (!fr.Fx.ContainsKey(effect))
                 {
-                    fr.Fx[effect] = Effects.Get(effect)!;
+                    var resolved = ResolveFx(effect);
+                    if (resolved != null)
+                    {
+                        fr.Fx[effect] = resolved;
+                    }
+                    else
+                    {
+                        FLLog.Warning("Fuses", $"Unable to resolve fuse effect '{effect}' for {fuse.Name}");
+                    }
                 }
             }
 
@@ -2694,7 +2733,7 @@ public class GameItemDb
     {
         var equip = new EffectEquipment()
         {
-            Particles = Effects.Get(fx.Particles),
+            Particles = ResolveFx(fx.Particles),
         };
         return equip;
     }

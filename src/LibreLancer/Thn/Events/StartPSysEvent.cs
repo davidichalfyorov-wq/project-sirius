@@ -28,13 +28,15 @@ namespace LibreLancer.Thn.Events
                 return;
             }
 
-            if (obj.Object == null)
+            if (obj.Object?.RenderComponent is not ParticleEffectRenderer r)
             {
-                FLLog.Error("Thn", "Entity " + Targets[0] + " null renderer");
+                // Many THN scripts reference optional particles that are absent in some
+                // mods or are replaced by player engine emitters. Treat missing PSys
+                // renderers as a no-op instead of spamming errors and aborting room logic.
+                FLLog.Debug("Thn", "Entity " + Targets[0] + " has no particle renderer");
                 return;
             }
-            
-            var r = (ParticleEffectRenderer)obj.Object.RenderComponent!;
+
             r.Active = true;
             instance.AddProcessor(new StopPSys(r, Duration));
         }

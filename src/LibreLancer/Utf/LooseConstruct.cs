@@ -33,7 +33,9 @@ namespace LibreLancer.Utf
         }
         public override void Update(ChannelFloat distance, Quaternion quat)
         {
-            throw new NotImplementedException();
+            // A loose construct has no deterministic animation track on its own.
+            // Some Discovery models still call Update() through generic construct
+            // paths; keep the original local transform instead of crashing.
         }
     }
 }

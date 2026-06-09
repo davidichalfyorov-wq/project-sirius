@@ -118,6 +118,38 @@ public class FreelancerData
         VFS = vfs;
     }
 
+    private void LoadLooseInfocardResources()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new[]
+        {
+            Freelancer.DataPath + "strings.json",
+            Freelancer.DataPath + "infocards.json",
+            "DATA\\strings.json",
+            "DATA/strings.json",
+            "strings.json"
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (!seen.Add(candidate) || !VFS.FileExists(candidate))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var stream = VFS.Open(candidate);
+                var loaded = Infocards.LoadJson(stream, candidate);
+                FLLog.Info("Strings", $"Loaded {loaded.Strings} strings and {loaded.Infocards} infocards from {candidate}");
+            }
+            catch (Exception e)
+            {
+                FLLog.Warning("Strings", $"Unable to load {candidate}: {e.Message}");
+            }
+        }
+    }
+
     public void LoadData()
     {
         if (Loaded)
@@ -137,6 +169,7 @@ public class FreelancerData
         var stringPool = new IniStringPool();
 
         Infocards = new InfocardManager(Freelancer.Resources);
+        LoadLooseInfocardResources();
 
         List<Action> tasks = [];
 

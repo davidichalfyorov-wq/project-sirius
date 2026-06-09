@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using LibreLancer.Data.Ini;
 
@@ -11,8 +12,16 @@ namespace LibreLancer.Data.Schema.Fuses;
 
 public abstract class FuseAction
 {
-    [Entry("at_t")]
     public float AtT;
+
+    [EntryHandler("at_t", Multiline = true)]
+    protected void HandleAtT(Entry e)
+    {
+        if (e.Count > 0)
+        {
+            AtT = e[0].ToSingle();
+        }
+    }
 }
 
 [ParsedSection]
@@ -57,6 +66,27 @@ public partial class FuseDestroyGroup : FuseAction //[destroy_group]
     public string? GroupName;
     [Entry("fate")]
     public FusePartFate Fate;
+    public bool? Separable;
+    public float[] LODRanges = [];
+    public string? DmgHp;
+    public string? DmgObj;
+
+    [EntryHandler("separable", Multiline = true)]
+    private void HandleSeparable(Entry e) => Separable = e.Count == 0 || e[0].ToBoolean();
+
+    [EntryHandler("LODranges", Multiline = true)]
+    private void HandleLodRanges(Entry e) => LODRanges = e.Select(x => x.ToSingle()).ToArray();
+
+    [EntryHandler("dmg_hp", Multiline = true)]
+    private void HandleDmgHp(Entry e) => DmgHp = string.Join(", ", e.Select(x => x.ToString()));
+
+    [EntryHandler("dmg_obj", Multiline = true)]
+    private void HandleDmgObj(Entry e) => DmgObj = string.Join(", ", e.Select(x => x.ToString()));
+}
+
+[ParsedSection]
+public partial class FuseMakeInvincible : FuseAction //[make_invincible]
+{
 }
 [ParsedSection]
 public partial class FuseStartCamParticles : FuseAction //[start_cam_particles]

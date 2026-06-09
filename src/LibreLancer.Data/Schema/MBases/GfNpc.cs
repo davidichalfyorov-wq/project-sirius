@@ -41,20 +41,52 @@ public partial class GfNpc
     public List<NpcBribe> Bribes = [];
     public NpcMission? Mission;
 
+    private string[]? activeKnowDb;
+    private string[]? activeRumorKnowDb;
+    private readonly List<NpcKnow> knowWaitingForDb = [];
+    private readonly List<NpcRumor> rumorWaitingForDb = [];
+
     [EntryHandler("know", MinComponents = 4, Multiline = true)]
-    private void HandleKnow(Entry e) => Know.Add(
-        new NpcKnow(e[0].ToInt32(), e[1].ToInt32(), e[2].ToInt32(), e[3].ToInt32())
-    );
+    private void HandleKnow(Entry e)
+    {
+        var know = new NpcKnow(e[0].ToInt32(), e[1].ToInt32(), e[2].ToInt32(), e[3].ToInt32());
+        if (activeKnowDb != null)
+        {
+            know.Objects = activeKnowDb;
+        }
+        else
+        {
+            knowWaitingForDb.Add(know);
+        }
+
+        Know.Add(know);
+    }
 
     [EntryHandler("rumor", MinComponents = 4, Multiline = true)]
-    private void HandleRumor(Entry e) => Rumors.Add(
-        new NpcRumor(e[0].ToString(), e[1].ToString(), e[2].ToInt32(), e[3].ToInt32(), false)
-    );
+    private void HandleRumor(Entry e)
+    {
+        AddRumor(new NpcRumor(e[0].ToString(), e[1].ToString(), e[2].ToInt32(), e[3].ToInt32(), false));
+    }
 
     [EntryHandler("rumor_type2", MinComponents = 4, Multiline = true)]
-    private void HandleRumorType2(Entry e) => Rumors.Add(
-        new NpcRumor(e[0].ToString(), e[1].ToString(), e[2].ToInt32(), e[3].ToInt32(), true)
-    );
+    private void HandleRumorType2(Entry e)
+    {
+        AddRumor(new NpcRumor(e[0].ToString(), e[1].ToString(), e[2].ToInt32(), e[3].ToInt32(), true));
+    }
+
+    private void AddRumor(NpcRumor rumor)
+    {
+        if (activeRumorKnowDb != null)
+        {
+            rumor.Objects = activeRumorKnowDb;
+        }
+        else
+        {
+            rumorWaitingForDb.Add(rumor);
+        }
+
+        Rumors.Add(rumor);
+    }
 
     [EntryHandler("bribe", MinComponents = 3, Multiline = true)]
     private void HandleBribe(Entry e) => Bribes.Add(
@@ -67,19 +99,23 @@ public partial class GfNpc
     [EntryHandler("rumorknowdb", Multiline = true)]
     private void RumorKnowDb(Entry knowdb)
     {
-        if (Rumors.Count == 0)
-            IniDiagnostic.Warn("rumorknowdb without rumor", knowdb);
-        else
-            Rumors[^1].Objects = knowdb.Select(x => x.ToString()).ToArray();
+        activeRumorKnowDb = knowdb.Select(x => x.ToString()).ToArray();
+        foreach (var rumor in rumorWaitingForDb)
+        {
+            rumor.Objects = activeRumorKnowDb;
+        }
+        rumorWaitingForDb.Clear();
     }
 
     [EntryHandler("knowdb", Multiline = true)]
     private void KnowDb(Entry knowdb)
     {
-        if (Know.Count == 0)
-            IniDiagnostic.Warn("knowdb without know", knowdb);
-        else
-            Know[^1].Objects = knowdb.Select(x => x.ToString()).ToArray();
+        activeKnowDb = knowdb.Select(x => x.ToString()).ToArray();
+        foreach (var know in knowWaitingForDb)
+        {
+            know.Objects = activeKnowDb;
+        }
+        knowWaitingForDb.Clear();
     }
 }
 
@@ -136,5 +172,6 @@ public class NpcRumor : RepInfo
         End = end;
         RepRequired = rep;
         Ids = ids;
+        Type2 = type2;
     }
 }

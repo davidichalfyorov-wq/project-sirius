@@ -23,8 +23,10 @@ public partial class LightSource : NamedObject
     public LightType? Type;
     [Entry("atten_curve")]
     public string? AttenCurve;
-    [Entry("color_curve")]
     public string? ColorCurve;
+
+    [EntryHandler("color_curve", Multiline = true)]
+    private void HandleColorCurve(Entry e) => ColorCurve = e.Count > 0 ? e[0].ToString() : null;
     [Entry("attenuation")]
     public Vector3? Attenuation;
     [Entry("direction")]

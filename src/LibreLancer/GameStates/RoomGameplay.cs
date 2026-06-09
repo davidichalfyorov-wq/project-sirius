@@ -12,6 +12,7 @@ using System.Linq;
 using ImGuiNET;
 using LibreLancer.Client;
 using LibreLancer.Client.Components;
+using LibreLancer.Data.GameData;
 using LibreLancer.Data.GameData.World;
 using LibreLancer.Utf.Dfm;
 using LibreLancer.Data.Schema.Missions;
@@ -72,6 +73,7 @@ namespace LibreLancer
         private double letterboxAmount = 1;
         private bool animatingLetterbox = false;
         private List<RTCHotspot> hotspots = [];
+        private List<BaseNpcHotspot> baseNpcHotspots = [];
         private GameObject playerShip = null!;
         private HashSet<string> processedPaths = [];
         private Queue<StoryCutsceneIni> toPlay = new();
@@ -162,13 +164,18 @@ namespace LibreLancer
         {
             RTCHotspot? hp = GetHotspot(e.X, e.Y);
 
-            if (hp == null)
+            if (hp != null)
             {
+                PlayScript(hp.ini, CutsceneState.Regular);
+                session.RpcServer.StoryNPCSelect(hp.npc, currentRoom.Nickname, currentBase.Nickname);
                 return;
             }
 
-            PlayScript(hp.ini, CutsceneState.Regular);
-            session.RpcServer.StoryNPCSelect(hp.npc, currentRoom.Nickname, currentBase.Nickname);
+            var baseNpc = GetBaseNpcHotspot(e.X, e.Y);
+            if (baseNpc != null)
+            {
+                ShowBaseNpcInteraction(baseNpc.Npc);
+            }
         }
 
         private void MissionAccepted()
@@ -787,6 +794,221 @@ namespace LibreLancer
             return null;
         }
 
+        private class BaseNpcHotspot
+        {
+            public ThnSceneObject Obj;
+            public BaseNpc Npc;
+
+            public BaseNpcHotspot(ThnSceneObject obj, BaseNpc npc)
+            {
+                Obj = obj;
+                Npc = npc;
+            }
+        }
+
+        private BaseNpcHotspot? GetBaseNpcHotspot(int mX, int mY)
+        {
+            foreach (var hp in baseNpcHotspots)
+            {
+                var sp = ScreenPosition(hp.Obj.Translate);
+                var rect = new RectangleF(
+                    sp.X - 50, sp.Y - 50, 100, 100);
+
+                if (rect.Contains(mX, mY))
+                {
+                    return hp;
+                }
+            }
+
+            return null;
+        }
+
+        private string GetBaseNpcName(BaseNpc npc)
+        {
+            if (npc.IndividualName > 0)
+            {
+                var name = Game.GameData.GetString(npc.IndividualName);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+
+            return npc.Nickname;
+        }
+
+        private void ShowBaseNpcInteraction(BaseNpc npc)
+        {
+            var name = GetBaseNpcName(npc);
+            var rumor = npc.Rumors.FirstOrDefault(x => x.Ids > 0);
+            if (rumor != null)
+            {
+                var text = Game.GameData.GetString(rumor.Ids);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    ((IClientPlayer)session).OnConsoleMessage($"{name}: {text}");
+                    return;
+                }
+            }
+
+            ((IClientPlayer)session).OnConsoleMessage($"{name}: No rumor text is available for this NPC.");
+        }
+
+        private BaseNpc? FindBaseNpc(string nickname)
+        {
+            return currentBase.Npcs.FirstOrDefault(x =>
+                x.Nickname.Equals(nickname, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private BaseNpc CreateFallbackAmbientNpc(string nickname, Faction? faction)
+        {
+            var costume = Game.GameData.Items.Costumes.FirstOrDefault();
+            var npc = new BaseNpc(nickname)
+            {
+                BaseAppr = costume,
+                Body = costume?.Body,
+                Head = costume?.Head,
+                LeftHand = costume?.LeftHand,
+                RightHand = costume?.RightHand,
+                Affiliation = faction ?? currentBase.LocalFaction,
+                Voice = (faction ?? currentBase.LocalFaction)?.NpcVoices.FirstOrDefault()?.Nickname,
+            };
+            currentBase.Npcs.Add(npc);
+            return npc;
+        }
+
+        private bool AddBaseNpcToScene(BaseNpc npc, string spot, ResolvedThn? fidgetScript)
+        {
+            if (scene == null)
+            {
+                return false;
+            }
+
+            var spotObj = scene.GetObject(spot);
+            if (spotObj == null)
+            {
+                FLLog.Warning("Room", $"Unable to place NPC '{npc.Nickname}': missing spot '{spot}' in {currentRoom.Nickname}");
+                return false;
+            }
+
+            var costume = npc.BaseAppr ?? Game.GameData.Items.Costumes.FirstOrDefault();
+            var head = npc.Head ?? costume?.Head;
+            var body = npc.Body ?? costume?.Body;
+            var rightHand = npc.RightHand ?? costume?.RightHand;
+            var leftHand = npc.LeftHand ?? costume?.LeftHand;
+            var accessory = npc.Accessory ?? costume?.Accessory;
+
+            if (body == null)
+            {
+                FLLog.Warning("Room", $"Unable to place NPC '{npc.Nickname}': missing body/costume data");
+                return false;
+            }
+
+            var sceneName = npc.Nickname;
+            var suffix = 1;
+            while (scene.GetObject(sceneName) != null)
+            {
+                sceneName = $"{npc.Nickname}_{suffix++}";
+            }
+
+            var thnObj = ThnRoomHandler.AddNpc(
+                scene,
+                Game.ResourceManager,
+                Game.GameData.GetCharacterAnimations(),
+                sceneName,
+                spot,
+                npc.Voice,
+                head,
+                body,
+                rightHand,
+                leftHand,
+                accessory,
+                fidgetScript
+            );
+            baseNpcHotspots.Add(new BaseNpcHotspot(thnObj, npc));
+            return true;
+        }
+
+        private List<BaseNpc> GetDynamicNpcCandidates()
+        {
+            List<BaseNpc> candidates = [];
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var fac in currentBase.BaseFactions.OrderByDescending(x => x.Weight))
+            {
+                foreach (var npcName in fac.Npcs)
+                {
+                    if (!seen.Add(npcName))
+                    {
+                        continue;
+                    }
+
+                    var npc = FindBaseNpc(npcName) ?? CreateFallbackAmbientNpc(npcName, fac.Faction);
+                    if (npc.Placement == null)
+                    {
+                        candidates.Add(npc);
+                    }
+                }
+            }
+
+            foreach (var npc in currentBase.Npcs)
+            {
+                if (npc.Placement == null && seen.Add(npc.Nickname))
+                {
+                    candidates.Add(npc);
+                }
+            }
+
+            return candidates;
+        }
+
+        private void AddDynamicBaseNpcsToRoom(HashSet<string> usedSpots)
+        {
+            if (scene == null)
+            {
+                return;
+            }
+
+            var allSpots = ThnRoomHandler.GetSpots(currentRoom)
+                .Where(x => !usedSpots.Contains(x.Nickname))
+                .ToList();
+            var spots = allSpots.Where(x => x.Dynamic).ToList();
+            if (spots.Count == 0)
+            {
+                spots = allSpots;
+            }
+
+            if (spots.Count == 0)
+            {
+                return;
+            }
+
+            var desiredCharacters = currentRoom.MaxCharacters > 0
+                ? currentRoom.MaxCharacters
+                : Math.Min(spots.Count + baseNpcHotspots.Count, 6);
+            var toSpawn = Math.Min(spots.Count, Math.Max(0, desiredCharacters - baseNpcHotspots.Count));
+            if (toSpawn <= 0)
+            {
+                return;
+            }
+
+            var candidates = GetDynamicNpcCandidates();
+            var fallbackFaction = currentBase.LocalFaction ?? currentBase.BaseFactions.Select(x => x.Faction).FirstOrDefault(x => x != null);
+            while (candidates.Count < toSpawn)
+            {
+                var nickname = $"{currentBase.Nickname}_{currentRoom.Nickname}_ambient_{candidates.Count + 1}";
+                candidates.Add(CreateFallbackAmbientNpc(nickname, fallbackFaction));
+            }
+
+            for (var i = 0; i < toSpawn && i < candidates.Count; i++)
+            {
+                if (AddBaseNpcToScene(candidates[i], spots[i].Nickname, null))
+                {
+                    usedSpots.Add(spots[i].Nickname);
+                }
+            }
+        }
+
         private void ProcessNextCutscene()
         {
             var ct = toPlay.Dequeue();
@@ -887,6 +1109,8 @@ namespace LibreLancer
             {
                 currentState = ScriptState.None;
                 SetRoomCameraAndShip();
+                AddBaseNpcsToRoom();
+                ui.Visible = true;
                 animatingLetterbox = true;
             }
         }
@@ -916,12 +1140,44 @@ namespace LibreLancer
                 ? playerShip.GetHardpoint("HpMount")!.Transform.Inverse()
                 : Transform3D.Identity);
 
-            shipMarker.Object?.Children.Add(playerShip);
+            if (shipMarker.Object != null)
+            {
+                playerShip.Parent = shipMarker.Object;
+                if (!shipMarker.Object.Children.Contains(playerShip))
+                {
+                    shipMarker.Object.Children.Add(playerShip);
+                }
+            }
+        }
+
+        private void AddBaseNpcsToRoom()
+        {
+            if (scene == null)
+            {
+                return;
+            }
+
+            HashSet<string> usedSpots = new(StringComparer.OrdinalIgnoreCase);
+            foreach (var npc in currentRoom.Npcs.ToList())
+            {
+                if (npc.Placement == null)
+                {
+                    continue;
+                }
+
+                if (AddBaseNpcToScene(npc, npc.Placement.Spot, npc.Placement.FidgetScript))
+                {
+                    usedSpots.Add(npc.Placement.Spot);
+                }
+            }
+
+            AddDynamicBaseNpcsToRoom(usedSpots);
         }
 
         private void RoomDoSceneScript(ThnScript? sc, ScriptState state)
         {
             hotspots = [];
+            baseNpcHotspots = [];
             firstFrame = true;
             currentState = state;
 
@@ -964,6 +1220,7 @@ namespace LibreLancer
             if (sc == null)
             {
                 SetRoomCameraAndShip();
+                AddBaseNpcsToRoom();
                 letterboxAmount = -1;
                 ui.Visible = true;
             }
@@ -1067,15 +1324,18 @@ namespace LibreLancer
                 }
             }
 
-            Game.Debug.Draw(delta, () =>
+            if (Game.Debug != null)
             {
-                ImGui.Text($"Room: {currentRoom.Nickname}");
-                ImGui.Text($"Virtual: {virtualRoom ?? "NONE"}");
-            }, () =>
-            {
-                Game.Debug.MissionWindow(session.GetTriggerInfo());
-                Game.Debug.ObjectsWindow(scene!.World.Objects);
-            });
+                Game.Debug.Draw(delta, () =>
+                {
+                    ImGui.Text($"Room: {currentRoom.Nickname}");
+                    ImGui.Text($"Virtual: {virtualRoom ?? "NONE"}");
+                }, () =>
+                {
+                    Game.Debug.MissionWindow(session.GetTriggerInfo());
+                    Game.Debug.ObjectsWindow(scene!.World.Objects);
+                });
+            }
 
             if (ui is { Visible: true, HasModal: false } && nextObjectiveUpdate != 0 && waitObjectiveFrames <= 0)
             {
@@ -1083,10 +1343,10 @@ namespace LibreLancer
                 nextObjectiveUpdate = 0;
             }
 
-            if (ui.Visible || ui.HasModal || Game.Debug.Enabled)
+            if (ui.Visible || ui.HasModal || Game.Debug?.Enabled == true)
             {
                 var dlist = Game.RenderContext.Renderer2D.CreateDrawList();
-                if (GetHotspot(Game.Mouse.X, Game.Mouse.Y) != null)
+                if (GetHotspot(Game.Mouse.X, Game.Mouse.Y) != null || GetBaseNpcHotspot(Game.Mouse.X, Game.Mouse.Y) != null)
                 {
                     talk_story.Draw(dlist, Game.Mouse, Game.TotalTime);
                 }

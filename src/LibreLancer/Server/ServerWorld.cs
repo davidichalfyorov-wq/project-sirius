@@ -515,6 +515,24 @@ namespace LibreLancer.Server
             }
         }
 
+        private static bool MissionDockAllowed(Player player, GameObject dock, DockKinds kind)
+        {
+            if (player.MPlayer == null)
+            {
+                return true;
+            }
+
+            var hash = dock.NicknameCRC;
+            if (kind == DockKinds.Tradelane)
+            {
+                return player.MPlayer.CanTl != 0 ||
+                       player.MPlayer.TlExceptions.Any(x => x.ItemA.Hash == hash || x.ItemB.Hash == hash);
+            }
+
+            return player.MPlayer.CanDock != 0 ||
+                   player.MPlayer.DockExceptions.Any(x => x.Hash == hash);
+        }
+
         public void RequestDock(Player player, ObjNetId id)
         {
             actions.Enqueue(() =>
@@ -534,6 +552,14 @@ namespace LibreLancer.Server
                     if (component == null)
                     {
                         FLLog.Warning("Server", $"object {dock.Nickname} is not dockable.");
+                    }
+                    else if (player.MPlayer != null && player.MPlayer.LockedGates.Contains(unchecked((int)dock.NicknameCRC)))
+                    {
+                        FLLog.Warning("Server", $"{player.Name} attempted to dock at locked object {dock.Nickname}");
+                    }
+                    else if (!MissionDockAllowed(player, dock, component.Action.Kind))
+                    {
+                        FLLog.Warning("Server", $"{player.Name} is not allowed to dock at {dock.Nickname}");
                     }
                     else
                     {

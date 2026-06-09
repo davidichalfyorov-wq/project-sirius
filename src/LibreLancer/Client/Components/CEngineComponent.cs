@@ -186,12 +186,12 @@ namespace LibreLancer.Client.Components
                     trailFxName = Engine.Def.TrailEffectPlayer;
                 if (!string.IsNullOrEmpty(trailFxName))
                 {
-                    trailFx = gameData.Items.Effects.Get(trailFxName)?.GetEffect(resourceManager);
+                    trailFx = gameData.ResolveEffect(trailFxName)?.GetEffect(resourceManager);
                 }
 
                 ParticleEffect? flameFx = null;
                 if(!string.IsNullOrEmpty(Engine.Def.FlameEffect))
-                    flameFx = gameData.Items.Effects.Get(Engine.Def.FlameEffect)?.GetEffect(resourceManager);
+                    flameFx = gameData.ResolveEffect(Engine.Def.FlameEffect)?.GetEffect(resourceManager);
                 foreach (var hp in hps)
                 {
                     if (hp.Name.Equals("hpengineglow", StringComparison.OrdinalIgnoreCase) ||

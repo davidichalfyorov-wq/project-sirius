@@ -72,7 +72,13 @@ public class HpTypesIni
         new("hp_turret_special_10", Weapon, 10, 1740, 909),
         new("hp_mine_dropper", Weapon, 0, 1522, 911),
         /*new HpType("hp_countermeasure", Weapon, 0, 1523, 910),*/
-        new("hp_countermeasure_dropper", Weapon, 0, 1523, 910)
+        new("hp_countermeasure_dropper", Weapon, 0, 1523, 910),
+        // Discovery/FLHook-era shiparch files can use broad hardpoint classes for
+        // mission ships, trains, transports, and cargo pods instead of vanilla
+        // hp_*_special_N classes.
+        new("hp_gun", Weapon, 0, 1525, 907),
+        new("hp_turret", Weapon, 0, 1731, 909),
+        new("hp_cargo_pod", External, 0, 1521, 914)
     ];
 
     public Dictionary<string, HpType> Types = new(StringComparer.OrdinalIgnoreCase);
@@ -80,7 +86,7 @@ public class HpTypesIni
     private void AddType(HpType type)
     {
         type.SortIndex = Types.Count;
-        Types.Add(type.Type, type);
+        Types[type.Type] = type;
     }
 
     public void LoadDefault()

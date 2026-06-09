@@ -116,16 +116,21 @@ public class ResourceDll
                 {
                     foreach (var res in table.Resources)
                     {
-                        var idx = res.Locales[0].Data.Offset;
-                        var count = res.Locales[0].Data.Count;
-                        if (res.Locales[0].Data.Count > 2)
+                        if (!TrySelectLocale(res, out var locale))
                         {
-                            if (res.Locales[0].Data.Count % 2 == 1 && res.Locales[0].Data[^1] == 0)
+                            continue;
+                        }
+
+                        var idx = locale.Data.Offset;
+                        var count = locale.Data.Count;
+                        if (locale.Data.Count > 2)
+                        {
+                            if (locale.Data.Count % 2 == 1 && locale.Data[^1] == 0)
                             {
                                 //skip extra NULL byte
                                 count--;
                             }
-                            if (res.Locales[0].Data[0] == 0xFF && res.Locales[0].Data[1] == 0xFE)
+                            if (locale.Data[0] == 0xFF && locale.Data[1] == 0xFE)
                             {
                                 //skip BOM
                                 idx += 2;
@@ -135,11 +140,11 @@ public class ResourceDll
 
                         try
                         {
-                            dll.Infocards.Add ((int)res.Name, Encoding.Unicode.GetString(res.Locales[0].Data.Array!, idx,count));
+                            dll.Infocards[(int)res.Name] = Encoding.Unicode.GetString(locale.Data.Array!, idx, count);
                         }
                         catch (Exception)
                         {
-                            FLLog.Error ("Infocards", $"{name}: Infocard Corrupt: {res.Name}");
+                            FLLog.Error("Infocards", $"{name}: Infocard Corrupt: {res.Name}");
                         }
                     }
 
@@ -149,12 +154,22 @@ public class ResourceDll
                 {
                     foreach (var res in table.Resources)
                     {
+                        if (!TrySelectLocale(res, out var locale))
+                        {
+                            continue;
+                        }
+
                         var blockId = (int)((res.Name - 1u) * 16);
-                        var seg = res.Locales[0].Data;
+                        var seg = locale.Data;
                         using var reader = new BinaryReader(new MemoryStream(seg.Array!, seg.Offset, seg.Count));
 
                         for (var j = 0; j < 16; j++)
                         {
+                            if (reader.BaseStream.Position + 2 > reader.BaseStream.Length)
+                            {
+                                break;
+                            }
+
                             var length = reader.ReadUInt16() * 2;
 
                             if (length == 0)
@@ -162,23 +177,34 @@ public class ResourceDll
                                 continue;
                             }
 
+                            if (reader.BaseStream.Position + length > reader.BaseStream.Length)
+                            {
+                                FLLog.Error("Strings", $"{name}: String block corrupt: {res.Name}");
+                                break;
+                            }
+
                             var bytes = reader.ReadBytes(length);
                             var str = Encoding.Unicode.GetString(bytes);
-                            dll.Strings.Add(blockId + j, str);
+                            dll.Strings[blockId + j] = str;
                         }
-
                     }
 
                     break;
                 }
                 case RT_VERSION when table.Resources.Count > 0:
-                    dll.VersionInfo = new VersionInfoResource(table.Resources[0].Locales[0].Data.ToArray());
+                    if (TrySelectLocale(table.Resources[0], out var versionLocale))
+                    {
+                        dll.VersionInfo = new VersionInfoResource(versionLocale.Data.ToArray());
+                    }
                     break;
                 case RT_DIALOG:
                 {
                     foreach (var dlg in table.Resources)
                     {
-                        dll.Dialogs.Add(new BinaryResource(dlg.Name, dlg.Locales[0].Data.ToArray()));
+                        if (TrySelectLocale(dlg, out var dialogLocale))
+                        {
+                            dll.Dialogs.Add(new BinaryResource(dlg.Name, dialogLocale.Data.ToArray()));
+                        }
                     }
 
                     break;
@@ -187,7 +213,10 @@ public class ResourceDll
                 {
                     foreach (var dlg in table.Resources)
                     {
-                        dll.Menus.Add(new BinaryResource(dlg.Name, dlg.Locales[0].Data.ToArray()));
+                        if (TrySelectLocale(dlg, out var menuLocale))
+                        {
+                            dll.Menus.Add(new BinaryResource(dlg.Name, menuLocale.Data.ToArray()));
+                        }
                     }
 
                     break;
@@ -196,6 +225,21 @@ public class ResourceDll
         }
 
         return dll;
+    }
+
+    private static bool TrySelectLocale(Resource res, out ResourceData locale)
+    {
+        if (res.Locales.Count == 0)
+        {
+            locale = null!;
+            return false;
+        }
+
+        // Prefer English/neutral resources, but accept the first locale for mods that only
+        // ship one resource language. This mirrors Windows' resource lookup well enough for
+        // Freelancer DLLs and avoids losing Discovery strings on Linux.
+        locale = res.Locales.FirstOrDefault(x => x.Locale is 0 or 0x409) ?? res.Locales[0];
+        return true;
     }
 
     private static int DirOffset(uint a) => (int)(a & 0x7FFFFFFF);
@@ -224,8 +268,15 @@ public class ResourceDll
                     throw new Exception("Malformed .rsrc section");
                 }
 
-                var dataEntry = Struct<IMAGE_RESOURCE_DATA_ENTRY>(rsrc, (int) langEntry.OffsetToData);
-                var dat = new ArraySegment<byte>(rsrc, (int)dataEntry.OffsetToData - rsrcOffset, (int)dataEntry.Size);
+                var dataEntry = Struct<IMAGE_RESOURCE_DATA_ENTRY>(rsrc, (int)langEntry.OffsetToData);
+                var dataOffset = (int)dataEntry.OffsetToData - rsrcOffset;
+                var dataSize = (int)dataEntry.Size;
+                if (dataOffset < 0 || dataSize < 0 || dataOffset + dataSize > rsrc.Length)
+                {
+                    FLLog.Warning("Dll", $"Skipping malformed resource {type}:{res.Name}:{langEntry.Name}");
+                    continue;
+                }
+                var dat = new ArraySegment<byte>(rsrc, dataOffset, dataSize);
                 res.Locales.Add(new ResourceData() {Locale = langEntry.Name, Data = dat});
             }
 
@@ -238,7 +289,7 @@ public class ResourceDll
     private static T Struct<T>(byte[] bytes, int offset) where T : unmanaged
     {
         var sz = Marshal.SizeOf(typeof(T));
-        if(offset + sz >= bytes.Length || offset < 0)
+        if (offset < 0 || offset + sz > bytes.Length)
         {
             throw new IndexOutOfRangeException();
         }
@@ -260,10 +311,17 @@ public class ResourceDll
         var fullImage = pe.GetEntireImage().GetContent();
         var offset = 0;
         var rawStart = 0;
+        var foundResources = false;
         foreach (var h in pe.PEHeaders.SectionHeaders.Where(h => h.Name == ".rsrc"))
         {
             offset = h.VirtualAddress;
             rawStart = h.PointerToRawData;
+            foundResources = true;
+        }
+
+        if (!foundResources)
+        {
+            throw new InvalidDataException("PE file does not contain a .rsrc section");
         }
 
         //allow reading past end of .rsrc section

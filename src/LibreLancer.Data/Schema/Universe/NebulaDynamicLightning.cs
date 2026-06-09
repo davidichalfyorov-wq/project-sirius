@@ -9,10 +9,14 @@ namespace LibreLancer.Data.Schema.Universe;
 [ParsedSection]
 public partial class NebulaDynamicLightning
 {
-    [Entry("gap")]
     public float Gap;
-    [Entry("duration")]
     public float Duration;
+
+    [EntryHandler("gap", Multiline = true)]
+    private void HandleGap(Entry e) => Gap = e.Count > 0 ? e[0].ToSingle() : 0;
+
+    [EntryHandler("duration", Multiline = true)]
+    private void HandleDuration(Entry e) => Duration = e.Count > 0 ? e[0].ToSingle() : 0;
     [Entry("color")]
     public Color4 Color;
     [Entry("ambient_intensity")]

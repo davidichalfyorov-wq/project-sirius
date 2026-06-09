@@ -25,7 +25,7 @@ namespace LibreLancer.Utf.Mat
             set
             {
                 type = value;
-                isBasic = basicMaterials.Contains(type);
+                isBasic = IsBasicMaterialType(type);
             }
         }
 
@@ -154,14 +154,57 @@ namespace LibreLancer.Utf.Mat
         public float? MFactor;
         public float? RFactor;
 
-        // All materials pulled from strings
-        private static List<string> basicMaterials =
-        [
+        // All materials pulled from strings. Discovery also combines the same short
+        // tokens in orders not present in vanilla (for example DcDtBtEc and DcDtEcEt).
+        private static readonly HashSet<string> basicMaterials = new(StringComparer.OrdinalIgnoreCase)
+        {
             "Dc", "DcDt", "DcDtEc", "DcDtOcOt", "DcDtEcOcOt",
             "DcDtTwo", "DcDtEcTwo", "DcDtOcOtTwo", "DcDtEcOcOtTwo",
             "DcDtEt", "DcDtEtTwo", "EcEt", "EcEtTwo",
             "BtDetailMapMaterial", "BtDetailMapTwoMaterial",
+        };
+
+        private static readonly string[] basicTokens =
+        [
+            "Two", "Dc", "Dt", "Ec", "Et", "Oc", "Ot", "Bt", "Nt", "Mt", "Rt", "Nm"
         ];
+
+        private static bool IsBasicMaterialType(string materialType)
+        {
+            if (basicMaterials.Contains(materialType))
+            {
+                return true;
+            }
+
+            var idx = 0;
+            var seen = 0;
+            while (idx < materialType.Length)
+            {
+                var matched = false;
+                foreach (var token in basicTokens)
+                {
+                    if (!materialType.AsSpan(idx).StartsWith(token, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    matched = true;
+                    idx += token.Length;
+                    seen++;
+                    break;
+                }
+
+                if (!matched)
+                {
+                    return false;
+                }
+            }
+
+            return seen > 0 &&
+                   (materialType.Contains("Dc", StringComparison.OrdinalIgnoreCase) ||
+                    materialType.Contains("Dt", StringComparison.OrdinalIgnoreCase) ||
+                    materialType.Contains("Ec", StringComparison.OrdinalIgnoreCase));
+        }
 
         private RenderMaterial? _rmat;
 
@@ -226,7 +269,7 @@ namespace LibreLancer.Utf.Mat
 
             var mat = new Material(node, type);
 
-            if (basicMaterials.Contains(type))
+            if (IsBasicMaterialType(type))
             {
                 mat.isBasic = true;
             }
@@ -537,7 +580,15 @@ namespace LibreLancer.Utf.Mat
                         _rmat = dm;
                         break;
                     default:
-                        throw new NotImplementedException();
+                        FLLog.Warning("Material", $"{Name}: Unsupported material type '{type}', using basic fallback");
+                        _rmat = new BasicMaterial("DcDt", res)
+                        {
+                            Dc = Dc,
+                            DtSampler = DtName ?? string.Empty,
+                            DtFlags = (SamplerFlags) DtFlags,
+                            Library = res
+                        };
+                        break;
                 }
             }
         }

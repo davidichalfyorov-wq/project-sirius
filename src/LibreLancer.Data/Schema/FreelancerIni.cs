@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using LibreLancer.Data.Dll;
 using LibreLancer.Data.Ini;
 using LibreLancer.Data.IO;
@@ -88,6 +89,175 @@ public class FreelancerIni
         "fc_ln_grp"
     ];
 
+    private readonly HashSet<string> resourceDllKeys = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool AddResourceDll(FileSystem vfs, string path, bool logMissing = false)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalized = path.Replace('/', '\\');
+        if (!vfs.FileExists(normalized))
+        {
+            if (logMissing)
+            {
+                FLLog.Warning("Dll", $"{path} not found");
+            }
+            return false;
+        }
+
+        var backing = vfs.GetBackingFileName(normalized);
+        var key = backing ?? normalized;
+        if (!resourceDllKeys.Add(key))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var stream = vfs.Open(normalized);
+            Resources ??= [];
+            Resources.Add(ResourceDll.FromStream(stream, backing ?? normalized));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            FLLog.Error("Dll", $"Failed to load resource dll '{path}': {ex.Message}");
+            return false;
+        }
+    }
+
+    private bool AddResourceDllAny(FileSystem vfs, string dll, bool logMissing = false)
+    {
+        var text = dll.Replace('/', '\\');
+        if (AddResourceDll(vfs, text, false))
+        {
+            return true;
+        }
+
+        if (!text.StartsWith("EXE\\", StringComparison.OrdinalIgnoreCase) &&
+            AddResourceDll(vfs, "EXE\\" + text, false))
+        {
+            return true;
+        }
+
+        if (text.StartsWith("EXE\\", StringComparison.OrdinalIgnoreCase) &&
+            AddResourceDll(vfs, text[4..], false))
+        {
+            return true;
+        }
+
+        if (logMissing)
+        {
+            FLLog.Warning("Dll", $"{dll} not found");
+        }
+
+        return false;
+    }
+
+    private void LoadResourceSection(FileSystem vfs, Section section)
+    {
+        // Freelancer.exe always prepends resources.dll before the [Resources] dll list.
+        // For librelancer.ini we accept either EXE-relative DLLs or root-relative DLLs so
+        // Linux installs can keep the original Discovery resource DLLs without Wine.
+        if (IsLibrelancer)
+        {
+            AddResourceDllAny(vfs, "resources.dll", logMissing: false);
+        }
+        else
+        {
+            AddResourceDll(vfs, @"EXE\resources.dll", logMissing: true);
+        }
+
+        foreach (Entry e in section)
+        {
+            if (e.Name.ToLowerInvariant() != "dll")
+            {
+                continue;
+            }
+
+            var dll = e[0].ToString();
+            if (IsLibrelancer)
+            {
+                AddResourceDllAny(vfs, dll, logMissing: true);
+            }
+            else
+            {
+                AddResourceDll(vfs, @"EXE\" + dll, logMissing: true);
+            }
+        }
+    }
+
+    private void EnsureLibrelancerResourceDlls(FileSystem vfs)
+    {
+        if (!IsLibrelancer)
+        {
+            return;
+        }
+
+        if (vfs.FileExists(@"EXE\freelancer.ini"))
+        {
+            foreach (Section section in IniFile.ParseFile(@"EXE\freelancer.ini", vfs))
+            {
+                if (!section.Name.Equals("resources", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                AddResourceDll(vfs, @"EXE\resources.dll", logMissing: true);
+                foreach (Entry e in section)
+                {
+                    if (e.Name.Equals("dll", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AddResourceDll(vfs, @"EXE\" + e[0], logMissing: true);
+                    }
+                }
+
+                break;
+            }
+        }
+
+        // Vanilla Freelancer encodes global IDS as (dllIndex << 16) + localId. If the
+        // original EXE/freelancer.ini is unavailable we still need a stable, vanilla-compatible
+        // order before adding Discovery's DLLs, otherwise UI, map, goods and infocard ids resolve
+        // against the wrong DLL index.
+        foreach (var candidate in new[]
+                 {
+                     @"EXE\resources.dll",
+                     @"EXE\offerbriberesources.dll",
+                     @"EXE\misctext.dll",
+                     @"EXE\nameresources.dll",
+                     @"EXE\equipresources.dll",
+                     @"EXE\goodsresources.dll",
+                     @"EXE\infocard.dll",
+                     @"EXE\misctextinfo2.dll",
+                     @"EXE\Discovery.dll",
+                     @"EXE\DsyAddition.dll",
+                     @"EXE\DsyAdditional.dll",
+                     @"resources.dll",
+                     @"offerbriberesources.dll",
+                     @"misctext.dll",
+                     @"nameresources.dll",
+                     @"equipresources.dll",
+                     @"goodsresources.dll",
+                     @"infocard.dll",
+                     @"misctextinfo2.dll",
+                     @"Discovery.dll",
+                     @"DsyAddition.dll",
+                     @"DsyAdditional.dll"
+                 })
+        {
+            AddResourceDll(vfs, candidate, false);
+        }
+
+        if (Resources is not { Count: > 0 })
+        {
+            FLLog.Warning("Dll", "No resource DLLs were loaded. UI strings and infocards will be missing.");
+        }
+    }
+
     private static string FindIni(FileSystem vfs) => vfs.FileExists("librelancer.ini") ? "librelancer.ini" : @"EXE\freelancer.ini";
 
     private static string EndInSep(string path)
@@ -155,36 +325,7 @@ public class FreelancerIni
                     break;
                 case "resources":
                     Resources = [];
-                    //NOTE: Freelancer hardcodes resources.dll
-                    //Not hardcoded for librelancer.ini as it will break
-                    string start = IsLibrelancer ? "" : "EXE\\";
-                    string? resdll = start + "resources.dll";
-                    if (!IsLibrelancer) {
-                        if (vfs.FileExists(resdll))
-                        {
-                            using var stream = vfs.Open(resdll);
-                            Resources.Add(ResourceDll.FromStream(stream, vfs.GetBackingFileName(resdll)));
-                        }
-                        else
-                        {
-                            FLLog.Warning("Dll", "resources.dll not found");
-                        }
-                    }
-                    foreach (Entry e in s)
-                    {
-                        if (e.Name.ToLowerInvariant () != "dll")
-                            continue;
-                        string dllname = start + e[0];
-                        if (vfs.FileExists(dllname))
-                        {
-                            using var stream = vfs.Open(dllname);
-                            Resources.Add(ResourceDll.FromStream(stream, vfs.GetBackingFileName(dllname)));
-                        }
-                        else
-                        {
-                            FLLog.Warning("Dll", e[0].ToString());
-                        }
-                    }
+                    LoadResourceSection(vfs, s);
                     break;
                 case "startup":
                     foreach (Entry e in s) {
@@ -331,5 +472,7 @@ public class FreelancerIni
         if (string.IsNullOrEmpty(MousePath)) MousePath = DataPath + "mouse.ini";
         if (string.IsNullOrEmpty(CamerasPath)) CamerasPath = DataPath + "cameras.ini";
         if (string.IsNullOrEmpty(ConstantsPath)) ConstantsPath = DataPath + "constants.ini";
+
+        EnsureLibrelancerResourceDlls(vfs);
     }
 }

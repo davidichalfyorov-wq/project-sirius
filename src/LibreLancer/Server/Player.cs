@@ -196,6 +196,7 @@ namespace LibreLancer.Server
             MPlayer.CanTl = 1;
             MPlayer.DockExceptions.Clear();
             MPlayer.TlExceptions.Clear();
+            MPlayer.LockedGates.Clear();
             AllowedDockUpdate();
         }
 
@@ -895,7 +896,7 @@ namespace LibreLancer.Server
             }
         }
 
-        private void UpdateCurrentReputations()
+        public void UpdateCurrentReputations()
         {
             rpcClient.UpdateReputations(Character!.Reputation.Reputations.Select(x => new NetReputation()
             {
@@ -994,6 +995,10 @@ namespace LibreLancer.Server
                     foreach (var ex in MPlayer.TlExceptions)
                         ad.TlExceptions.Add(ex.ItemA);
                 }
+
+                ad.LockedDockables = [];
+                foreach (var locked in MPlayer.LockedGates)
+                    ad.LockedDockables.Add((uint)locked);
 
                 rpcClient.UpdateAllowedDocking(ad);
             }

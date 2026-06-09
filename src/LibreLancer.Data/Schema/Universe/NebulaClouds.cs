@@ -21,22 +21,32 @@ public partial class NebulaClouds
     public Color3f? PuffColorA;
     [Entry("puff_colorb")]
     public Color3f? PuffColorB;
-    [Entry("puff_max_alpha")]
     public float? PuffMaxAlpha;
     [Entry("puff_shape", Multiline = true)]
     public List<string> PuffShape = [];
     [Entry("puff_weights")]
     public int[] PuffWeights = [];
-    [Entry("puff_drift")]
     public float? PuffDrift;
     [Entry("near_fade_distance")]
     public Vector2? NearFadeDistance;
-    [Entry("lightning_intensity")]
     public float? LightningIntensity;
     [Entry("lightning_color")]
     public Color4? LightningColor;
-    [Entry("lightning_gap")]
     public float? LightningGap;
-    [Entry("lightning_duration")]
     public float? LightningDuration;
+
+    [EntryHandler("puff_max_alpha", Multiline = true)]
+    private void HandlePuffMaxAlpha(Entry e) => PuffMaxAlpha = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("puff_drift", Multiline = true)]
+    private void HandlePuffDrift(Entry e) => PuffDrift = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("lightning_intensity", Multiline = true)]
+    private void HandleLightningIntensity(Entry e) => LightningIntensity = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("lightning_gap", Multiline = true)]
+    private void HandleLightningGap(Entry e) => LightningGap = e.Count > 0 ? e[0].ToSingle() : null;
+
+    [EntryHandler("lightning_duration", Multiline = true)]
+    private void HandleLightningDuration(Entry e) => LightningDuration = e.Count > 0 ? e[0].ToSingle() : null;
 }

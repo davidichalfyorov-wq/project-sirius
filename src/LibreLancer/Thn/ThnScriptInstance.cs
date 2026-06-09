@@ -60,6 +60,34 @@ namespace LibreLancer.Thn
             return sub != null && type == e.Type && e.Template.Equals(templateName, StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool IsPlayerEnginePsys(ThnEntity entity)
+        {
+            if (Cutscene.PlayerEngine == null || entity.Type != EntityTypes.PSys)
+            {
+                return false;
+            }
+
+            if (string.Equals(entity.Template, "PlayerShipEngines", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Discovery room THNs often name player engine PSys objects after concrete ships
+            // (e.g. Ship_l_fighter_1_engine) instead of using the vanilla template. Keep this
+            // matcher ship-scoped so ambient fire, smoke, steam and intro planet effects do not
+            // accidentally get attached to the player's engine component.
+            var name = entity.Name ?? string.Empty;
+            var template = entity.Template ?? string.Empty;
+            var source = name + " " + template;
+            var looksLikeEngine = source.Contains("engine", StringComparison.OrdinalIgnoreCase) ||
+                                  source.Contains("exhaust", StringComparison.OrdinalIgnoreCase) ||
+                                  source.Contains("_fire", StringComparison.OrdinalIgnoreCase) ||
+                                  source.Contains("fire_", StringComparison.OrdinalIgnoreCase);
+            var tiedToShip = source.Contains("ship", StringComparison.OrdinalIgnoreCase) ||
+                             source.StartsWith("Ship_", StringComparison.OrdinalIgnoreCase);
+            return looksLikeEngine && tiedToShip;
+        }
+
         public void ConstructEntities(Dictionary<string, ThnSceneObject> objects, bool spawnObjects)
         {
             this.Objects = objects;
@@ -95,7 +123,7 @@ namespace LibreLancer.Thn
                     continue;
                 }
 
-                if (spawnObjects && CheckObject(kv.Value, Cutscene.PlayerEngine, EntityTypes.PSys, "PlayerShipEngines"))
+                if (spawnObjects && IsPlayerEnginePsys(kv.Value))
                 {
                     obj.Entity = kv.Value;
                     obj.Engine = Cutscene.PlayerEngine;
@@ -150,7 +178,9 @@ namespace LibreLancer.Thn
                                 drawable = ast?.ModelFile!.LoadFile(resman)!.Drawable!;
                                 break;
                             default:
-                                throw new NotImplementedException("Mesh Category " + kv.Value.MeshCategory);
+                                FLLog.Warning("Thn", $"Unhandled mesh category '{kv.Value.MeshCategory}' for THN entity '{kv.Value.Name}'");
+                                drawable = null;
+                                break;
                         }
                     }
                     else
@@ -191,9 +221,7 @@ namespace LibreLancer.Thn
                 }
                 else if (kv.Value.Type == EntityTypes.PSys)
                 {
-                    var fx = gameData.Items.Effects.Get(kv.Value.Template);
-                    fx ??= gameData.Items.VisEffects.Get(kv.Value
-                        .Template); // TODO: Check if this only searches VisEffects
+                    var fx = gameData.ResolveEffect(kv.Value.Template);
 
                     if (fx?.AlePath != null)
                     {

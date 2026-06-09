@@ -9,10 +9,14 @@ namespace LibreLancer.Data.Schema.Universe;
 [ParsedSection]
 public partial class NebulaBackgroundLightning
 {
-    [Entry("duration")]
     public float Duration;
-    [Entry("gap")]
     public float Gap;
+
+    [EntryHandler("duration", Multiline = true)]
+    private void HandleDuration(Entry e) => Duration = e.Count > 0 ? e[0].ToSingle() : 0;
+
+    [EntryHandler("gap", Multiline = true)]
+    private void HandleGap(Entry e) => Gap = e.Count > 0 ? e[0].ToSingle() : 0;
     [Entry("color")]
     public Color4 Color;
 }

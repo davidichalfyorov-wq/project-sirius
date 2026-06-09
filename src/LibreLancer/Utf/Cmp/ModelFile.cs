@@ -149,6 +149,11 @@ namespace LibreLancer.Utf.Cmp
                     case "vmeshwire":
                         VMeshWire = new VMeshWire((node as IntermediateNode)!);
                         break;
+                    case "wmeshwire":
+                        // Discovery/older exporters can include WMeshWire instead of VMeshWire.
+                        // LibreLancer only consumes VMeshWire for optional wireframe rendering, so
+                        // this node is safely ignored instead of logged as a model error.
+                        break;
                     case "mass properties":
                         // TODO 3db Mass Properties
                         break;
