@@ -16,6 +16,7 @@ namespace LibreLancer.Render
     public class SunRenderer : ObjectRenderer
 	{
         public Sun Sun { get; private set; }
+        public Vector3 WorldPosition => pos;
         private Vector3 pos;
         private SystemRenderer? sysr;
         private int ID;

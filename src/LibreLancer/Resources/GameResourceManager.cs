@@ -242,7 +242,11 @@ public class GameResourceManager : ResourceManager, IDisposable
             return null;
         }
 
-        if (outTexture != null)
+        // A disposed texture is as gone as a null slot: scene unloads kill
+        // the GPU object while callers (cursor, cached materials) keep the
+        // name. GL silently survives on recycled handles; Vulkan substitutes
+        // a transparent fallback, so reload from source instead.
+        if (outTexture != null && !outTexture.IsDisposed)
         {
             return outTexture;
         }

@@ -1,3 +1,5 @@
+#include "includes/ColorSpace.hlsl"
+
 #include "includes/Lighting.hlsl"
 
 Texture2D<float4> DtTexture : register(t0, TEXTURE_SPACE);
@@ -33,10 +35,10 @@ float4 main(Input input) : SV_Target0
 {
     float facingRatio = clamp(dot(normalize(input.V), normalize(input.N)), 0.0, 1.0);
 
-    float4 tex = DtTexture.Sample(DtSampler, float2(facingRatio, 0.0));
+    float4 tex = SampleColorTexture(DtTexture, DtSampler, float2(facingRatio, 0.0));
 #ifdef VERTEX_LIGHTING
     float4 lit = ApplyVertexLighting(ac, ec, Dc * input.color,
-        DtTexture.Sample(DtSampler, input.texCoord),
+        SampleColorTexture(DtTexture, DtSampler, input.texCoord),
         input.viewPosition,
         input.frontFacing ? input.diffuseTermFront : input.diffuseTermBack,
         input.frontFacing ? input.ambientTermFront : input.ambientTermBack);

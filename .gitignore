@@ -23,6 +23,13 @@ build/
 # CI packaging output
 packaging/
 
+# Local work artifacts (patches, bundles, exports)
+Output/
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
 # Auto-generated version file
 src/CommonVersion.props
 
@@ -78,3 +85,13 @@ temp/
 *.tmp
 *.swp
 *.swo
+
+# Local screenshots and render dumps
+FreelancerShots/
+renders/
+
+# Vendored third-party checkouts
+extern/
+
+# Heavy local document exports
+docs/*.pdf

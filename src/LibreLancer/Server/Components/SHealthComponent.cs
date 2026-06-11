@@ -132,6 +132,10 @@ namespace LibreLancer.Server.Components
             if (Parent.TryGetComponent<SNPCComponent>(out var npc))
             {
                 npc.TakingDamage(hullDamage);
+                // GCS combat chatter: the victim calls out the hits, the
+                // shooter gloats. Dispatcher cooldowns keep this sparse.
+                Parent.GetComponent<Comms.SChatterComponent>()?.Say(Comms.ChatterEvent.TakingDamage);
+                attacker?.GetComponent<Comms.SChatterComponent>()?.Say(Comms.ChatterEvent.InflictingDamage);
             }
 
             if (Invulnerable && CurrentHealth < (MaxHealth * 0.09f))

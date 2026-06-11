@@ -10,6 +10,9 @@ namespace LibreLancer.Render
 {
 	public class SystemLighting
 	{
+        /// <summary>Owned by SystemRenderer; consumed via Lighting.Environment.</summary>
+        public EnvironmentProbe? Ibl;
+
         public int ID = Environment.TickCount;
 		public Color4 Ambient = Color4.Black;
 		public List<DynamicLight> Lights = [];

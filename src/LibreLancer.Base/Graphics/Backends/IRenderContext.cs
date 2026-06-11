@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using LibreLancer.Graphics.Vertices;
 
 namespace LibreLancer.Graphics.Backends;
+
+public readonly record struct PassTiming(string Name, double Milliseconds);
 
 internal interface IRenderContext
 {
@@ -60,4 +63,13 @@ internal interface IRenderContext
     void SetTextureSlot(int slot, Texture? texture);
     void SetSamplerState(int slot, SamplerState state);
     void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount);
+
+    /// <summary>Read the current backbuffer contents (screenshots).</summary>
+    void ReadBackBuffer(int width, int height, Bgra8[] destination);
+
+    // GPU pass timers (graphics roadmap 9.3). Results arrive with a
+    // frames-in-flight delay; backends without timer support no-op.
+    void BeginPassTimer(string name) { }
+    void EndPassTimer() { }
+    IReadOnlyList<PassTiming> PassTimings => Array.Empty<PassTiming>();
 }

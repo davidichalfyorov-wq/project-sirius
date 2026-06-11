@@ -1,5 +1,7 @@
+#define PIXEL_SHADOWS 1
 #include "includes/Lighting.hlsl"
 #include "includes/Modulate.hlsl"
+#include "includes/ColorSpace.hlsl"
 
 Texture2D<float4> DtTexture : register(t0, TEXTURE_SPACE);
 SamplerState DtSampler : register(s0, TEXTURE_SPACE);
@@ -78,7 +80,7 @@ float3 getNormal(Input input)
 
 float4 main(Input input) : SV_Target0
 {
-    float4 dtSampled = DtTexture.Sample(DtSampler, GetTexCoord(0, input));
+    float4 dtSampled = SampleColorTexture(DtTexture, DtSampler, GetTexCoord(0, input));
 #ifdef ALPHATEST_ENABLED
     if (dtSampled.a < 0.5)
     {
@@ -89,7 +91,7 @@ float4 main(Input input) : SV_Target0
 #ifdef TEX2_ENABLED
     if (Tex2Type < 1)
     {
-        ec += EtTexture.Sample(EtSampler, GetTexCoord(1, input));
+        ec += SampleColorTexture(EtTexture, EtSampler, GetTexCoord(1, input));
     }
 #endif
     float4 ac = float4(1.0, 1.0, 1.0, 1.0);
@@ -110,14 +112,14 @@ float4 main(Input input) : SV_Target0
 #ifdef TEX2_ENABLED
     if(Tex2Type >= 1)
     {
-        float4 bt = BtTexture.Sample(BtSampler, GetTexCoord(3, input));
+        float4 bt = SampleColorTexture(BtTexture, BtSampler, GetTexCoord(3, input));
         color.rgb = Mod2x(color.rgb, bt.rgb);
     }
 #endif
 
 #ifdef ENVMAP
     float4 env = EnvTexture.Sample(EnvSampler, input.viewSpaceReflection);
-    float3 envrgb = 2 * env.rgb * color.rgb;
+    float3 envrgb = 2 * SrgbToLinear(env.rgb) * color.rgb;
     color = float4(envrgb, color.a);
 #endif
     float4 acolor = color * float4(1.0, 1.0, 1.0, Oc);

@@ -38,6 +38,7 @@ public interface IClientPlayer
     void DestroyPart(ObjNetId id, uint part);
     void DestroyEquipment(ObjNetId id, bool explode, string hardpoint);
     void RunMissionDialog(NetDlgLine[] lines);
+    void Chatter(NetDlgLine[] lines);
     void StartJumpTunnel();
     void StartTradelane();
     void TradelaneDisrupted();

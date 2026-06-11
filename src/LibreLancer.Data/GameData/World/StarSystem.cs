@@ -32,6 +32,11 @@ public class StarSystem : NamedItem
 
     public ResolvedModel? StarsNebula;
 
+    //Optional pre-baked cubemap replacements for starsphere CMP layers.
+    public string? StarsBasicCubemap;
+    public string? StarsComplexCubemap;
+    public string? StarsNebulaCubemap;
+
     //Encounter Parameters
     public List<EncounterParameters> EncounterParameters = [];
 
@@ -112,6 +117,9 @@ public class StarSystem : NamedItem
         other.StarsBasic = StarsBasic;
         other.StarsComplex = StarsComplex;
         other.StarsNebula = StarsNebula;
+        other.StarsBasicCubemap = StarsBasicCubemap;
+        other.StarsComplexCubemap = StarsComplexCubemap;
+        other.StarsNebulaCubemap = StarsNebulaCubemap;
         other.AmbientColor = AmbientColor;
         other.MusicSpace = MusicSpace;
         other.MusicDanger = MusicDanger;

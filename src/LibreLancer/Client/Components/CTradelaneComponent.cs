@@ -26,14 +26,45 @@ public class CTradelaneComponent : GameComponent
         }
 
         var resman = GetResourceManager(world)!;
+        var gameData = GetGameData(world);
         var laneFx = Def.RingActive?.GetEffect(resman);
+
+        if (laneFx == null && gameData != null)
+        {
+            // Some Discovery tradelane equipment omits tl_ring_active and
+            // relies on the stock ring effect. Try the common Freelancer names
+            // before giving up, otherwise every tradelane logs a warning and
+            // appears inert.
+            foreach (var fallback in new[]
+            {
+                "gf_tlr_active", "gf_tlr_active_loop",
+                "li_tlr_active", "li_tlr_active_loop",
+                "br_tlr_active", "br_tlr_active_loop",
+                "ku_tlr_active", "ku_tlr_active_loop",
+                "rh_tlr_active", "rh_tlr_active_loop",
+                "tlr_active", "tlr_active_loop", "tradelane_ring_active"
+            })
+            {
+                laneFx = gameData.Items.ResolveFx(fallback)?.GetEffect(resman);
+                if (laneFx != null)
+                {
+                    break;
+                }
+            }
+        }
 
         var leftHp = Parent?.GetHardpoint("HpLeftLane");
         var rightHp = Parent?.GetHardpoint("HpRightLane");
 
-        if (laneFx is null || leftHp is null || rightHp is null)
+        if (laneFx is null)
         {
-            FLLog.Warning("CTradelaneComponent", $"Register called but component could not be resolved. laneFx: {laneFx}, leftHp: {leftHp}, rightHp: {rightHp}");
+            FLLog.Debug("CTradelaneComponent", $"No tradelane ring effect for {Parent?.Nickname ?? "<unknown>"}; rendering lane without active ring FX");
+            return;
+        }
+
+        if (leftHp is null || rightHp is null)
+        {
+            FLLog.Warning("CTradelaneComponent", $"Register called but lane hardpoints could not be resolved. leftHp: {leftHp}, rightHp: {rightHp}");
             return;
         }
 

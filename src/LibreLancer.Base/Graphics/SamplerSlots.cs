@@ -2,7 +2,7 @@ namespace LibreLancer.Graphics;
 
 public sealed class SamplerSlots
 {
-    private SamplerState[] slots = new SamplerState[8];
+    private SamplerState[] slots = new SamplerState[16];
     private RenderContext rc;
     internal SamplerSlots(RenderContext rc)
     {

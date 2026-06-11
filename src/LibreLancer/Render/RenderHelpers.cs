@@ -31,6 +31,7 @@ namespace LibreLancer.Render
             ldynamic = true;
             var lights = Lighting.Create();
             lights.Ambient = lambient ? new Color3f(src.Ambient.R, src.Ambient.G, src.Ambient.B) : Color3f.Black;
+            lights.Environment = lambient ? src.Ibl : null;
             lights.NumberOfTilesX = src.NumberOfTilesX;
 			if (nofog)
 			{

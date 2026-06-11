@@ -1,3 +1,5 @@
+#include "includes/ColorSpace.hlsl"
+
 Texture2D<float4> Texture : register(t0, TEXTURE_SPACE);
 SamplerState Sampler : register(s0, TEXTURE_SPACE);
 
@@ -15,6 +17,7 @@ cbuffer Uniform : register(b3, UNIFORM_SPACE)
 
 float4 main(PSInput input) : SV_Target0
 {
-    float4 sample = Texture.Sample(Sampler, input.texCoord) * input.innerColor;
-    return float4(lerp(sample.rgb, input.outerColor.rgb, BlendFactor), sample.a);
+    float4 sample = SampleColorTexture(Texture, Sampler, input.texCoord)
+        * float4(SrgbToLinear(input.innerColor.rgb), input.innerColor.a);
+    return float4(lerp(sample.rgb, SrgbToLinear(input.outerColor.rgb), BlendFactor), sample.a);
 }

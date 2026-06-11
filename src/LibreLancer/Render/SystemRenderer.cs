@@ -48,6 +48,9 @@ namespace LibreLancer.Render
         public RigidModel[] StarSphereModels;
         public Matrix4x4[] StarSphereWorlds = null!;
         public Lighting[] StarSphereLightings = null!;
+        private readonly RigidModel?[] starSphereLayerModels = new RigidModel?[3];
+        private StarsphereCubemapRenderer? cubemapStarspheres;
+        private bool useSystemCubemapStarspheres;
         public LineRenderer DebugRenderer;
         public Action? OpaqueHook;
         public Action? PhysicsHook;
@@ -129,23 +132,65 @@ namespace LibreLancer.Render
         {
             starSystem = system;
 
+            cubemapStarspheres ??= new StarsphereCubemapRenderer(rstate);
+            cubemapStarspheres.Clear();
+            Array.Clear(starSphereLayerModels, 0, starSphereLayerModels.Length);
+            StarSphereWorlds = null!;
+            StarSphereLightings = null!;
+
+            useSystemCubemapStarspheres = game.GetService<GameSettings>()?.UseCubemapStarspheres ?? true;
             List<RigidModel> starSphereRenderData = [];
-            AddModel(system.StarsBasic);
-            AddModel(system.StarsComplex);
-            AddModel(system.StarsNebula);
+
+            AddLayer(StarsphereLayer.Basic, system.StarsBasic, system.StarsBasicCubemap);
+            AddLayer(StarsphereLayer.Complex, system.StarsComplex, system.StarsComplexCubemap);
+            AddLayer(StarsphereLayer.Nebula, system.StarsNebula, system.StarsNebulaCubemap);
+
+            // Per-system IBL probe (roadmap 5.3): convolve the most
+            // colourful available starsphere cubemap, ambient fallback
+            // otherwise. CPU build, runs once per system load.
+            SystemLighting.Ibl?.Dispose();
+            SystemLighting.Ibl = null;
+            if (Settings.SelectedIbl)
+            {
+                var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+                SystemLighting.Ibl = EnvironmentProbe.Build(rstate, resman,
+                    system.StarsNebulaCubemap ?? system.StarsComplexCubemap ?? system.StarsBasicCubemap,
+                    system.AmbientColor);
+                FLLog.Info("IBL", $"Environment probe for {system.Nickname} built in {loadTimer.ElapsedMilliseconds} ms");
+            }
 
             StarSphereModels = starSphereRenderData.ToArray();
             return;
 
-            void AddModel(ResolvedModel? mdl)
+            void AddLayer(StarsphereLayer layer, ResolvedModel? mdl, string? cubemapPath)
             {
+                if (useSystemCubemapStarspheres)
+                {
+                    cubemapStarspheres.LoadLayer(layer, cubemapPath, resman);
+                    if (cubemapStarspheres.HasLayer(layer))
+                    {
+                        return;
+                    }
+                }
+
                 if (mdl?.LoadFile(resman)?.Drawable is not IRigidModelFile loaded)
                 {
                     return;
                 }
 
-                starSphereRenderData.Add(loaded.CreateRigidModel(true, resman));
+                var rigidModel = loaded.CreateRigidModel(true, resman);
+                starSphereLayerModels[(int)layer] = rigidModel;
+                starSphereRenderData.Add(rigidModel);
             }
+        }
+
+        /// <summary>
+        /// Disables system cubemap starspheres for temporary starsphere overrides such as THN cutscenes.
+        /// </summary>
+        public void DisableCubemapStarspheres()
+        {
+            useSystemCubemapStarspheres = false;
+            Array.Clear(starSphereLayerModels, 0, starSphereLayerModels.Length);
         }
 
         public void LoadLights(StarSystem system)
@@ -172,7 +217,7 @@ namespace LibreLancer.Render
         {
             foreach (var model in StarSphereModels)
             {
-                model.Update(game.TotalTime);
+                model.Update(RenderClock.Get(game.TotalTime));
             }
 
             foreach (var field in AsteroidFields!)
@@ -240,6 +285,8 @@ namespace LibreLancer.Render
         }
 
         private MultisampleTarget? msaa;
+        private HdrFramePipeline? hdrPipeline;
+        private ShadowMapRenderer? shadowMaps;
         private int _mwidth = -1, _mheight = -1;
         public CommandBuffer Commands;
         private int _twidth = -1, _theight = -1;
@@ -277,6 +324,28 @@ namespace LibreLancer.Render
                 return;
             }
 
+            // Unified frame pipeline: the scene goes into an HDR target and
+            // reaches the output through one tonemap pass; MSAA (below)
+            // resolves into that target instead of the screen. The pass is
+            // mandatory: the phase 2 linear workflow decodes textures at the
+            // sample site, and this pass owns the matching display encode —
+            // hdr=false maps grading/bloom/rays/AA off and runs it as the
+            // bare pass-through encode.
+            hdrPipeline ??= new HdrFramePipeline(rstate);
+            hdrPipeline.Tonemapper = Settings.SelectedTonemapper;
+            hdrPipeline.Exposure = Settings.SelectedExposure;
+            hdrPipeline.BloomEnabled = Settings.SelectedBloom;
+            hdrPipeline.BloomThreshold = Settings.SelectedBloomThreshold;
+            hdrPipeline.BloomIntensity = Settings.SelectedBloomIntensity;
+            hdrPipeline.BloomRadius = Settings.SelectedBloomRadius;
+            hdrPipeline.BloomMips = Settings.SelectedBloomMips;
+            hdrPipeline.GodRaysEnabled = Settings.SelectedGodRays;
+            hdrPipeline.GodRaysIntensity = Settings.SelectedGodRaysIntensity;
+            hdrPipeline.GodRaysSamples = Settings.SelectedGodRaysSamples;
+            hdrPipeline.PostAa = Settings.SelectedPostAa;
+            hdrPipeline.Begin(renderWidth, renderHeight);
+            rstate.BeginPassTimer("scene");
+
             RenderTarget? restoreTarget = rstate.RenderTarget;
 
             if (Settings.SelectedMSAA > 0)
@@ -297,6 +366,26 @@ namespace LibreLancer.Render
             rstate.PreferredFilterLevel = Settings.SelectedFiltering;
             rstate.AnisotropyLevel = Settings.SelectedAnisotropy;
             var nr = CheckNebulae(); // are we in a nebula?
+
+            // Cascaded sun shadows (roadmap 5.4): render the atlas before
+            // the scene camera takes over; receivers sample it via the
+            // ShadowData block SetLights publishes.
+            RenderMaterial.ActiveShadows = null;
+            // Space scenes only: a SunRenderer marks a real system scene.
+            // THN sets (bar/city backdrops) light their own way and the
+            // cascade fit around their cameras self-shadows everything.
+            if (Settings.SelectedShadows && HasSunRenderer() &&
+                FindDirectionalLight(out var sunDirection))
+            {
+                shadowMaps ??= new ShadowMapRenderer(rstate, resman);
+                shadowMaps.Draw(objects, SystemLighting.Lights, sunDirection, camera, resman);
+                RenderMaterial.ActiveShadows = shadowMaps;
+                rstate.Textures[8] = shadowMaps.AtlasTexture;
+                rstate.Samplers[8] = SamplerState.PointClamp;
+                rstate.Textures[9] = shadowMaps.LocalAtlasTexture;
+                rstate.Samplers[9] = SamplerState.PointClamp;
+            }
+
             rstate.SetCamera(camera);
             Commands.Camera = camera;
             var transitioned = false;
@@ -403,43 +492,7 @@ namespace LibreLancer.Render
                     rstate.SetCamera(thn);
                 }
 
-                for (var i = 0; i < StarSphereModels.Length; i++)
-                {
-                    Matrix4x4 ssworld = Matrix4x4.CreateTranslation(camera.Position);
-
-                    if (StarSphereWorlds != null)
-                    {
-                        ssworld = StarSphereWorlds[i] * ssworld;
-                    }
-
-                    var lighting = Lighting.Empty;
-
-                    if (StarSphereLightings != null)
-                    {
-                        lighting = StarSphereLightings[i];
-                    }
-
-                    // We frustum cull to save on fill rate for low end devices (pi)
-                    var mdl = StarSphereModels[i];
-
-                    foreach (var part in mdl.AllParts)
-                    {
-                        if (!part.Active || part.Mesh == null)
-                        {
-                            continue;
-                        }
-
-                        var p = part;
-                        var w = p.LocalTransform.Matrix() * ssworld;
-                        var bsphere = new BoundingSphere(Vector3.Transform(p.Mesh!.Center, w), p.Mesh.Radius);
-
-                        if (camera.FrustumCheck(bsphere))
-                        {
-                            p.Mesh.DrawImmediate(0, resman, rstate, w, ref lighting, mdl.MaterialAnims,
-                                BasicMaterial.ForceAlpha);
-                        }
-                    }
-                }
+                DrawStarsphereLayers();
 
                 if (camera is ThnCamera thn2 && !ZOverride)
                 {
@@ -496,13 +549,156 @@ namespace LibreLancer.Render
                 rstate.RenderTarget = restoreTarget;
             }
 
+            rstate.EndPassTimer();
+            hdrPipeline.GodRaysSun = ComputeGodRaysSun();
+            hdrPipeline.End();
+
+            if (debugBrdfLut)
+            {
+                // Reference look: red->yellow gradient falling off along Y.
+                var list = rstate.Renderer2D.CreateDrawList();
+                list.DrawImageStretched(IblResources.GetBrdfLut(rstate),
+                    new Rectangle(8, renderHeight - 136, 128, 128), Color4.White);
+                list.Render();
+            }
+
             rstate.DepthEnabled = true;
             objects.Clear();
+        }
+
+        private bool HasSunRenderer()
+        {
+            foreach (var obj in objects)
+            {
+                if (obj is SunRenderer)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool FindDirectionalLight(out Vector3 direction)
+        {
+            foreach (var light in SystemLighting.Lights)
+            {
+                if (light.Light.Kind == LightKind.Directional && light.Active)
+                {
+                    direction = Vector3.Normalize(light.Light.Direction);
+                    return true;
+                }
+            }
+            direction = Vector3.UnitY;
+            return false;
+        }
+
+        private static readonly bool debugBrdfLut =
+            Environment.GetEnvironmentVariable("SIRIUS_DEBUG_BRDF") == "1";
+
+        /// <summary>
+        /// Projects the dominant visible sun for the god rays pass:
+        /// (uv.x, uv.y, uv radius, 1), or W &lt;= 0 when no sun applies
+        /// (behind the camera / far off screen) - roadmap 4.6.
+        /// </summary>
+        private Vector4 ComputeGodRaysSun()
+        {
+            var best = new Vector4(0, 0, 0, -1);
+            var bestDistance = float.MaxValue;
+            foreach (var obj in objects)
+            {
+                if (obj is not SunRenderer sun)
+                    continue;
+                var clip = Vector4.Transform(new Vector4(sun.WorldPosition, 1), camera.ViewProjection);
+                if (clip.W <= 0)
+                    continue; // behind the camera
+                var uv = new Vector2(clip.X, clip.Y) / clip.W * 0.5f + new Vector2(0.5f);
+                if (uv.X < -0.5f || uv.X > 1.5f || uv.Y < -0.5f || uv.Y > 1.5f)
+                    continue; // too far off screen to contribute
+                var centerDistance = (uv - new Vector2(0.5f)).Length();
+                if (centerDistance >= bestDistance)
+                    continue;
+                bestDistance = centerDistance;
+                // Radius in v units (the mask shader works in aspect-corrected uv).
+                var radius = sun.Sun.Radius * camera.Projection.M22 / clip.W * 0.5f;
+                best = new Vector4(uv.X, uv.Y, MathF.Max(radius, 1e-4f), 1);
+            }
+            return best;
+        }
+
+
+        private void DrawStarsphereLayers()
+        {
+            if (useSystemCubemapStarspheres && cubemapStarspheres is { AllLoaded: true })
+            {
+                cubemapStarspheres.DrawComposite(camera, game.TotalTime, rstate.CurrentViewport);
+                return;
+            }
+
+            if (useSystemCubemapStarspheres && cubemapStarspheres is { AnyLoaded: true })
+            {
+                for (var i = 0; i < 3; i++)
+                {
+                    var layer = (StarsphereLayer)i;
+                    if (cubemapStarspheres.HasLayer(layer))
+                    {
+                        cubemapStarspheres.DrawLayer(camera, game.TotalTime, rstate.CurrentViewport, layer);
+                    }
+                    else if (starSphereLayerModels[i] != null)
+                    {
+                        DrawRigidStarsphere(starSphereLayerModels[i]!, i);
+                    }
+                }
+
+                return;
+            }
+
+            for (var i = 0; i < StarSphereModels.Length; i++)
+            {
+                DrawRigidStarsphere(StarSphereModels[i], i);
+            }
+        }
+
+        private void DrawRigidStarsphere(RigidModel mdl, int index)
+        {
+            Matrix4x4 ssworld = Matrix4x4.CreateTranslation(camera.Position);
+
+            if (StarSphereWorlds != null && index < StarSphereWorlds.Length)
+            {
+                ssworld = StarSphereWorlds[index] * ssworld;
+            }
+
+            var lighting = Lighting.Empty;
+
+            if (StarSphereLightings != null && index < StarSphereLightings.Length)
+            {
+                lighting = StarSphereLightings[index];
+            }
+
+            // We frustum cull to save on fill rate for low end devices (pi)
+            foreach (var part in mdl.AllParts)
+            {
+                if (!part.Active || part.Mesh == null)
+                {
+                    continue;
+                }
+
+                var p = part;
+                var w = p.LocalTransform.Matrix() * ssworld;
+                var bsphere = new BoundingSphere(Vector3.Transform(p.Mesh!.Center, w), p.Mesh.Radius);
+
+                if (camera.FrustumCheck(bsphere))
+                {
+                    p.Mesh.DrawImmediate(0, resman, rstate, w, ref lighting, mdl.MaterialAnims,
+                        BasicMaterial.ForceAlpha);
+                }
+            }
         }
 
         public void Dispose()
         {
             msaa?.Dispose();
+            hdrPipeline?.Dispose();
+            cubemapStarspheres?.Dispose();
 
             Polyline.Dispose();
             FxPool.Dispose();

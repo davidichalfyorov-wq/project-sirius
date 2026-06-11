@@ -222,16 +222,21 @@ namespace LibreLancer.World.Components
 
             var hp = GetTargetHardpoint(docking!, true, lastTargetHp);
 
-            if (hp == null)
-            {
-                // No dock hardpoints available, cancel docking
-                FLLog.Error("Autopilot", $"No dock hardpoints available for {Parent.Nickname} docking");
-                return true; // finished
-            }
-
             float radius = 5;
             var maxSpeed = 1f;
-            var targetPoint = (hp.Transform * TargetObject!.WorldTransform).Position;
+            var targetPoint = hp != null
+                ? (hp.Transform * TargetObject!.WorldTransform).Position
+                : TargetObject!.WorldTransform.Position;
+
+            if (hp == null)
+            {
+                // Discovery has several dockable solars with incomplete or
+                // differently named DockPoint hardpoints.  The server already
+                // validates and starts docking; client autopilot should still
+                // approach the object instead of aborting with an error.
+                radius = MathF.Max(50, docking.GetTriggerRadius());
+                maxSpeed = 0.5f;
+            }
 
             if (lastTargetHp > 0)
             {
@@ -431,6 +436,14 @@ namespace LibreLancer.World.Components
         {
             if (Parent.Formation == null ||
                 Parent.Formation.LeadShip == Parent)
+            {
+                return true;
+            }
+
+            // The leader can despawn (dock/death) between server updates;
+            // touching its removed physics body is an access violation.
+            if (!Parent.Formation.LeadShip.Flags.HasFlag(GameObjectFlags.Exists) ||
+                Parent.Formation.LeadShip.PhysicsComponent?.Body == null)
             {
                 return true;
             }

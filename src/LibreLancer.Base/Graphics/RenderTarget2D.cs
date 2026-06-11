@@ -15,9 +15,18 @@ public class RenderTarget2D : RenderTarget
 
     internal readonly IRenderTarget2D Backing;
     public RenderTarget2D (RenderContext context, int width, int height)
+        : this(context, new Texture2D(context, width, height))
     {
-        Texture = new Texture2D(context, width, height);
-        DepthBuffer = new DepthBuffer(context, width, height);
+    }
+
+    /// <summary>
+    /// Render target over a caller-created colour texture, e.g. an
+    /// HdrBlendable scene target for the unified frame pipeline.
+    /// </summary>
+    public RenderTarget2D(RenderContext context, Texture2D texture)
+    {
+        Texture = texture;
+        DepthBuffer = new DepthBuffer(context, texture.Width, texture.Height);
         Backing = context.Backend.CreateRenderTarget2D(Texture.Backing, DepthBuffer.Backing);
         Target = Backing;
     }

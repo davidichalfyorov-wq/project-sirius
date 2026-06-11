@@ -174,4 +174,8 @@ internal class NullRenderContext : IRenderContext
     public void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount)
     {
     }
+
+    public void ReadBackBuffer(int width, int height, Bgra8[] destination)
+    {
+    }
 }

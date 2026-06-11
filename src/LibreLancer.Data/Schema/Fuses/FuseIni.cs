@@ -23,6 +23,7 @@ public partial class FuseIni
     [Section("damage_root", Type = typeof(FuseDamageRoot), Child = true)]
     [Section("damage_group", Type = typeof(FuseDamageGroup), Child = true)]
     [Section("tumble", Type = typeof(FuseTumble), Child = true)]
+    [Section("make_invincible", Type = typeof(FuseMakeInvincible), Child = true)]
     public List<Fuse> Fuses = [];
     public void AddFuseIni(string path, FileSystem vfs, IniStringPool? stringPool = null)
     {

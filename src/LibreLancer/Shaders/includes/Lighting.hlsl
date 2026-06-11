@@ -40,6 +40,103 @@ cbuffer Lighting : register(b2, UNIFORM_SPACE)
     Light Lights[MAX_LIGHTS];
 }
 
+#ifdef PIXEL_SHADOWS
+// Cascaded shadow maps (roadmap 5.4): linear light depth RGB-packed
+// into a colour atlas of 3 side-by-side cascade tiles (t8/s8).
+// ShadowParams.x > 0 enables sampling; y = 1/atlas tiles; z = bias.
+cbuffer ShadowData : register(b6, UNIFORM_SPACE)
+{
+    float4x4 ShadowMatrix0;
+    float4x4 ShadowMatrix1;
+    float4x4 ShadowMatrix2;
+    float4 ShadowSplits; // xyz: cascade far view-distances
+    float4 ShadowParams; // x: enabled, y: 1/cascades, z: depth bias
+};
+
+Texture2D<float4> ShadowAtlas : register(t8, TEXTURE_SPACE);
+SamplerState ShadowSampler : register(s8, TEXTURE_SPACE);
+
+// Local spotlight shadows (roadmap 5.5): 2x2 tile atlas, lights matched
+// by position (w of LocalShadowPos > 0 enables the slot).
+cbuffer LocalShadowData : register(b7, UNIFORM_SPACE)
+{
+    float4x4 LocalShadowMatrix[4];
+    float4 LocalShadowPos[4]; // xyz: light position, w: enabled
+    float4 LocalShadowParams; // x: count, z: depth bias
+};
+
+Texture2D<float4> LocalShadowAtlas : register(t9, TEXTURE_SPACE);
+SamplerState LocalShadowSampler : register(s9, TEXTURE_SPACE);
+
+float UnpackShadowDepth(float3 packed)
+{
+    return dot(packed, float3(1.0, 1.0 / 255.0, 1.0 / 65025.0));
+}
+
+float SampleLocalShadow(float3 worldPosition, float3 lightPosition)
+{
+    if (LocalShadowParams.x <= 0)
+        return 1.0;
+    [unroll]
+    for (int slot = 0; slot < 4; slot++)
+    {
+        if (LocalShadowPos[slot].w <= 0)
+            continue;
+        float3 d = LocalShadowPos[slot].xyz - lightPosition;
+        if (dot(d, d) > 4.0)
+            continue;
+        float4 lightClip = mul(float4(worldPosition, 1.0), LocalShadowMatrix[slot]);
+        if (lightClip.w <= 0)
+            return 1.0;
+        float2 uv = lightClip.xy / lightClip.w * 0.5 + 0.5;
+        if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0)
+            return 1.0;
+        float reference = saturate(lightClip.w * LocalShadowPos[slot].w) - LocalShadowParams.z;
+        float2 atlasUv = (uv + float2(slot & 1, slot >> 1)) * 0.5;
+        float3 packed = LocalShadowAtlas.Sample(LocalShadowSampler, atlasUv).rgb;
+        return UnpackShadowDepth(packed) >= reference ? 1.0 : 0.0;
+    }
+    return 1.0;
+}
+
+// 1 = lit, 0 = fully shadowed. viewDistance picks the cascade.
+float SampleShadow(float3 worldPosition, float viewDistance)
+{
+    if (ShadowParams.x <= 0)
+        return 1.0;
+    int cascade = viewDistance < ShadowSplits.x ? 0 : viewDistance < ShadowSplits.y ? 1 : 2;
+    if (viewDistance >= ShadowSplits.z)
+        return 1.0;
+    float4x4 mat = cascade == 0 ? ShadowMatrix0 : cascade == 1 ? ShadowMatrix1 : ShadowMatrix2;
+    float4 lightClip = mul(float4(worldPosition, 1.0), mat); // row-vector convention
+    float2 uv = lightClip.xy * 0.5 + 0.5;
+    if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0)
+        return 1.0;
+    // Offscreen targets keep GL orientation on both backends; the ortho
+    // depth in [0, far] was written linearly by the caster pass.
+    float reference = lightClip.z - ShadowParams.z;
+    float tiles = ShadowParams.y;
+    float2 atlasUv = float2((uv.x + cascade) * tiles, uv.y);
+    float2 texel = float2(tiles / 1024.0, 1.0 / 1024.0);
+    float lit = 0.0;
+    [unroll]
+    for (int oy = 0; oy < 2; oy++)
+    {
+        [unroll]
+        for (int ox = 0; ox < 2; ox++)
+        {
+            float3 packed = ShadowAtlas.Sample(ShadowSampler,
+                atlasUv + float2(ox - 0.5, oy - 0.5) * texel).rgb;
+            lit += UnpackShadowDepth(packed) >= reference ? 1.0 : 0.0;
+        }
+    }
+    return lit * 0.25;
+}
+
+#else
+float SampleShadow(float3 worldPosition, float viewDistance) { return 1.0; }
+float SampleLocalShadow(float3 worldPosition, float3 lightPosition) { return 1.0; }
+#endif
 
 float quadratic(float x, float3 params)
 {
@@ -186,7 +283,7 @@ float4 ApplyPixelLighting(
         if (Lights[i].Type == 0)
         {
             surfaceToLight = normalize(-Lights[i].Direction);
-            attenuation = 1.0;
+            attenuation = SampleShadow(position, length(viewPosition.xyz));
         }
         else
         {
@@ -198,6 +295,7 @@ float4 ApplyPixelLighting(
                 : quadratic(distanceToLight / max(Lights[i].Range,1.), curve);
             if (Lights[i].Spotlight > 0)
             {
+                attenuation *= SampleLocalShadow(position, Lights[i].Position);
                 float rho = dot(surfaceToLight, -Lights[i].Direction);
                 float spotlightFactor = pow(clamp((rho - Lights[i].Phi) / (Lights[i].Theta - Lights[i].Phi),0.,1.), Lights[i].Falloff);
                 float NdotL = max(dot(n, Lights[i].Direction), 0.0);

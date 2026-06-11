@@ -51,6 +51,40 @@
 				<Button id="af_left" style="sel_left" X="200" Y="67"/>
 				<Button id="af_right" style="sel_right" X="350" Y="67"/>
 				<TextBlock id="af_display" X="204" Y="60" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="AF SELECTION"/>
+				<!-- TONE MAPPING -->
+				<TextBlock X="18" Y="90" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="TONE MAPPING"/>
+				<Button id="tonemap_left" style="sel_left" X="200" Y="97"/>
+				<Button id="tonemap_right" style="sel_right" X="350" Y="97"/>
+				<TextBlock id="tonemap_display" X="204" Y="90" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="TONEMAP SELECTION"/>
+				<!-- EXPOSURE -->
+				<TextBlock X="18" Y="120" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="EXPOSURE"/>
+				<HSlider Width="150" Height="12" X="200" Y="124" id="exposure"/>
+				<!-- BLOOM -->
+				<TextBlock X="18" Y="150" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="BLOOM"/>
+				<Button id="bloom_left" style="sel_left" X="200" Y="157"/>
+				<Button id="bloom_right" style="sel_right" X="350" Y="157"/>
+				<TextBlock id="bloom_display" X="204" Y="150" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="BLOOM SELECTION"/>
+				<!-- BLOOM INTENSITY -->
+				<TextBlock X="18" Y="180" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="BLOOM INTENSITY"/>
+				<HSlider Width="150" Height="12" X="200" Y="184" id="bloom_intensity"/>
+				<!-- GOD RAYS -->
+				<TextBlock X="18" Y="210" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="SUN RAYS"/>
+				<Button id="godrays_left" style="sel_left" X="200" Y="217"/>
+				<Button id="godrays_right" style="sel_right" X="350" Y="217"/>
+				<TextBlock id="godrays_display" X="204" Y="210" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="GODRAYS SELECTION"/>
+				<!-- GOD RAYS INTENSITY -->
+				<TextBlock X="18" Y="240" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="SUN RAYS INTENSITY"/>
+				<HSlider Width="150" Height="12" X="200" Y="244" id="godrays_intensity"/>
+				<!-- IBL -->
+				<TextBlock X="18" Y="270" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="IMAGE LIGHTING"/>
+				<Button id="ibl_left" style="sel_left" X="200" Y="277"/>
+				<Button id="ibl_right" style="sel_right" X="350" Y="277"/>
+				<TextBlock id="ibl_display" X="204" Y="270" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="IBL SELECTION"/>
+				<!-- SHADOWS -->
+				<TextBlock X="18" Y="300" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="SHADOWS"/>
+				<Button id="shadows_left" style="sel_left" X="200" Y="307"/>
+				<Button id="shadows_right" style="sel_right" X="350" Y="307"/>
+				<TextBlock id="shadows_display" X="204" Y="300" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="SHADOWS SELECTION"/>
 			</Panel>
 		</Panel>
 	</Panel>

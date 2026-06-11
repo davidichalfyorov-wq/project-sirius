@@ -24,6 +24,7 @@ public class FreelancerIni
     public string? HudPath { get; private set; }
     public string? XInterfacePath { get; private set; }
     public string? DataVersion { get; private set; }
+    public bool UseCubemapStarspheres { get; private set; } = true;
 
     public List<string> EquipmentPaths { get; private set; }
     public List<string> LoadoutPaths { get; private set; }
@@ -332,6 +333,17 @@ public class FreelancerIni
                         if (e.Name.ToLowerInvariant () != "movie_file")
                             continue;
                         StartupMovies.Add (e [0].ToString());
+                    }
+                    break;
+                case "settings":
+                    foreach (Entry e in s)
+                    {
+                        if (e.Name.Equals("use_cubemap_starspheres", StringComparison.OrdinalIgnoreCase))
+                        {
+                            UseCubemapStarspheres = e[0].ToString().Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                                                     e[0].ToString().Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                                                     e[0].ToString().Equals("yes", StringComparison.OrdinalIgnoreCase);
+                        }
                     }
                     break;
                 case "extended":

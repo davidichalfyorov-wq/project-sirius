@@ -14,6 +14,7 @@ using LibreLancer.Client;
 using LibreLancer.Client.Components;
 using LibreLancer.Data.GameData;
 using LibreLancer.Data.GameData.World;
+using LibreLancer.Data.Schema.GCS;
 using LibreLancer.Utf.Dfm;
 using LibreLancer.Data.Schema.Missions;
 using LibreLancer.Graphics.Text;
@@ -424,7 +425,7 @@ namespace LibreLancer
 
         private bool ProcessCutscenes()
         {
-            foreach (var ct in session.ActiveCutscenes)
+            foreach (var ct in session.ActiveCutscenes.ToList())
             {
                 if (processedPaths.Contains(ct.RefPath.ToLowerInvariant()))
                 {
@@ -668,7 +669,7 @@ namespace LibreLancer
             var r = virtualRoom ?? currentRoom.Nickname;
             var b = currentBase.Nickname;
 
-            foreach (var x in session.Thns.Ambients.Where(x =>
+            foreach (var x in session.Thns.Ambients.ToList().Where(x =>
                          x.Base.Equals(b, StringComparison.OrdinalIgnoreCase) &&
                          x.Room.Equals(r, StringComparison.OrdinalIgnoreCase)))
             {
@@ -877,6 +878,111 @@ namespace LibreLancer
             return npc;
         }
 
+
+        private ResolvedThn? GetDefaultFidgetScript(Posture posture, BaseNpc npc)
+        {
+            var explicitScript = npc.Placement?.FidgetScript;
+            if (!string.IsNullOrWhiteSpace(explicitScript?.DataPath))
+            {
+                return explicitScript;
+            }
+
+            var female = false;
+            var bodyNick = npc.Body?.Nickname ?? npc.BaseAppr?.Body?.Nickname;
+            if (!string.IsNullOrWhiteSpace(bodyNick))
+            {
+                female = bodyNick.Contains("female", StringComparison.OrdinalIgnoreCase) ||
+                         bodyNick.Contains("fem", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var postureName = posture.ToString().Contains("sit", StringComparison.OrdinalIgnoreCase)
+                ? "sit"
+                : "stand";
+            var genderName = female ? "female" : "male";
+            var candidates = new List<string>
+            {
+                $"scripts\\bases\\fidget_{postureName}_{genderName}.thn",
+                $"scripts\\bases\\fidget_{postureName}.thn",
+                $"scripts\\bases\\fidget_stand_{genderName}.thn",
+                "scripts\\bases\\fidget_stand_male.thn",
+                "scripts\\bases\\fidget_stand.thn"
+            };
+
+            // Discovery ships its idle animations as numbered variants under
+            // scripts/extras (fidget_stand_male_01..05 etc.) instead of the
+            // vanilla scripts/bases names - without them every room NPC ends
+            // up frozen in the T-pose. Pick a variant deterministically per
+            // NPC so the crowd doesn't move in sync.
+            var variantCount = (postureName, genderName) switch
+            {
+                ("sit", "female") => 1,
+                ("sit", "male") => 3,
+                ("stand", "female") => 6,
+                _ => 5
+            };
+            var pick = (int)(Data.CrcTool.FLModelCrc(npc.Nickname) % (uint)variantCount) + 1;
+            candidates.Add($"scripts\\extras\\fidget_{postureName}_{genderName}_{pick:D2}.thn");
+            candidates.Add($"scripts\\extras\\fidget_{postureName}_{genderName}_01.thn");
+            candidates.Add($"scripts\\extras\\fidget_stand_{genderName}_{pick:D2}.thn");
+            candidates.Add($"scripts\\extras\\fidget_stand_{genderName}_null.thn");
+            candidates.Add("scripts\\extras\\fidget_stand_male_null.thn");
+
+            foreach (var candidate in candidates)
+            {
+                var resolved = Game.GameData.Items.ResolveThn(candidate);
+                if (!string.IsNullOrWhiteSpace(resolved.DataPath) && Game.GameData.VFS.FileExists(resolved.DataPath))
+                {
+                    return resolved;
+                }
+            }
+
+            return null;
+        }
+
+
+        private ResolvedThn? ResolveDefaultFidgetScript(BaseNpc npc, RoomNpcSpot? spot = null)
+        {
+            var candidates = new List<string>();
+            var action = npc.Placement?.Action ?? string.Empty;
+            var isFemale = npc.Body?.Nickname?.Contains("female", StringComparison.OrdinalIgnoreCase) == true ||
+                           npc.Head?.Nickname?.Contains("female", StringComparison.OrdinalIgnoreCase) == true;
+            var gender = isFemale ? "female" : "male";
+
+            if (action.Contains("bartender", StringComparison.OrdinalIgnoreCase) ||
+                npc.Nickname.Contains("bartender", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.AddRange([
+                    "scripts\\extras\\fidget_bartender.thn",
+                    $"scripts\\extras\\fidget_stand_{gender}_null.thn"
+                ]);
+            }
+            else if (spot?.Posture == Posture.SitLow || spot?.Posture == Posture.SitHigh)
+            {
+                candidates.AddRange([
+                    $"scripts\\extras\\fidget_sit_{gender}_null.thn",
+                    "scripts\\extras\\fidget_sit_male_null.thn",
+                    "scripts\\extras\\fidget_sit_female_null.thn"
+                ]);
+            }
+
+            candidates.AddRange([
+                $"scripts\\extras\\fidget_stand_{gender}_null.thn",
+                "scripts\\extras\\fidget_stand_male_null.thn",
+                "scripts\\extras\\fidget_stand_female_null.thn"
+            ]);
+
+            foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var resolved = Game.GameData.Items.ResolveThn(candidate);
+                if (resolved.DataPath != null)
+                {
+                    return resolved;
+                }
+            }
+
+            return null;
+        }
+
         private bool AddBaseNpcToScene(BaseNpc npc, string spot, ResolvedThn? fidgetScript)
         {
             if (scene == null)
@@ -910,6 +1016,10 @@ namespace LibreLancer
             {
                 sceneName = $"{npc.Nickname}_{suffix++}";
             }
+
+            fidgetScript ??= GetDefaultFidgetScript(ThnRoomHandler.GetSpotPosture(currentRoom, spot), npc);
+
+            fidgetScript ??= ResolveDefaultFidgetScript(npc);
 
             var thnObj = ThnRoomHandler.AddNpc(
                 scene,
@@ -951,7 +1061,7 @@ namespace LibreLancer
                 }
             }
 
-            foreach (var npc in currentBase.Npcs)
+            foreach (var npc in currentBase.Npcs.ToList())
             {
                 if (npc.Placement == null && seen.Add(npc.Nickname))
                 {
@@ -1002,7 +1112,7 @@ namespace LibreLancer
 
             for (var i = 0; i < toSpawn && i < candidates.Count; i++)
             {
-                if (AddBaseNpcToScene(candidates[i], spots[i].Nickname, null))
+                if (AddBaseNpcToScene(candidates[i], spots[i].Nickname, GetDefaultFidgetScript(spots[i].Posture, candidates[i])))
                 {
                     usedSpots.Add(spots[i].Nickname);
                 }
@@ -1152,7 +1262,7 @@ namespace LibreLancer
 
         private void AddBaseNpcsToRoom()
         {
-            if (scene == null)
+            if (scene == null || baseNpcHotspots.Count > 0)
             {
                 return;
             }
@@ -1236,8 +1346,20 @@ namespace LibreLancer
             }
         }
 
+        private double autoplayLaunchTimer = 4.0;
+        private bool autoplayLaunched;
+        private bool autoplayLaunchShot;
+        private double autoplayLaunchShotTimer;
+
         public override void Update(double delta)
         {
+            if (SiriusAutoplay.Enabled && !autoplayLaunched && (autoplayLaunchTimer -= delta) <= 0)
+            {
+                autoplayLaunched = true;
+                FLLog.Info("Autoplay", "SIRIUS_AUTOPLAY: launching to space");
+                Launch();
+            }
+
             waitObjectiveFrames--;
 
             if (waitObjectiveFrames < 0)
@@ -1261,6 +1383,21 @@ namespace LibreLancer
                 else
                 {
                     scene.Update(firstFrame ? 0 : delta);
+                }
+            }
+
+            if (SiriusAutoplay.GoldenDir != null &&
+                autoplayLaunched &&
+                !autoplayLaunchShot &&
+                currentState == ScriptState.Launch &&
+                scene != null)
+            {
+                autoplayLaunchShotTimer += delta;
+                if (autoplayLaunchShotTimer >= 1.0)
+                {
+                    autoplayLaunchShot = true;
+                    Game.Screenshot(Path.Combine(SiriusAutoplay.GoldenDir, "launch.png"));
+                    FLLog.Info("Autoplay", "golden: launch.png");
                 }
             }
 
@@ -1352,7 +1489,7 @@ namespace LibreLancer
                 }
                 else
                 {
-                    cursor.Draw(dlist, Game.Mouse, Game.TotalTime);
+                    cursor.Draw(dlist, Game.Mouse, RenderClock.Get(Game.TotalTime));
                 }
                 dlist.Render();
             }

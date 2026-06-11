@@ -65,12 +65,15 @@ namespace LibreLancer.Render.Materials
             METALMAP = (1 << 1),
             ROUGHMAP = (1 << 2),
             ET_ENABLED = (1 << 3),
-            VERTEX_TEXTURE2 = (1 << 4)
+            VERTEX_TEXTURE2 = (1 << 4),
+            IBL = (1 << 5)
         }
 
-        private Shader GetPBRShader(IVertexType vertexType)
+        private Shader GetPBRShader(IVertexType vertexType, bool useIbl)
         {
             var caps = (PBRFeatures) 0;
+            if (useIbl)
+                caps |= PBRFeatures.IBL;
             if (!string.IsNullOrEmpty(RtSampler))
                 caps |= PBRFeatures.ROUGHMAP;
             if (!string.IsNullOrEmpty(NmSampler))
@@ -215,7 +218,8 @@ namespace LibreLancer.Render.Materials
             }
 
 
-            var shader = pbr ? GetPBRShader(vertextype) : GetRegularShader(vertextype, envMapping);
+            var useIbl = lights.Environment is { } probe0 && !probe0.Specular.IsDisposed;
+            var shader = pbr ? GetPBRShader(vertextype, useIbl) : GetRegularShader(vertextype, envMapping);
             SetWorld(shader);
             // Dt
             BindTexture(rstate, 0, DtSampler, 0, DtFlags, ResourceManager.WhiteTextureName);
@@ -283,8 +287,14 @@ namespace LibreLancer.Render.Materials
 
             if (pbr)
             {
+                // MAT colour constants are display-referred (LINEAR_AUDIT.md)
                 var param = new PBRParameters()
-                    { Dc = dcValue, Ec = Ec, Metallic = Metallic ?? 1.0f, Roughness = Roughness ?? 1.0f, Oc = Oc * OpacityMultiplier };
+                {
+                    Dc = ColorSpace.SrgbToLinear(dcValue), Ec = ColorSpace.SrgbToLinear(Ec),
+                    Metallic = MaterialNormalizer.Metallic(Metallic, !string.IsNullOrEmpty(MtSampler)),
+                    Roughness = MaterialNormalizer.Roughness(Roughness, !string.IsNullOrEmpty(RtSampler)),
+                    Oc = Oc * OpacityMultiplier
+                };
                 shader.SetUniformBlock(3, ref param);
 
                 if (!string.IsNullOrEmpty(MtSampler))
@@ -297,13 +307,25 @@ namespace LibreLancer.Render.Materials
                     BindTexture(rstate, 4, RtSampler, 4, RtFlags, ResourceManager.WhiteTextureName);
                 }
 
+                if (useIbl)
+                {
+                    var probe = lights.Environment!;
+                    rstate.Textures[5] = probe.Irradiance;
+                    rstate.Samplers[5] = SamplerState.LinearClamp;
+                    rstate.Textures[6] = probe.Specular;
+                    rstate.Samplers[6] = SamplerState.LinearClamp;
+                    rstate.Textures[7] = IblResources.GetBrdfLut(rstate);
+                    rstate.Samplers[7] = SamplerState.LinearClamp;
+                }
+
                 SetTextureCoordinates(shader, DtFlags, EtFlags, NmFlags, MtFlags, RtFlags);
             }
             else
             {
                 var param = new BasicParameters()
                 {
-                    Dc = dcValue, Ec = Ec, FadeRange = new Vector2(FadeNear, FadeFar), Oc = Oc * OpacityMultiplier,
+                    Dc = ColorSpace.SrgbToLinear(dcValue), Ec = ColorSpace.SrgbToLinear(Ec),
+                    FadeRange = new Vector2(FadeNear, FadeFar), Oc = Oc * OpacityMultiplier,
                     Tex2Type = BtEnabled && !EtEnabled ? 1 : 0
                 };
                 shader.SetUniformBlock(3, ref param);

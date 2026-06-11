@@ -14,10 +14,14 @@ using LibreLancer.Data;
 using LibreLancer.Data.GameData;
 using LibreLancer.Data.GameData.Items;
 using LibreLancer.Data.GameData.World;
+using DataSchemaEncounter = LibreLancer.Data.Schema.Universe.Encounter;
+using LibreLancer.Missions;
 using LibreLancer.Net;
 using LibreLancer.Net.Protocol;
 using LibreLancer.Physics;
 using LibreLancer.Resources;
+using LibreLancer.Data.Schema.Missions;
+using LibreLancer.Server.Comms;
 using LibreLancer.Server.Components;
 using LibreLancer.World;
 using LibreLancer.World.Components;
@@ -32,6 +36,7 @@ namespace LibreLancer.Server
         public GameServer Server;
         public StarSystem System;
         public NPCManager NPCs;
+        public ChatterDispatcher Chatter = null!;
         private Random debrisRandom = new();
         private object _idLock = new();
 
@@ -62,6 +67,385 @@ namespace LibreLancer.Server
             GameWorld.LoadSystem(system, server.Resources, null, true);
             GameWorld.Physics!.OnCollision += PhysicsOnCollision;
             NPCs = new NPCManager(this);
+            Chatter = new ChatterDispatcher(this);
+            SpawnInitialPopulationEncounters();
+        }
+
+        private readonly Random populationRandom = new();
+        private Dictionary<string, EncounterIni?>? encounterCache;
+        private int ambientNpcIndex = 0;
+
+        private EncounterIni? GetEncounterIni(string nickname)
+        {
+            encounterCache ??= new Dictionary<string, EncounterIni?>(StringComparer.OrdinalIgnoreCase);
+            if (encounterCache.TryGetValue(nickname, out var cached))
+            {
+                return cached;
+            }
+
+            var ep = System.EncounterParameters.FirstOrDefault(x =>
+                x.Nickname.Equals(nickname, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(ep.SourceFile))
+            {
+                encounterCache[nickname] = null;
+                return null;
+            }
+
+            var path = ep.SourceFile;
+            if (!Server.GameData.Items.VFS.FileExists(path))
+            {
+                var prefixed = Server.GameData.Items.Ini.Freelancer.DataPath + path;
+                if (Server.GameData.Items.VFS.FileExists(prefixed))
+                {
+                    path = prefixed;
+                }
+            }
+
+            if (!Server.GameData.Items.VFS.FileExists(path))
+            {
+                FLLog.Warning("Encounter", $"Encounter file '{ep.SourceFile}' for '{nickname}' not found");
+                encounterCache[nickname] = null;
+                return null;
+            }
+
+            try
+            {
+                cached = new EncounterIni(path, Server.GameData.Items.VFS);
+            }
+            catch (Exception e)
+            {
+                FLLog.Warning("Encounter", $"Unable to load encounter '{nickname}' from '{path}': {e.Message}");
+                cached = null;
+            }
+
+            encounterCache[nickname] = cached;
+            return cached;
+        }
+
+        private Faction? PickEncounterFaction(DataSchemaEncounter encounter)
+        {
+            if (encounter.FactionSpawns.Count == 0)
+            {
+                return System.LocalFaction;
+            }
+
+            var total = encounter.FactionSpawns.Sum(x => MathF.Max(0, x.Chance));
+            var pick = total > 0 ? populationRandom.NextSingle() * total : 0;
+            foreach (var spawn in encounter.FactionSpawns)
+            {
+                pick -= MathF.Max(0, spawn.Chance);
+                if (pick <= 0 || total == 0)
+                {
+                    return Server.GameData.Items.Factions.Get(spawn.Faction) ?? System.LocalFaction;
+                }
+            }
+
+            return Server.GameData.Items.Factions.Get(encounter.FactionSpawns[^1].Faction) ?? System.LocalFaction;
+        }
+
+        private CostumeEntry? PickSpaceCostume(Faction? faction)
+        {
+            var costumes = faction?.Properties?.SpaceCostume;
+            if (costumes == null || costumes.Count == 0)
+            {
+                return null;
+            }
+
+            var costume = costumes[populationRandom.Next(costumes.Count)];
+            return new CostumeEntry([costume.Head, costume.Body, costume.Extra], Server.GameData.Items);
+        }
+
+        private Vector3 RandomPointInZone(Zone zone)
+        {
+            var size = zone.Size;
+            switch (zone.Shape)
+            {
+                case ShapeKind.Sphere:
+                {
+                    var dir = new Vector3(
+                        populationRandom.NextSingle() * 2f - 1f,
+                        populationRandom.NextSingle() * 2f - 1f,
+                        populationRandom.NextSingle() * 2f - 1f);
+                    if (dir.LengthSquared() < 0.001f) dir = Vector3.UnitX;
+                    dir = Vector3.Normalize(dir);
+                    var distance = size.X * MathF.Pow(populationRandom.NextSingle(), 1f / 3f) * 0.75f;
+                    return zone.Position + dir * distance;
+                }
+                case ShapeKind.Box:
+                {
+                    var local = new Vector3(
+                        (populationRandom.NextSingle() - 0.5f) * size.X,
+                        (populationRandom.NextSingle() - 0.5f) * size.Y,
+                        (populationRandom.NextSingle() - 0.5f) * size.Z);
+                    return zone.Position + Vector3.TransformNormal(local, zone.RotationMatrix);
+                }
+                case ShapeKind.Ellipsoid:
+                {
+                    var local = new Vector3(
+                        (populationRandom.NextSingle() * 2f - 1f) * size.X * 0.5f,
+                        (populationRandom.NextSingle() * 2f - 1f) * size.Y * 0.5f,
+                        (populationRandom.NextSingle() * 2f - 1f) * size.Z * 0.5f);
+                    return zone.Position + Vector3.TransformNormal(local, zone.RotationMatrix);
+                }
+                default:
+                {
+                    var radius = MathF.Max(1000f, MathF.Max(size.X, size.Z));
+                    var angle = populationRandom.NextSingle() * MathF.Tau;
+                    var y = (populationRandom.NextSingle() - 0.5f) * MathF.Max(100f, size.Y);
+                    return zone.Position + new Vector3(MathF.Cos(angle) * radius * 0.5f, y, MathF.Sin(angle) * radius * 0.5f);
+                }
+            }
+        }
+
+        private float ZoneWanderRadius(Zone zone)
+        {
+            var s = zone.Size;
+            return MathF.Max(1000f, MathF.Max(s.X, MathF.Max(s.Y, s.Z)) * 0.65f);
+        }
+
+        private const int AmbientSystemBudget = 36;
+        private readonly List<GameObject> ambientShips = new();
+        private double ambientRepopTimer = 45.0;
+
+        private void SpawnInitialPopulationEncounters()
+        {
+            // Golden captures need an empty, reproducible system: ambient
+            // traffic is random per run and would diff every screenshot.
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                return;
+            }
+
+            var totalSpawned = 0;
+
+            foreach (var zone in System.Zones.Where(z => z.Encounters is { Length: > 0 } && z.Density > 0)
+                         .OrderByDescending(z => z.Density))
+            {
+                if (totalSpawned >= AmbientSystemBudget)
+                {
+                    break;
+                }
+
+                totalSpawned += SpawnZoneEncounters(zone, AmbientSystemBudget - totalSpawned);
+            }
+
+            if (totalSpawned > 0)
+            {
+                FLLog.Info("Encounter", $"Spawned {totalSpawned} ambient NPC ships in {System.Nickname}");
+            }
+        }
+
+        private int SpawnZoneEncounters(Zone zone, int budget)
+        {
+            var spawned = 0;
+            var zoneBudget = Math.Clamp(zone.MaxBattleSize > 0 ? zone.MaxBattleSize : Math.Max(1, zone.Density / 3), 1, 4);
+            foreach (var enc in zone.Encounters!)
+            {
+                if (spawned >= budget || zoneBudget <= 0)
+                {
+                    break;
+                }
+
+                var chance = enc.Chance <= 0 ? 1f : enc.Chance;
+                if (chance > 1f) chance /= 100f;
+                chance = Math.Clamp(chance, 0.05f, 1f);
+                if (populationRandom.NextSingle() > chance)
+                {
+                    continue;
+                }
+
+                var faction = PickEncounterFaction(enc);
+                if (faction == null)
+                {
+                    continue;
+                }
+
+                var ini = GetEncounterIni(enc.Archetype);
+                if (ini == null)
+                {
+                    continue;
+                }
+
+                var info = EncounterHandler.CreateEncounter(ini, enc.Difficulty, faction, Server.GameData.Items);
+                var group = new List<GameObject>();
+                foreach (var entry in info.Ships)
+                {
+                    if (spawned >= budget || zoneBudget <= 0)
+                    {
+                        break;
+                    }
+
+                    var shipArch = entry.Ship;
+                    if (string.IsNullOrWhiteSpace(shipArch.Loadout) ||
+                        !Server.GameData.Items.TryGetLoadout(shipArch.Loadout!, out var loadout) ||
+                        loadout.Archetype == null)
+                    {
+                        FLLog.Warning("Encounter", $"Skipping NPC ship '{shipArch.Nickname}' without loadout");
+                        continue;
+                    }
+
+                    var pos = RandomPointInZone(zone);
+                    var orient = Quaternion.CreateFromAxisAngle(Vector3.UnitY, populationRandom.NextSingle() * MathF.Tau);
+                    var pilot = Server.GameData.Items.GetPilot(shipArch.Pilot ?? "pilot_solar_easy");
+                    var nickname = $"ambient_{System.Nickname}_{++ambientNpcIndex}";
+                    var obj = NPCs.DoSpawn(
+                        entry.Name,
+                        nickname,
+                        faction,
+                        shipArch.StateGraph ?? "FIGHTER",
+                        PickSpaceCostume(faction),
+                        loadout,
+                        pilot,
+                        pos,
+                        orient,
+                        null,
+                        0,
+                        null,
+                        entry.Voice);
+                    group.Add(obj);
+                    ambientShips.Add(obj);
+                    spawned++;
+                    zoneBudget--;
+                }
+
+                if (group.Count == 0)
+                {
+                    continue;
+                }
+
+                var seed = ambientNpcIndex * 397 ^ System.Nickname.GetHashCode();
+                if (info.Behavior != EncounterBehavior.trade && group.Count > 1)
+                {
+                    // Patrol/wander groups fly in formation behind a leader,
+                    // like vanilla encounter wings. Traders travel solo so a
+                    // leader docking away does not strand its followers.
+                    var lead = group[0];
+                    for (var i = 1; i < group.Count; i++)
+                    {
+                        FormationTools.EnterFormation(group[i], lead, Vector3.Zero);
+                        group[i].AddComponent(new SAmbientBehaviorComponent(
+                            group[i], info.Behavior, zone.Position, ZoneWanderRadius(zone), seed + i));
+                    }
+                    lead.AddComponent(new SAmbientBehaviorComponent(
+                        lead, info.Behavior, zone.Position, ZoneWanderRadius(zone), seed));
+                }
+                else
+                {
+                    for (var i = 0; i < group.Count; i++)
+                    {
+                        group[i].AddComponent(new SAmbientBehaviorComponent(
+                            group[i], info.Behavior, zone.Position, ZoneWanderRadius(zone), seed + i));
+                    }
+                }
+            }
+
+            return spawned;
+        }
+
+        /// <summary>
+        /// Combat interconnection: when a ship calls contact, nearby idle
+        /// patrol/wander traffic of the same faction turns to engage the
+        /// hostile. Traders never join; mission NPCs are left alone.
+        /// </summary>
+        public void RequestAssistance(GameObject caller, GameObject hostile)
+        {
+            const float AssistRange = 7000f;
+            if (!caller.TryGetComponent<SNPCComponent>(out var callerNpc) || callerNpc.Faction == null)
+            {
+                return;
+            }
+
+            var callerPos = caller.WorldTransform.Position;
+            foreach (var ship in ambientShips)
+            {
+                if (ship == caller || !ship.Flags.HasFlag(GameObjectFlags.Exists))
+                {
+                    continue;
+                }
+                if (!ship.TryGetComponent<SAmbientBehaviorComponent>(out var ambient) ||
+                    ambient.Behavior == EncounterBehavior.trade)
+                {
+                    continue;
+                }
+                if (!ship.TryGetComponent<SNPCComponent>(out var npc) ||
+                    npc.Faction != callerNpc.Faction ||
+                    npc.CurrentDirective != null ||
+                    npc.MissionRuntime != null)
+                {
+                    continue;
+                }
+                if (ship.GetComponent<SelectedTargetComponent>()?.Selected != null)
+                {
+                    continue;
+                }
+                if (Vector3.Distance(ship.WorldTransform.Position, callerPos) > AssistRange)
+                {
+                    continue;
+                }
+                npc.Attack(hostile, GameWorld);
+            }
+        }
+
+        private bool autoplayChatterTested;
+
+        private void AmbientRepopulationTick(double delta)
+        {
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                return;
+            }
+
+            ambientRepopTimer -= delta;
+            if (ambientRepopTimer > 0)
+            {
+                return;
+            }
+            ambientRepopTimer = 40.0 + populationRandom.NextDouble() * 20.0;
+
+            // SIRIUS_AUTOPLAY diagnostics: force one dock-request exchange from
+            // the NPC nearest to the player so headless runs always exercise
+            // the full chatter path (assembly -> RPC -> client audio chain).
+            if (SiriusAutoplay.Enabled && !autoplayChatterTested && Players.Count > 0)
+            {
+                var playerPos = Players.Values.First()?.WorldTransform.Position;
+                var nearest = playerPos == null ? null : ambientShips
+                    .Where(s => s.Flags.HasFlag(GameObjectFlags.Exists) && s.GetComponent<SChatterComponent>() != null)
+                    .OrderBy(s => Vector3.Distance(s.WorldTransform.Position, playerPos.Value))
+                    .FirstOrDefault();
+                if (nearest != null)
+                {
+                    autoplayChatterTested = true;
+                    var said = nearest.GetComponent<SChatterComponent>()!.Say(ChatterEvent.DockRequest, ignoreShipCooldown: true);
+                    FLLog.Info("Autoplay", $"forced chatter test from {nearest.Nickname}: {(said ? "spoken" : "silent (no clips/hearing)")}");
+                    if (said)
+                    {
+                        // Complete the exchange like UpdateTrade does: tower
+                        // answers a few seconds later, anchored to the ship.
+                        var station = GameWorld.Objects.FirstOrDefault(o => o.TryGetComponent<SDockableComponent>(out _));
+                        if (station != null)
+                        {
+                            DelayAction(() => Chatter.TrySendAtc(station, ChatterEvent.DockGranted, nearest), 3.5);
+                        }
+                    }
+                }
+            }
+
+            ambientShips.RemoveAll(x => !x.Flags.HasFlag(GameObjectFlags.Exists));
+            if (ambientShips.Count >= AmbientSystemBudget)
+            {
+                return;
+            }
+
+            var zones = System.Zones.Where(z => z.Encounters is { Length: > 0 } && z.Density > 0).ToArray();
+            if (zones.Length == 0)
+            {
+                return;
+            }
+
+            // Top the population back up gradually, a couple of ships per tick,
+            // mimicking vanilla's continuous arrivals after traffic docks away.
+            var zone = zones[populationRandom.Next(zones.Length)];
+            SpawnZoneEncounters(zone, Math.Min(2, AmbientSystemBudget - ambientShips.Count));
         }
 
         private void PhysicsOnCollision(PhysicsObject? obja, PhysicsObject? objb)
@@ -995,10 +1379,84 @@ namespace LibreLancer.Server
         private double noPlayersTime;
         private double maxNoPlayers = 2.0;
 
+        private bool goldenTeleported;
+        private double goldenSpawnTime = -1;
+
+        // SIRIUS_TELEPORT="x,y,z,yawDegrees" pins an arbitrary autoplay pose
+        // for effect screenshots; the golden gate keeps its hardcoded pose.
+        private static readonly Vector4? teleportOverride = ParseTeleportOverride();
+
+        private static Vector4? ParseTeleportOverride()
+        {
+            var value = Environment.GetEnvironmentVariable("SIRIUS_TELEPORT");
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            var parts = value.Split(',');
+            if (parts.Length != 4)
+            {
+                return null;
+            }
+            var inv = global::System.Globalization.CultureInfo.InvariantCulture;
+            const global::System.Globalization.NumberStyles style =
+                global::System.Globalization.NumberStyles.Float;
+            return float.TryParse(parts[0], style, inv, out var x) &&
+                   float.TryParse(parts[1], style, inv, out var y) &&
+                   float.TryParse(parts[2], style, inv, out var z) &&
+                   float.TryParse(parts[3], style, inv, out var yaw)
+                ? new Vector4(x, y, z, yaw)
+                : null;
+        }
+
         public bool Update(double delta, double totalTime, uint currentTick)
         {
             // Avoid locks during Update
             CurrentTick = currentTick;
+
+            // Golden captures: pin the player to a fixed director's pose on
+            // the SERVER - it owns the authoritative transform, a client-side
+            // teleport is overwritten on the next tick. Facing planet
+            // Manhattan: a static subject (tradelane gate sections animate
+            // with a per-run phase).
+            if ((SiriusAutoplay.GoldenDir != null || (SiriusAutoplay.Enabled && teleportOverride != null))
+                && Players.Count > 0)
+            {
+                // Key off the player's arrival in SPACE, not absolute server
+                // time: load times differ per backend and an early teleport
+                // gets overwritten by the launch sequence.
+                if (goldenSpawnTime < 0)
+                {
+                    goldenSpawnTime = totalTime;
+                }
+                if (totalTime - goldenSpawnTime < 3.0)
+                {
+                    goto skipTeleport;
+                }
+                // Re-pin EVERY tick: idle physics drift (engine wash,
+                // damping) shifts the hull a few pixels per run otherwise.
+                var ship = Players.Values.First();
+                var pose = teleportOverride is { } pin
+                    ? new Transform3D(
+                        new Vector3(pin.X, pin.Y, pin.Z),
+                        Quaternion.CreateFromAxisAngle(Vector3.UnitY, pin.W * MathF.PI / 180f))
+                    : new Transform3D(
+                        new Vector3(-33000, 500, -28000),
+                        Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI));
+                ship.SetLocalTransform(pose);
+                if (ship.PhysicsComponent?.Body != null)
+                {
+                    ship.PhysicsComponent.Body.SetTransform(pose);
+                    ship.PhysicsComponent.Body.LinearVelocity = Vector3.Zero;
+                    ship.PhysicsComponent.Body.AngularVelocity = Vector3.Zero;
+                }
+                if (!goldenTeleported)
+                {
+                    goldenTeleported = true;
+                    FLLog.Info("Autoplay", "golden: server teleported player to director pose");
+                }
+            }
+            skipTeleport: ;
 
             while (actions.Count > 0 && actions.TryDequeue(out var act))
             {
@@ -1019,6 +1477,8 @@ namespace LibreLancer.Server
             {
                 return true;
             }
+
+            AmbientRepopulationTick(delta);
 
             // Update
             NPCs.FrameStart();

@@ -610,6 +610,26 @@ public partial class CGameSession
         RunSync(() => { RunDialog(lines); });
     }
 
+    void IClientPlayer.Chatter(NetDlgLine[] lines)
+    {
+        RunSync(() => { RunChatter(lines); });
+    }
+
+    // Ambient radio chatter: plays the GCS segment chain back to back.
+    // Unlike RunDialog it opens no comm window and reports nothing back to
+    // the server - overheard traffic is purely cosmetic.
+    private void RunChatter(NetDlgLine[] lines, int index = 0)
+    {
+        if (index >= lines.Length)
+            return;
+
+        FLLog.Info("Chatter", $"playing {lines[index].Voice} 0x{lines[index].Hash:X8} ({index + 1}/{lines.Length})");
+        Game.Sound.PlayVoiceLine(lines[index].Voice!, lines[index].Hash, () =>
+        {
+            RunSync(() => RunChatter(lines, index + 1));
+        });
+    }
+
     void IClientPlayer.StopShip()
     {
         FLLog.Debug("Mission", "StopShip() call received");

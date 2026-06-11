@@ -81,7 +81,9 @@ namespace LibreLancer.Interface
         {
             if (Animation != null)
             {
-                var x = time;
+                // Golden captures: pulsing UI colours (menu buttons etc.)
+                // would diff between runs; pin them to a fixed phase.
+                var x = SiriusAutoplay.GoldenDir != null ? 0 : time;
                 var factor = (float) Math.Abs(Math.Sin(Math.PI * x * Animation.Speed));
                 return new Color4(
                     MathHelper.Lerp(Animation.Color1.R, Animation.Color2.R, factor),

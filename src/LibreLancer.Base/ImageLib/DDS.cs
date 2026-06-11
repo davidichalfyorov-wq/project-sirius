@@ -322,6 +322,101 @@ public static class DDS
         return sfc.ToArray();
     }
 
+
+    /// <summary>
+    /// Writes a one-mip DDS cubemap. Faces must be ordered +X, -X, +Y, -Y, +Z, -Z.
+    /// </summary>
+    /// <param name="stream">Output stream.</param>
+    /// <param name="size">Cubemap face width and height.</param>
+    /// <param name="format">Surface format. Supported formats are Bgra8, Dxt1 and Dxt5.</param>
+    /// <param name="faces">Six face payloads in DDS cubemap order.</param>
+    public static void WriteCubemap(Stream stream, int size, SurfaceFormat format, IReadOnlyList<byte[]> faces)
+    {
+        if (size <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(size));
+        }
+
+        if (faces.Count != 6)
+        {
+            throw new ArgumentException("DDS cubemap requires exactly 6 faces", nameof(faces));
+        }
+
+        var expectedBytes = format switch
+        {
+            SurfaceFormat.Dxt1 => ((size + 3) / 4) * ((size + 3) / 4) * 8,
+            SurfaceFormat.Dxt5 => ((size + 3) / 4) * ((size + 3) / 4) * 16,
+            SurfaceFormat.Bgra8 => size * size * 4,
+            _ => throw new NotSupportedException($"DDS cubemap write format {format} is not supported")
+        };
+
+        for (var i = 0; i < faces.Count; i++)
+        {
+            if (faces[i].Length != expectedBytes)
+            {
+                throw new ArgumentException($"Cubemap face {i} has {faces[i].Length} bytes, expected {expectedBytes}", nameof(faces));
+            }
+        }
+
+        var writer = new BinaryWriter(stream);
+        writer.Write(DDS_MAGIC);
+        writer.Write(HEADER_SIZE);
+        writer.Write(DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT |
+                     (format == SurfaceFormat.Bgra8 ? DDSD_PITCH : DDSD_LINEARSIZE));
+        writer.Write((uint)size);
+        writer.Write((uint)size);
+        writer.Write((uint)(format == SurfaceFormat.Bgra8 ? size * 4 : expectedBytes));
+        writer.Write(0u); // depth
+        writer.Write(0u); // mipmap count
+        for (var i = 0; i < 11; i++) writer.Write(0u);
+
+        writer.Write(PFORMAT_SIZE);
+        switch (format)
+        {
+            case SurfaceFormat.Dxt1:
+                writer.Write(0x4u); // DDPF_FOURCC
+                writer.Write((uint)FourCC.DXT1);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                break;
+            case SurfaceFormat.Dxt5:
+                writer.Write(0x4u); // DDPF_FOURCC
+                writer.Write((uint)FourCC.DXT5);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(0u);
+                break;
+            case SurfaceFormat.Bgra8:
+                writer.Write(0x41u); // DDPF_RGB | DDPF_ALPHAPIXELS
+                writer.Write(0u);
+                writer.Write(32u);
+                writer.Write(0x00ff0000u);
+                writer.Write(0x0000ff00u);
+                writer.Write(0x000000ffu);
+                writer.Write(0xff000000u);
+                break;
+            default:
+                throw new NotSupportedException($"DDS cubemap write format {format} is not supported");
+        }
+
+        const uint ddsCaps2AllCubemapFaces = DDSCAPS2_CUBEMAP | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000 | 0x8000;
+        writer.Write(DDSCAPS_TEXTURE | DDSCAPS_COMPLEX);
+        writer.Write(ddsCaps2AllCubemapFaces);
+        writer.Write(0u);
+        writer.Write(0u);
+        writer.Write(0u);
+
+        for (var i = 0; i < faces.Count; i++)
+        {
+            writer.Write(faces[i]);
+        }
+    }
+
     public static bool StreamIsDDS(Stream stream)
     {
         BinaryReader reader = new BinaryReader(stream);

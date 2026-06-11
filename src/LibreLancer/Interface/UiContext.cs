@@ -248,7 +248,8 @@ namespace LibreLancer.Interface
         {
             ViewportWidth = game.Width;
             ViewportHeight = game.Height;
-            Update(game.TotalTime, game.Mouse.X, game.Mouse.Y, game.Mouse.IsButtonDown(MouseButtons.Left));
+            Update(RenderClock.Get(game.TotalTime), game.Mouse.X, game.Mouse.Y,
+                game.Mouse.IsButtonDown(MouseButtons.Left));
         }
 
         public bool HasModal => modals.Count > 0;
@@ -303,7 +304,7 @@ namespace LibreLancer.Interface
         public void SetWidget(UiWidget widget)
         {
             widget.ApplyStylesheet(Data.Stylesheet);
-            foreach (var m in modals)
+            foreach (var m in modals.ToArray())
                 m.Widget.Dispose();
             modals = [];
             baseWidget = widget;
@@ -323,7 +324,7 @@ namespace LibreLancer.Interface
         {
             widget.ApplyStylesheet(Data.Stylesheet);
 
-            foreach (var modal in modals)
+            foreach (var modal in modals.ToArray())
             {
                 if (modal.Handle == handle)
                 {
@@ -465,7 +466,7 @@ namespace LibreLancer.Interface
                 baseWidget.Render(this, dlist, desktopRect);
             }
 
-            foreach (var widget in modals)
+            foreach (var widget in modals.ToArray())
                 widget.Widget.Render(this, dlist, desktopRect);
 
             if (!string.IsNullOrWhiteSpace(requestedRollover))

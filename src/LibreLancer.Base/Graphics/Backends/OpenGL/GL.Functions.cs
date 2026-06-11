@@ -93,6 +93,42 @@ internal static unsafe partial class GL
     public static bool DesktopGL4 = false;
     public static bool GL430 = false;
 
+    // ARB_timer_query (desktop GL 3.3 core; absent on GLES).
+    public const int GL_TIMESTAMP = 0x8E28;
+    public const int GL_QUERY_RESULT = 0x8866;
+    public const int GL_QUERY_RESULT_AVAILABLE = 0x8867;
+    private static delegate* unmanaged<int, uint*, void> _glGenQueries;
+    private static delegate* unmanaged<int, uint*, void> _glDeleteQueries;
+    private static delegate* unmanaged<uint, int, void> _glQueryCounter;
+    private static delegate* unmanaged<uint, int, int*, void> _glGetQueryObjectiv;
+    private static delegate* unmanaged<uint, int, ulong*, void> _glGetQueryObjectui64v;
+    public static bool TimerQueriesAvailable { get; private set; }
+
+    public static uint GenQuery()
+    {
+        uint query;
+        _glGenQueries(1, &query);
+        return query;
+    }
+
+    public static void DeleteQuery(uint query) => _glDeleteQueries(1, &query);
+
+    public static void QueryCounter(uint query) => _glQueryCounter(query, GL_TIMESTAMP);
+
+    public static bool QueryResultAvailable(uint query)
+    {
+        int available;
+        _glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
+        return available != 0;
+    }
+
+    public static ulong QueryResultU64(uint query)
+    {
+        ulong value;
+        _glGetQueryObjectui64v(query, GL_QUERY_RESULT, &value);
+        return value;
+    }
+
     private static Dictionary<int, string> errors = null!;
     public static bool ErrorChecking = false;
 
@@ -108,6 +144,14 @@ internal static unsafe partial class GL
         errors.Add(0x0505, "Out Of Memory");
         errors.Add(0x0506, "Invalid Framebuffer Operation");
         Load(getProcAddress, GLES);
+        _glGenQueries = (delegate* unmanaged<int, uint*, void>)getProcAddress("glGenQueries");
+        _glDeleteQueries = (delegate* unmanaged<int, uint*, void>)getProcAddress("glDeleteQueries");
+        _glQueryCounter = (delegate* unmanaged<uint, int, void>)getProcAddress("glQueryCounter");
+        _glGetQueryObjectiv = (delegate* unmanaged<uint, int, int*, void>)getProcAddress("glGetQueryObjectiv");
+        _glGetQueryObjectui64v = (delegate* unmanaged<uint, int, ulong*, void>)getProcAddress("glGetQueryObjectui64v");
+        TimerQueriesAvailable = !GLES &&
+            _glGenQueries != null && _glDeleteQueries != null && _glQueryCounter != null &&
+            _glGetQueryObjectiv != null && _glGetQueryObjectui64v != null;
         if (GLExtensions.DebugInfo)
         {
             Enable(GL_DEBUG_OUTPUT_KHR);

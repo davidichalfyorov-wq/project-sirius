@@ -1515,6 +1515,12 @@ public class GameItemDb
             sys.StarsBasic = ResolveDrawable(inisys.Background?.BasicStarsPath);
             sys.StarsComplex = ResolveDrawable(inisys.Background?.ComplexStarsPath);
             sys.StarsNebula = ResolveDrawable(inisys.Background?.NebulaePath);
+            if (flData.Freelancer.UseCubemapStarspheres)
+            {
+                sys.StarsBasicCubemap = ResolveStarsphereCubemap(inisys.Background?.BasicStarsCubemapPath, sys.StarsBasic);
+                sys.StarsComplexCubemap = ResolveStarsphereCubemap(inisys.Background?.ComplexStarsCubemapPath, sys.StarsComplex);
+                sys.StarsNebulaCubemap = ResolveStarsphereCubemap(inisys.Background?.NebulaeCubemapPath, sys.StarsNebula);
+            }
 
             if (inisys.LightSources != null)
             {
@@ -2127,6 +2133,24 @@ public class GameItemDb
         }
 
         return n;
+    }
+
+
+    private string? ResolveStarsphereCubemap(string? explicitPath, ResolvedModel? fallbackModel)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+        {
+            return DataPath(explicitPath);
+        }
+
+        if (fallbackModel?.SourcePath == null)
+        {
+            return null;
+        }
+
+        var derivedSource = System.IO.Path.ChangeExtension(fallbackModel.SourcePath, ".cubemap.dds");
+        var derivedPath = flData.Freelancer.DataPath + derivedSource;
+        return VFS.FileExists(derivedPath) ? derivedPath : null;
     }
 
 

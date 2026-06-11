@@ -9,6 +9,7 @@ using LibreLancer.Data.Schema.Pilots;
 using LibreLancer.Data.Schema.Solar;
 using LibreLancer.Missions;
 using LibreLancer.Net.Protocol;
+using LibreLancer.Server.Comms;
 using LibreLancer.Server.Components;
 using LibreLancer.World;
 using LibreLancer.World.Components;
@@ -125,7 +126,8 @@ namespace LibreLancer.Server
             Quaternion orient,
             string? arrivalObj,
             int arrivalIndex,
-            MissionRuntime? msn = null
+            MissionRuntime? msn = null,
+            Voice? commVoice = null
             )
         {
             var ship = World.Server.GameData.Items.Ships.Get(loadout.Archetype);
@@ -162,8 +164,14 @@ namespace LibreLancer.Server
             var cargo = new SNPCCargoComponent(obj);
             cargo.Cargo.AddRange(loadout.Cargo);
             obj.AddComponent(cargo);
-            var stateDescription = new StateGraphDescription(stateGraph!.ToUpperInvariant(), "LEADER");
-            World.Server.GameData.Items.Ini.StateGraphDb.Tables.TryGetValue(stateDescription, out var stateTable);
+            var stateGraphName = string.IsNullOrWhiteSpace(stateGraph) ? "FIGHTER" : stateGraph!;
+            var stateDescription = new StateGraphDescription(stateGraphName.ToUpperInvariant(), "LEADER");
+            if (!World.Server.GameData.Items.Ini.StateGraphDb.Tables.TryGetValue(stateDescription, out var stateTable))
+            {
+                FLLog.Warning("NPC", $"State graph '{stateGraphName}' was not found; using FIGHTER/LEADER fallback");
+                World.Server.GameData.Items.Ini.StateGraphDb.Tables.TryGetValue(
+                    new StateGraphDescription("FIGHTER", "LEADER"), out stateTable);
+            }
             var npcComponent = new SNPCComponent(obj, this, stateTable!) { MissionRuntime = msn, Faction = affiliation };
             npcComponent.SetPilot(pilot);
             npcComponent.CommHead = costume?.Head;
@@ -177,6 +185,13 @@ namespace LibreLancer.Server
             obj.AddComponent(new WeaponControlComponent(obj));
             obj.AddComponent(new SDestroyableComponent(obj, World));
             obj.AddComponent(new DirectiveRunnerComponent(obj));
+            if (commVoice != null)
+            {
+                var chatter = new SChatterComponent(obj, World.Chatter, commVoice, affiliation, () => World.Server.TotalTime);
+                obj.AddComponent(chatter);
+                // Dying pilots scream on the open channel like vanilla traffic.
+                obj.GetComponent<SHealthComponent>()!.KilledHook += _ => chatter.Say(ChatterEvent.Death, ignoreShipCooldown: true);
+            }
             // NPCs spawn already cloaked
             if (obj.TryGetComponent<CloakComponent>(out var cloak))
             {

@@ -54,6 +54,12 @@ public static class ThnRoomHandler
     private static Regex markerRegex = new(@"^Z([sg])\/(\w+)\/(\w+)\/(\d\d)\/(\w+)\/?(\w+)?$");
 
 
+    public static Posture GetSpotPosture(BaseRoom currentRoom, string spot)
+    {
+        return GetSpots(currentRoom).FirstOrDefault(x =>
+            x.Nickname.Equals(spot, StringComparison.OrdinalIgnoreCase)).Posture;
+    }
+
     public static RoomNpcSpot[] GetSpots(BaseRoom currentRoom)
     {
         if (currentRoom.SetScript?.DataPath == null)
@@ -140,19 +146,29 @@ public static class ThnRoomHandler
         obj.AnimationComponent = animation;
         obj.AddComponent(animation);
         var spotObj = scene!.GetObject(spot)!;
-        obj.SetLocalTransform(new Transform3D(spotObj.Translate with { Y = 0 }, spotObj.Rotate));
+        // Discovery rooms rely on the marker's full 3D transform.  The old
+        // code flattened Y to zero, which put many NPCs half inside floors
+        // and broke seated/bartender fidget scripts.
+        obj.SetLocalTransform(new Transform3D(spotObj.Translate, spotObj.Rotate));
         var thnObj = new ThnSceneObject
         {
             Name = name,
-            Translate = spotObj.Translate with { Y = 0 },
+            Translate = spotObj.Translate,
             Rotate = spotObj.Rotate,
             Object = obj,
             Voice = voice
         };
         scene.AddObject(thnObj);
-        if (fidgetScript != null)
+        if (!string.IsNullOrWhiteSpace(fidgetScript?.DataPath))
         {
-            scene.FidgetScript(fidgetScript.LoadScript(), name);
+            try
+            {
+                scene.FidgetScript(fidgetScript.LoadScript(), name);
+            }
+            catch (Exception e)
+            {
+                FLLog.Warning("Room", $"Unable to start fidget script '{fidgetScript.DataPath}' for NPC '{name}': {e.Message}");
+            }
         }
         return thnObj;
     }

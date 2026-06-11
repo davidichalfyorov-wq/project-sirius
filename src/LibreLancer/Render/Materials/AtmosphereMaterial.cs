@@ -41,7 +41,7 @@ namespace LibreLancer.Render.Materials
         {
             var sh = AllShaders.Atmosphere.Get(rstate.HasFeature(GraphicsFeature.GLES) ? 1U : 0U);
             SetWorld(sh);
-            var p = new AtmosphereParameters() { Dc = Dc, Ac = Ac, Fade = Fade, Oc = Alpha };
+            var p = new AtmosphereParameters() { Dc = ColorSpace.SrgbToLinear(Dc), Ac = ColorSpace.SrgbToLinear(Ac), Fade = Fade, Oc = Alpha };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
             sh.SetUniformBlock(3, ref p);

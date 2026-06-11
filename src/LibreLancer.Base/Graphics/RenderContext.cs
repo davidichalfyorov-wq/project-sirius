@@ -286,6 +286,14 @@ public class RenderContext
 
     public void SSBOMemoryBarrier() => impl.MemoryBarrier();
 
+    /// <summary>GPU time markers around a render pass (debug overlay).</summary>
+    public void BeginPassTimer(string name) => impl.BeginPassTimer(name);
+
+    public void EndPassTimer() => impl.EndPassTimer();
+
+    /// <summary>Per-pass GPU times from a few frames ago.</summary>
+    public System.Collections.Generic.IReadOnlyList<Backends.PassTiming> PassTimings => impl.PassTimings;
+
     public void ClearAll()
     {
         Apply();

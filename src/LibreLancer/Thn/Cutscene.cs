@@ -231,6 +231,7 @@ public class Cutscene : IDisposable
 
         if (spawnObjects && resetObjects)
         {
+            Renderer?.DisableCubemapStarspheres();
             // Add starspheres in the right order
             var sorted = ((IEnumerable<Tuple<IDrawable, ThnSceneObject>>)layers).Reverse()
                 .OrderBy(x => x.Item2.Entity.SortGroup).ToArray();
@@ -311,7 +312,7 @@ public class Cutscene : IDisposable
         }
 
         currentTime += delta;
-        foreach (var obj in sceneObjects.Values) obj.Update();
+        foreach (var obj in sceneObjects.Values.ToArray()) obj.Update();
         if (text != null)
         {
             if (currentTime > text.Start)
@@ -321,7 +322,7 @@ public class Cutscene : IDisposable
             }
         }
 
-        foreach (var instance in instances)
+        foreach (var instance in instances.ToArray())
         {
             instance.Update(delta);
         }

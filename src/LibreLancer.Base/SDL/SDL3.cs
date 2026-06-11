@@ -2641,6 +2641,24 @@ internal static unsafe partial class SDL3
 	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
 	public static partial void SDL_DestroyWindow(IntPtr window);
 
+	/* Vulkan WSI entry points (render backend phase 3) */
+	[LibraryImport(nativeLibName, StringMarshalling = StringMarshalling.Utf8)]
+	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+	public static partial SDLBool SDL_Vulkan_LoadLibrary(string? path);
+
+	[LibraryImport(nativeLibName)]
+	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+	public static partial IntPtr SDL_Vulkan_GetVkGetInstanceProcAddr();
+
+	[LibraryImport(nativeLibName)]
+	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+	public static unsafe partial byte** SDL_Vulkan_GetInstanceExtensions(out uint count);
+
+	[LibraryImport(nativeLibName)]
+	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+	public static unsafe partial SDLBool SDL_Vulkan_CreateSurface(
+		IntPtr window, IntPtr instance, IntPtr allocator, out ulong surface);
+
 	[LibraryImport(nativeLibName)]
 	[UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
 	public static partial SDLBool SDL_ScreenSaverEnabled();

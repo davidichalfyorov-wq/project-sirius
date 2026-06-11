@@ -51,6 +51,27 @@ public abstract class ResourceManager
     public ConvexMeshCollection ConvexCollection { get; protected set; } = null!;
 
     protected FileSystem VFS;
+
+    /// <summary>
+    /// Checks whether a file exists in the Freelancer virtual file system.
+    /// </summary>
+    /// <param name="filename">Virtual file path.</param>
+    /// <returns><c>true</c> when the file can be opened from the VFS.</returns>
+    public bool ResourceExists(string? filename)
+    {
+        return VFS.FileExists(filename);
+    }
+
+    /// <summary>
+    /// Opens a file from the Freelancer virtual file system.
+    /// </summary>
+    /// <param name="filename">Virtual file path.</param>
+    /// <returns>A readable stream for the requested resource.</returns>
+    public System.IO.Stream OpenResource(string filename)
+    {
+        return VFS.Open(filename);
+    }
+
     protected ResourceManager(FileSystem vfs)
     {
         VFS = vfs;

@@ -1,3 +1,5 @@
+#include "includes/ColorSpace.hlsl"
+
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
 
@@ -28,8 +30,8 @@ float4 main(Input input) : SV_Target0
     float dist = distance(CameraPosition, input.worldPosition);
     float delta = max(FADE_DISTANCE - dist, 0.0);
     float alpha = (FADE_DISTANCE - delta) / FADE_DISTANCE;
-    float4 tex = Texture.Sample(Sampler, input.texCoord * float2(TextureAspect, 1.0));
-    float4 dc = float4(tex.rgb * ColorShift.rgb, tex.a * alpha);
+    float4 tex = SampleColorTexture(Texture, Sampler, input.texCoord * float2(TextureAspect, 1.0));
+    float4 dc = float4(tex.rgb * SrgbToLinear(ColorShift.rgb), tex.a * alpha);
     // These parameters may not be entirely correct
     return ApplyPixelLighting(
         float4(1.0, 1.0, 1.0, 1.0),

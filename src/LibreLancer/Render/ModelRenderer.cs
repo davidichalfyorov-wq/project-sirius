@@ -51,25 +51,37 @@ namespace LibreLancer.Render
 
             if (Spin != Vector3.Zero)
             {
-                spinX += elapsed * Spin.X;
-
-                if (spinX > (2 * Math.PI))
+                // Accumulated phase depends on load time; once a golden
+                // capture freezes the clock, pin spin (docking rings,
+                // planets) to a fixed phase so runs match.
+                if (RenderClock.Frozen is { } frozenTime)
                 {
-                    spinX -= 2 * Math.PI;
+                    spinX = frozenTime * Spin.X % (2 * Math.PI);
+                    spinY = frozenTime * Spin.Y % (2 * Math.PI);
+                    spinZ = frozenTime * Spin.Z % (2 * Math.PI);
                 }
-
-                spinY += elapsed * Spin.Y;
-
-                if (spinY > (2 * Math.PI))
+                else
                 {
-                    spinY -= 2 * Math.PI;
-                }
+                    spinX += elapsed * Spin.X;
 
-                spinZ += elapsed * Spin.Z;
+                    if (spinX > (2 * Math.PI))
+                    {
+                        spinX -= 2 * Math.PI;
+                    }
 
-                if (spinZ > (2 * Math.PI))
-                {
-                    spinZ -= 2 * Math.PI;
+                    spinY += elapsed * Spin.Y;
+
+                    if (spinY > (2 * Math.PI))
+                    {
+                        spinY -= 2 * Math.PI;
+                    }
+
+                    spinZ += elapsed * Spin.Z;
+
+                    if (spinZ > (2 * Math.PI))
+                    {
+                        spinZ -= 2 * Math.PI;
+                    }
                 }
             }
 
@@ -227,7 +239,7 @@ namespace LibreLancer.Render
         {
             if (Model != null)
             {
-                Model.Update(sysr!.Game.TotalTime);
+                Model.Update(RenderClock.Get(sysr!.Game.TotalTime));
 
                 for (var i = 0; i < Model.AllParts.Length; i++)
                 {

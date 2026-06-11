@@ -164,7 +164,10 @@ public class ShaderBundleWriter
         WriteVarUInt32(writer, sh.Fragment.NumUniformBuffers);
         WriteUTF8(writer, sh.Fragment.EntryPoint);
         WriteVarUInt32(writer, (uint)sh.Fragment.Code.Length);
-        writer.Write(sh.Vertex.Code);
+        // Was sh.Vertex.Code: the declared length came from the fragment
+        // stage but the bytes from the vertex stage, corrupting every
+        // SPIR-V consumer (the GL backend never noticed - it reads GLSL).
+        writer.Write(sh.Fragment.Code);
         return ms.ToArray();
     }
 

@@ -159,7 +159,7 @@ namespace LibreLancer.Utf.Mat
 
             if (SideMaterialNames.Count < 6)
             {
-                FLLog.Warning("Sph", $"Sph {path} does not contain all 6 sides and will not render");
+                FLLog.Warning("Sph", $"Sph {path} does not contain all 6 sides; reusing the last available side for missing faces");
             }
         }
 
@@ -184,7 +184,7 @@ namespace LibreLancer.Utf.Mat
                 BoundingBox = BoundingBox.CreateFromSphere(new BoundingSphere(Vector3.Zero, Radius))
             };
 
-            if (drawable && SideMaterials.Length >= 6)
+            if (drawable && SideMaterials.Length > 0)
             {
                 var sphere = resources.GetQuadSphere(26);
 
@@ -192,9 +192,10 @@ namespace LibreLancer.Utf.Mat
                 {
                     Vector3 pos;
                     sphere.GetDrawParameters(faces[i], out var start, out var count, out pos);
+                    var materialIndex = Math.Min(i, SideMaterialNames.Count - 1);
                     var dc = new MeshDrawcall
                     {
-                        MaterialCrc = CrcTool.FLModelCrc(SideMaterialNames[i]),
+                        MaterialCrc = CrcTool.FLModelCrc(SideMaterialNames[materialIndex]),
                         BaseVertex = 0,
                         StartIndex = start,
                         PrimitiveCount = count

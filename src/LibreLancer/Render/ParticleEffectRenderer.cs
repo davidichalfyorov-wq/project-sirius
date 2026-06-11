@@ -72,6 +72,14 @@ namespace LibreLancer.Render
                 return;
             }
 
+            // Golden captures: particle effects (dock sparkles, idle FX) have
+            // per-run phase. Skipping the update entirely keeps the pool
+            // empty, so no sparkles are emitted and screenshots stay stable.
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                return;
+            }
+
             if (Attachment != null) {
                 transform = Attachment.Transform.Matrix() * transform;
                 position = Vector3.Transform(Vector3.Zero, transform);

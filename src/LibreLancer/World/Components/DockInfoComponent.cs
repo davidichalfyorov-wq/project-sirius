@@ -60,28 +60,40 @@ namespace LibreLancer.World.Components
 
 		public IEnumerable<Hardpoint> GetDockHardpoints(Vector3 position, int index = 0)
 		{
+			if (Spheres.Length == 0 || index < 0 || index >= Spheres.Length)
+            {
+                yield break;
+            }
+
 			if (Action.Kind != DockKinds.Tradelane)
 			{
 				var hpname = Spheres[index].Hardpoint.Replace("DockMount", "DockPoint");
-				yield return Parent.GetHardpoint(hpname + "02")!;
-				yield return Parent.GetHardpoint(hpname + "01")!;
-				yield return Parent.GetHardpoint(Spheres[index].Hardpoint)!;
+                foreach (var name in new[] { hpname + "02", hpname + "01", Spheres[index].Hardpoint })
+                {
+                    var hp = Parent.GetHardpoint(name);
+                    if (hp != null)
+                    {
+                        yield return hp;
+                    }
+                }
 			}
 			else if (Action.Kind == DockKinds.Tradelane)
 			{
 				var heading = position - Parent.PhysicsComponent!.Body.Position;
                 var fwd = Vector3.Transform(-Vector3.UnitZ, Parent.PhysicsComponent.Body.Orientation);
 				var dot = Vector3.Dot(heading, fwd);
-				if (dot > 0)
-				{
-					tlHP = "HpLeftLane";
-					yield return Parent.GetHardpoint("HpLeftLane")!;
-				}
-				else
-				{
-					tlHP = "HpRightLane";
-					yield return Parent.GetHardpoint("HpRightLane")!;
-				}
+                var names = dot > 0
+                    ? new[] { "HpLeftLane", "HpRightLane" }
+                    : new[] { "HpRightLane", "HpLeftLane" };
+                foreach (var name in names)
+                {
+                    tlHP = name;
+                    var hp = Parent.GetHardpoint(name);
+                    if (hp != null)
+                    {
+                        yield return hp;
+                    }
+                }
 			}
 		}
         public override void Update(double time, GameWorld world)

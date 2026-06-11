@@ -1,0 +1,2 @@
+vertex StarsphereCubemap.vert.hlsl
+fragment StarsphereCubemap.frag.hlsl

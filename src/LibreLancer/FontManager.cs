@@ -21,6 +21,7 @@ namespace LibreLancer
 
     public class FontManager
 	{
+        public bool Loaded => _loaded;
         private bool _loaded = false;
         private Dictionary<int, FontDescription> infocardFonts = new();
         private Dictionary<string, string> nicknames = [];

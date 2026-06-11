@@ -1,3 +1,5 @@
+#include "includes/ColorSpace.hlsl"
+
 #include "includes/Lighting.hlsl"
 #include "includes/Modulate.hlsl"
 
@@ -38,8 +40,8 @@ float4 main(Input input) : SV_Target0
     float2 uv = float2(
        FlipU > 0 ? 1 - input.texCoord1.x : input.texCoord1.x,
        FlipV > 0 ? 1 - input.texCoord1.y : input.texCoord1.y);
-    float4 tex = DtTexture.Sample(DtSampler, uv);
-    float4 detail = DmTexture.Sample(DmSampler, uv * TileRate);
+    float4 tex = SampleColorTexture(DtTexture, DtSampler, uv);
+    float4 detail = SampleColorTexture(DmTexture, DmSampler, uv * TileRate);
 
     float4 baseColor;
 #ifdef VERTEX_LIGHTING

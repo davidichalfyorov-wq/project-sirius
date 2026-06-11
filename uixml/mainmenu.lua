@@ -6,7 +6,7 @@ class mainmenu : mainmenu_Designer
 	{
 		base();
 		local scn = this.Elements;
-		scn.version.Text = FormatStringID(1271, 1, 0)
+		scn.version.Text = "INDEV"
 		delay ??= 0;
 		LoadSound('ui_motion_swish')
 		// hack as we shouldn't run animations in constructors for now

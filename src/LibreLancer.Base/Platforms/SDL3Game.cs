@@ -11,6 +11,7 @@ using LibreLancer.Dialogs;
 using LibreLancer.Graphics;
 using LibreLancer.Graphics.Backends;
 using LibreLancer.Graphics.Backends.OpenGL;
+using LibreLancer.Graphics.Backends.Vulkan;
 
 namespace LibreLancer.Platforms;
 
@@ -248,10 +249,8 @@ internal class SDL3Game : IGame
 
     private unsafe void TakeScreenshot()
     {
-        GL.ReadBuffer(GL.GL_BACK);
         var colordata = new Bgra8[Width * height];
-        fixed (Bgra8* ptr = colordata)
-            GL.ReadPixels(0, 0, Width, height, GL.GL_BGRA, GL.GL_UNSIGNED_BYTE, (IntPtr)ptr);
+        RenderContext.Backend.ReadBackBuffer(Width, height, colordata);
         for (int i = 0; i < colordata.Length; i++)
         {
             colordata[i].A = 0xFF;
@@ -369,12 +368,25 @@ internal class SDL3Game : IGame
         //Create Window
 
         var hiddenFlag = loop.Splash ? SDL3.SDL_WindowFlags.SDL_WINDOW_HIDDEN : 0;
-        var flags = SDL3.SDL_WindowFlags.SDL_WINDOW_OPENGL | SDL3.SDL_WindowFlags.SDL_WINDOW_RESIZABLE |
+        var backendFlag = RenderBackendSelector.Kind == RenderBackendKind.Vulkan
+            ? (SDL3.SDL_WindowFlags)0x10000000 // SDL_WINDOW_VULKAN
+            : SDL3.SDL_WindowFlags.SDL_WINDOW_OPENGL;
+        var flags = backendFlag | SDL3.SDL_WindowFlags.SDL_WINDOW_RESIZABLE |
                     SDL3.SDL_WindowFlags.SDL_WINDOW_HIGH_PIXEL_DENSITY |
                     hiddenFlag;
         if (IsFullScreen)
             flags |= SDL3.SDL_WindowFlags.SDL_WINDOW_FULLSCREEN;
         var sdlWin = SDL3.SDL_CreateWindow(Title, Width, height, flags);
+        var vulkanWindowFailed = false;
+        if (sdlWin == IntPtr.Zero && RenderBackendSelector.Kind == RenderBackendKind.Vulkan)
+        {
+            // No usable Vulkan loader/driver: SDL refuses the VULKAN window
+            // flag outright. Retry as an OpenGL window.
+            FLLog.Warning("Graphics", $"Vulkan window creation failed ({SDL3.SDL_GetError()}) - falling back to OpenGL");
+            vulkanWindowFailed = true;
+            flags = (flags & ~(SDL3.SDL_WindowFlags)0x10000000) | SDL3.SDL_WindowFlags.SDL_WINDOW_OPENGL;
+            sdlWin = SDL3.SDL_CreateWindow(Title, Width, height, flags);
+        }
         if(Platform.RunningOS != OS.Windows)
             FileDialog.Sdl3Handle = sdlWin; //NFD currently handles windows better than SDL3. May change in future.
         Platform.Init(SDL3.SDL_GetCurrentVideoDriver());
@@ -402,11 +414,56 @@ internal class SDL3Game : IGame
 
         SDL3.SDL_SetEventEnabled((uint)SDL3.SDL_EventType.SDL_EVENT_DROP_FILE, true);
         windowptr = sdlWin;
-        IRenderContext? renderBackend = GLRenderContext.Create(sdlWin);
+        if (Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR") != null)
+        {
+            // Golden captures need a fixed framebuffer: window managers may
+            // maximise or tile the window regardless of the configured size.
+            SDL3.SDL_SetWindowResizable(sdlWin, false);
+            SDL3.SDL_SetWindowSize(sdlWin, 1024, 768);
+            // The initial cursor position is wherever the OS pointer happens
+            // to sit over the new window - it differs per run, changes button
+            // hover state and draws the cursor sprite at a random spot. Park
+            // it in the bottom-right corner.
+            SDL3.SDL_WarpMouseInWindow(sdlWin, 1016, 760);
+        }
+        IRenderContext? renderBackend =
+            RenderBackendSelector.Kind == RenderBackendKind.Vulkan && !vulkanWindowFailed
+                ? VKRenderContext.Create(sdlWin)
+                : GLRenderContext.Create(sdlWin);
+        if (renderBackend == null && !vulkanWindowFailed &&
+            RenderBackendSelector.Kind == RenderBackendKind.Vulkan)
+        {
+            // Vulkan unavailable on this machine: rebuild the window with the
+            // OpenGL flag (SDL window backend flags are fixed at creation).
+            FLLog.Warning("Graphics", "Vulkan init failed - falling back to OpenGL");
+            SDL3.SDL_DestroyWindow(sdlWin);
+            flags = (flags & ~(SDL3.SDL_WindowFlags)0x10000000) | SDL3.SDL_WindowFlags.SDL_WINDOW_OPENGL;
+            sdlWin = SDL3.SDL_CreateWindow(Title, Width, height, flags);
+            if (sdlWin == IntPtr.Zero)
+            {
+                CrashWindow.Run("Librelancer", "Failed to create SDL window",
+                    "SDL Error: " + (SDL3.SDL_GetError() ?? ""));
+                return;
+            }
+            if (Platform.RunningOS != OS.Windows)
+                FileDialog.Sdl3Handle = sdlWin;
+            if (minWindowSize != Point.Zero)
+            {
+                SDL3.SDL_SetWindowMinimumSize(sdlWin, minWindowSize.X, minWindowSize.Y);
+            }
+            windowptr = sdlWin;
+            if (Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR") != null)
+            {
+                SDL3.SDL_SetWindowResizable(sdlWin, false);
+                SDL3.SDL_SetWindowSize(sdlWin, 1024, 768);
+                SDL3.SDL_WarpMouseInWindow(sdlWin, 1016, 760);
+            }
+            renderBackend = GLRenderContext.Create(sdlWin);
+        }
         if (renderBackend == null)
         {
-            CrashWindow.Run("Librelancer", "Failed to create OpenGL context",
-                "Your driver or gpu does not support at least OpenGL 3.2 or OpenGL ES 3.1\n" +
+            CrashWindow.Run("Librelancer", $"Failed to create {RenderBackendSelector.Kind} context",
+                "Your driver or gpu does not support the selected render backend\n" +
                 SDL3.SDL_GetError() ?? "");
             return;
         }
@@ -479,6 +536,20 @@ internal class SDL3Game : IGame
         timer.Start();
         double last = 0;
         double elapsed = 0;
+        // SIRIUS_FIXED_DT decouples content time from the wall clock for
+        // offline frame capture: every loop iteration advances by exactly
+        // this many seconds no matter how long render + readback take.
+        double fixedDt = 0;
+        var fixedDtEnv = Environment.GetEnvironmentVariable("SIRIUS_FIXED_DT");
+        if (!string.IsNullOrEmpty(fixedDtEnv) &&
+            double.TryParse(fixedDtEnv, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsedFixedDt) &&
+            parsedFixedDt > 0)
+        {
+            fixedDt = parsedFixedDt;
+            FLLog.Info("Timing", $"Fixed timestep {fixedDt:F6}s ({1.0 / fixedDt:F2} fps content time)");
+        }
+        double fixedTotal = 0;
         SDL3.SDL_Event e = new SDL3.SDL_Event();
         SDL3.SDL_StopTextInput(windowptr);
         MouseButtons doRelease = 0;
@@ -615,12 +686,15 @@ internal class SDL3Game : IGame
             while (actions.TryDequeue(out Action? work))
                 work?.Invoke();
 
-            totalTime = timer.Elapsed.TotalSeconds;
+            totalTime = fixedDt > 0 ? fixedTotal : timer.Elapsed.TotalSeconds;
+            var spikeStart = timer.Elapsed.TotalSeconds;
             loop.OnUpdate(elapsed);
             if (!running)
                 break;
+            var spikeAfterUpdate = timer.Elapsed.TotalSeconds;
             loop.OnDraw(elapsed);
             RenderContext.EndFrame();
+            var spikeAfterDraw = timer.Elapsed.TotalSeconds;
             //Frame time before, FPS after
             var tk = timer.Elapsed.TotalSeconds - totalTime;
             frameTime = CalcAverageTime(tk);
@@ -631,11 +705,26 @@ internal class SDL3Game : IGame
             }
 
             RenderContext.Backend.SwapWindow(sdlWin, isVsync, IsFullScreen);
+            // Stutter forensics: one line per slow frame saying where the
+            // time went. 40ms = clearly perceptible hitch at any refresh
+            // rate; loads produce a handful of lines, smooth play none.
+            var spikeAfterSwap = timer.Elapsed.TotalSeconds;
+            if (spikeAfterSwap - spikeStart > 0.040)
+            {
+                FLLog.Info("Timing", FormattableString.Invariant(
+                    $"Frame spike {(spikeAfterSwap - spikeStart) * 1000:F1}ms: update={(spikeAfterUpdate - spikeStart) * 1000:F1} draw={(spikeAfterDraw - spikeAfterUpdate) * 1000:F1} present={(spikeAfterSwap - spikeAfterDraw) * 1000:F1}"));
+            }
 
             elapsed = timer.Elapsed.TotalSeconds - last;
             renderFrequency = (1.0 / CalcAverageTick(elapsed));
             last = timer.Elapsed.TotalSeconds;
             totalTime = timer.Elapsed.TotalSeconds;
+            if (fixedDt > 0)
+            {
+                elapsed = fixedDt;
+                fixedTotal += fixedDt;
+                totalTime = fixedTotal;
+            }
             if (elapsed < 0)
             {
                 elapsed = 0;

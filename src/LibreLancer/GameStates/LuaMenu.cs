@@ -41,7 +41,10 @@ namespace LibreLancer
             ui = Game.Ui;
             ui.GameApi = api;
             ui.Visible = true;
-            ui.OpenScene("mainmenu", 0.4);
+            // Debug hook (like SIRIUS_INTRO): boot straight into a UI scene,
+            // e.g. SIRIUS_OPEN_SCENE=options for settings screenshots.
+            var bootScene = Environment.GetEnvironmentVariable("SIRIUS_OPEN_SCENE");
+            ui.OpenScene(string.IsNullOrWhiteSpace(bootScene) ? "mainmenu" : bootScene, 0.4);
             g.GameData.PopulateCursors();
             g.CursorKind = CursorKind.None;
             intro = g.GameData.GetIntroScene();
@@ -251,8 +254,22 @@ namespace LibreLancer
                     var embeddedServer = new EmbeddedServer(state.Game.GameData, state.Game.ResourceManager,
                         state.Game.GetSaveFolder());
                     var session = new CGameSession(state.Game, embeddedServer);
-                    embeddedServer.StartFromSave("EXE\\newplayer.fl",
-                        state.Game.GameData.VFS.ReadAllBytes("EXE\\newplayer.fl"));
+                    var saveBytes = state.Game.GameData.VFS.ReadAllBytes("EXE\\newplayer.fl");
+                    // SIRIUS_SPAWN="system,base" starts the fresh game
+                    // elsewhere - multi-system effect captures (pairs with
+                    // SIRIUS_TELEPORT for the in-space pose).
+                    if (Environment.GetEnvironmentVariable("SIRIUS_SPAWN") is { Length: > 0 } spawn &&
+                        spawn.Split(',') is { Length: 2 } spawnParts)
+                    {
+                        var text = System.Text.Encoding.ASCII.GetString(saveBytes);
+                        text = System.Text.RegularExpressions.Regex.Replace(
+                            text, @"(?m)^system = .*$", "system = " + spawnParts[0].Trim());
+                        text = System.Text.RegularExpressions.Regex.Replace(
+                            text, @"(?m)^base = .*$", "base = " + spawnParts[1].Trim());
+                        saveBytes = System.Text.Encoding.ASCII.GetBytes(text);
+                        FLLog.Info("Autoplay", $"Spawn override: {spawnParts[0]} / {spawnParts[1]}");
+                    }
+                    embeddedServer.StartFromSave("EXE\\newplayer.fl", saveBytes);
                     state.Game.ChangeState(new NetWaitState(session, state.Game));
                 });
             }
@@ -448,19 +465,52 @@ namespace LibreLancer
             ui.RenderWidget(delta);
             DoFade(delta);
             var dlist = Game.RenderContext.Renderer2D.CreateDrawList();
-            cur.Draw(dlist, Game.Mouse, Game.TotalTime);
+            cur.Draw(dlist, Game.Mouse, RenderClock.Get(Game.TotalTime));
             dlist.Render();
         }
 
         private int uframe = 0;
         private bool newUI = false;
+        // Golden runs wait longer: the menu button reveal animation needs
+        // several seconds to fully converge - capturing mid-lerp leaves a
+        // subpixel clip-edge difference between runs.
+        private double autoplayTimer = SiriusAutoplay.GoldenDir != null ? 8.0 : 2.0;
+        private bool autoplayStarted;
+        private bool autoplayMenuShot;
+
         public override void Update(double delta)
         {
             ui.Update(Game);
             Game.TextInputEnabled = ui.KeyboardGrabbed;
             scene?.UpdateViewport(Game.RenderContext.CurrentViewport, (float) Game.Width / Game.Height);
-            scene?.Update(delta);
+            // Golden captures freeze the THN intro at its first frame - the
+            // scene animates ships, so any timing jitter between runs would
+            // otherwise diff the screenshot.
+            scene?.Update(SiriusAutoplay.GoldenDir != null ? 0 : delta);
             api._Update();
+            if (SiriusAutoplay.Enabled && !autoplayStarted)
+            {
+                autoplayTimer -= delta;
+                // Let the button reveal play out on live time, then freeze
+                // the presentation clock: the shine sweep loops forever and
+                // would otherwise never align between runs.
+                if (SiriusAutoplay.GoldenDir != null && autoplayTimer <= 2.5)
+                {
+                    RenderClock.Freeze(100.0);
+                }
+                if (SiriusAutoplay.GoldenDir != null && !autoplayMenuShot && autoplayTimer <= 0.5)
+                {
+                    autoplayMenuShot = true;
+                    Game.Screenshot(System.IO.Path.Combine(SiriusAutoplay.GoldenDir, "menu.png"));
+                    FLLog.Info("Autoplay", "golden: menu.png");
+                }
+                if (autoplayTimer <= 0)
+                {
+                    autoplayStarted = true;
+                    FLLog.Info("Autoplay", "SIRIUS_AUTOPLAY: starting new game");
+                    api.NewGame();
+                }
+            }
         }
 #if DEBUG
         void LoadSpecific(int index)

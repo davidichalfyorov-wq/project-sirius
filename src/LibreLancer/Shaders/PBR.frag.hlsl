@@ -1,3 +1,4 @@
+#define PIXEL_SHADOWS 1
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
 
@@ -15,6 +16,15 @@ SamplerState MtSampler : register(s3, TEXTURE_SPACE);
 
 Texture2D<float4> RtTexture : register(t4, TEXTURE_SPACE);
 SamplerState RtSampler : register(s4, TEXTURE_SPACE);
+
+#ifdef IBL
+TextureCube<float4> IrradianceMap : register(t5, TEXTURE_SPACE);
+SamplerState IrradianceSampler : register(s5, TEXTURE_SPACE);
+TextureCube<float4> PrefilteredMap : register(t6, TEXTURE_SPACE);
+SamplerState PrefilteredSampler : register(s6, TEXTURE_SPACE);
+Texture2D<float4> BrdfLutMap : register(t7, TEXTURE_SPACE);
+SamplerState BrdfLutSampler : register(s7, TEXTURE_SPACE);
+#endif
 
 #define M_PI 3.141592653589793
 #define c_MinRoughness 0.04
@@ -200,18 +210,22 @@ float4 main(Input input) : SV_Target0
         if (Lights[i].Type == 0)
         {
             surfaceToLight = normalize(-Lights[i].Direction);
-            attenuation = 1.0;
+            attenuation = SampleShadow(input.worldPosition, length(input.viewPosition.xyz));
         }
         else
         {
-            surfaceToLight = normalize(Lights[i].Position - input.worldPosition);
-            float distanceToLight = length(surfaceToLight);
+            // Measure distance BEFORE normalizing (roadmap 5.2 bug audit:
+            // length of the normalized vector collapsed attenuation to 1).
+            float3 lightVector = Lights[i].Position - input.worldPosition;
+            float distanceToLight = length(lightVector);
+            surfaceToLight = lightVector / max(distanceToLight, 1e-5);
             float3 curve = Lights[i].Attenuation;
             attenuation = Lights[i].Type == 1.0
                 ? 1.0 / (curve.x + curve.y * distanceToLight + curve.z * (distanceToLight * distanceToLight))
                 : quadratic(distanceToLight / max(Lights[i].Range,1.), curve);
             if (Lights[i].Spotlight > 0)
             {
+                attenuation *= SampleLocalShadow(input.worldPosition, Lights[i].Position);
                 float rho = dot(surfaceToLight, -Lights[i].Direction);
                 float spotlightFactor = pow(clamp((rho - Lights[i].Phi) / (Lights[i].Theta - Lights[i].Phi),0.,1.), Lights[i].Falloff);
                 float NdotL = max(dot(n, Lights[i].Direction), 0.0);
@@ -255,11 +269,28 @@ float4 main(Input input) : SV_Target0
         float3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
         color += NdotL * Lights[i].Diffuse * attenuation * (diffuseContrib + specContrib);
     }
+#ifdef IBL
+    // Roadmap 5.3: cosine irradiance for diffuse, roughness-mip prefilter
+    // + split-sum LUT for specular. Probe faces store sRGB bytes.
+    {
+        float NdotVa = clamp(abs(dot(n, v)), 1e-3, 1.0);
+        float3 irradiance = SRGBtoLinear(IrradianceMap.Sample(IrradianceSampler, n)).rgb;
+        float3 reflected = reflect(-v, n);
+        float specMip = perceptualRoughness * 4.0; // SpecularMips - 1
+        float3 prefiltered = SRGBtoLinear(PrefilteredMap.SampleLevel(PrefilteredSampler, reflected, specMip)).rgb;
+        float2 lutSample = BrdfLutMap.Sample(BrdfLutSampler, float2(NdotVa, perceptualRoughness)).rg;
+        color += irradiance * diffuseColor;
+        color += prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
+    }
+#else
     color += AmbientColor.xyz * baseColor.xyz;
+#endif
 
     #ifdef ET_ENABLED
     color += SRGBtoLinear(EtTexture.Sample(EtSampler, GetTexCoord(1, input))).xyz;
     #endif
 
-    return  float4(pow(color,(float3)1.0/2.2), baseColor.a);
+    // Linear HDR out - the tonemap pass owns the display encode
+    // (phase 2 linear workflow, docs/LINEAR_AUDIT.md).
+    return float4(color, baseColor.a);
 }

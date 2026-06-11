@@ -86,8 +86,19 @@ namespace LibreLancer.Server
                 }
                 if (stepCount == 2 && accumulatedTime >= TimeStep)
                 {
-                    TotalTime += accumulatedTime;
-                    onStep(accumulatedTime,TotalTime, currentTick++);
+                    // A long stall (GC, first-run shader compile) must not
+                    // become one gigantic catch-up step - the physics breaks
+                    // down on multi-second deltas. Step once with a clamped
+                    // delta and drop the remainder of the stall.
+                    var maxCatchUp = TimeStep * 4;
+                    var step = accumulatedTime > maxCatchUp ? maxCatchUp : accumulatedTime;
+                    if (accumulatedTime > maxCatchUp)
+                    {
+                        FLLog.Warning("Server",
+                            $"Stall: dropping {(accumulatedTime - step).TotalMilliseconds:F0}ms of catch-up time");
+                    }
+                    TotalTime += step;
+                    onStep(step, TotalTime, currentTick++);
                     accumulatedTime = TimeSpan.Zero;
                 }
             }

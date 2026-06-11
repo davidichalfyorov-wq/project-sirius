@@ -7,6 +7,18 @@ local msaa_levels = {
 	"MSAA 8x"
 }
 
+// Post-process AA shares the ANTI-ALIASING selector with MSAA: the
+// entries after the MSAA levels select post_aa instead (roadmap 4.7).
+local post_aa_levels = {
+	"FXAA"
+}
+
+local function post_aa_to_idx(s, msaamax)
+{
+	if (s == "fxaa") return msaamax + 1;
+	return 0
+}
+
 local function val_selection(left, right, display, values, vmin, vmax, vcurrent)
 {
 	local state = {}
@@ -46,6 +58,26 @@ local function idx_to_msaa(i)
 		default: return 0;
 	}
 }
+
+local tonemap_modes = {
+	"OFF",
+	"FILMIC",
+	"ACES FILMIC"
+}
+
+local bloom_modes = {
+	"OFF",
+	"ON"
+}
+
+local function tonemapper_to_idx(s) => s == "aces" ? 3 : (s == "off" ? 1 : 2);
+
+local function idx_to_tonemapper(i) => i == 3 ? "aces" : (i == 1 ? "off" : "filmic");
+
+// Exposure slider: log scale, 0.25..4.0 with 1.0 at the middle
+local function exposure_to_slider(e) => math.log(e / 0.25) / math.log(16);
+
+local function slider_to_exposure(v) => 0.25 * math.pow(16, v);
 
 // Anisotropy Levels
 local function idx_to_anisotropy(i) => i == 1 ? 0 : math.pow(2, i - 1);
@@ -110,8 +142,26 @@ class options : options_Designer with Modal
 		for (i in this.AnisotropyLevels)
 			table.insert(anisotropy, tostring(i) + "x AF");
 	
-		this.MSAA = val_selection(e.msaa_left, e.msaa_right, e.msaa_display, msaa_levels, 1, msaa_to_idx(this.opts.MaxMSAA()), msaa_to_idx(this.opts.MSAA))
+		// One ANTI-ALIASING selector: MSAA levels first, then post-AA modes
+		local msaamax = msaa_to_idx(this.opts.MaxMSAA())
+		local aa_values = {}
+		for (i in 1..msaamax)
+			table.insert(aa_values, msaa_levels[i]);
+		for (v in post_aa_levels)
+			table.insert(aa_values, v);
+		local aa_current = post_aa_to_idx(this.opts.PostAA, msaamax)
+		if (aa_current == 0) aa_current = msaa_to_idx(this.opts.MSAA);
+		this.MSAAMax = msaamax
+		this.MSAA = val_selection(e.msaa_left, e.msaa_right, e.msaa_display, aa_values, 1, aa_values.length, aa_current)
 		this.AF = val_selection(e.af_left, e.af_right, e.af_display, anisotropy, 1, anisotropy.length, anisotropy_to_idx(this.opts.Anisotropy))
+		this.Tonemap = val_selection(e.tonemap_left, e.tonemap_right, e.tonemap_display, tonemap_modes, 1, 3, tonemapper_to_idx(this.opts.Tonemapper))
+		e.exposure.Value = exposure_to_slider(this.opts.Exposure)
+		this.Bloom = val_selection(e.bloom_left, e.bloom_right, e.bloom_display, bloom_modes, 1, 2, this.opts.Bloom ? 2 : 1)
+		e.bloom_intensity.Value = this.opts.BloomIntensity / 0.6
+		this.GodRays = val_selection(e.godrays_left, e.godrays_right, e.godrays_display, bloom_modes, 1, 2, this.opts.GodRays ? 2 : 1)
+		e.godrays_intensity.Value = this.opts.GodRaysIntensity / 0.8
+		this.Ibl = val_selection(e.ibl_left, e.ibl_right, e.ibl_display, bloom_modes, 1, 2, this.opts.Ibl ? 2 : 1)
+		this.Shadows = val_selection(e.shadows_left, e.shadows_right, e.shadows_display, bloom_modes, 1, 2, this.opts.Shadows ? 2 : 1)
 
 		this.controlcategories = { e.cat_ship, e.cat_ui, e.cat_mp }
 		e.cat_ship.OnClick(() => this.setcontrolcategory(1))
@@ -127,8 +177,22 @@ class options : options_Designer with Modal
 		this.opts.SfxVolume = e.sfxvol.Value
 		this.opts.MusicVolume = e.musicvol.Value
 		this.opts.VoiceVolume = e.voicevol.Value
-		this.opts.MSAA = idx_to_msaa(this.MSAA.vcurrent)
+		if (this.MSAA.vcurrent > this.MSAAMax) {
+			this.opts.MSAA = 0
+			this.opts.PostAA = "fxaa"
+		} else {
+			this.opts.MSAA = idx_to_msaa(this.MSAA.vcurrent)
+			this.opts.PostAA = "off"
+		}
 		this.opts.Anisotropy = idx_to_anisotropy(this.AF.vcurrent)
+		this.opts.Tonemapper = idx_to_tonemapper(this.Tonemap.vcurrent)
+		this.opts.Exposure = slider_to_exposure(e.exposure.Value)
+		this.opts.Bloom = this.Bloom.vcurrent == 2
+		this.opts.BloomIntensity = e.bloom_intensity.Value * 0.6
+		this.opts.GodRays = this.GodRays.vcurrent == 2
+		this.opts.GodRaysIntensity = e.godrays_intensity.Value * 0.8
+		this.opts.Ibl = this.Ibl.vcurrent == 2
+		this.opts.Shadows = this.Shadows.vcurrent == 2
 		this.keymap.Save();
 		Game.ApplySettings(this.opts)
 		if (this.isModal) {

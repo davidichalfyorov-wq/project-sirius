@@ -118,8 +118,75 @@ namespace LibreLancer.Render
             }
         }
 
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private struct ShadowDataBuffer
+        {
+            public Matrix4x4 Matrix0;
+            public Matrix4x4 Matrix1;
+            public Matrix4x4 Matrix2;
+            public Vector4 Splits;
+            public Vector4 Params;
+        }
+
+        /// <summary>Cascade source for this frame; set by SystemRenderer.</summary>
+        public static ShadowMapRenderer? ActiveShadows;
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private unsafe struct LocalShadowBuffer
+        {
+            public Matrix4x4 Matrix0;
+            public Matrix4x4 Matrix1;
+            public Matrix4x4 Matrix2;
+            public Matrix4x4 Matrix3;
+            public Vector4 Pos0;
+            public Vector4 Pos1;
+            public Vector4 Pos2;
+            public Vector4 Pos3;
+            public Vector4 Params;
+        }
+
+        private static void SetShadowData(Shader shader)
+        {
+            if (shader.HasUniformBlock(6))
+            {
+                var data = new ShadowDataBuffer();
+                if (ActiveShadows != null)
+                {
+                    data.Matrix0 = ActiveShadows.LightViewProjection[0];
+                    data.Matrix1 = ActiveShadows.LightViewProjection[1];
+                    data.Matrix2 = ActiveShadows.LightViewProjection[2];
+                    data.Splits = ActiveShadows.CascadeSplits;
+                    // y: 1/cascade tiles, z: linear depth bias (~9m of the
+                    // 30km light range, against acne on big curved hulls).
+                    data.Params = new Vector4(1f, 1f / ShadowMapRenderer.Cascades, 0.0003f, 0f);
+                }
+                shader.SetUniformBlock(6, ref data);
+            }
+            if (shader.HasUniformBlock(7))
+            {
+                var local = new LocalShadowBuffer();
+                if (ActiveShadows is { LocalCount: > 0 } shadows)
+                {
+                    local.Matrix0 = shadows.LocalViewProjection[0];
+                    local.Matrix1 = shadows.LocalViewProjection[1];
+                    local.Matrix2 = shadows.LocalViewProjection[2];
+                    local.Matrix3 = shadows.LocalViewProjection[3];
+                    local.Pos0 = WithEnabled(shadows.LocalPositions[0], 0 < shadows.LocalCount);
+                    local.Pos1 = WithEnabled(shadows.LocalPositions[1], 1 < shadows.LocalCount);
+                    local.Pos2 = WithEnabled(shadows.LocalPositions[2], 2 < shadows.LocalCount);
+                    local.Pos3 = WithEnabled(shadows.LocalPositions[3], 3 < shadows.LocalCount);
+                    local.Params = new Vector4(shadows.LocalCount, 0f, 0.002f, 0f);
+                }
+                shader.SetUniformBlock(7, ref local);
+            }
+
+            static Vector4 WithEnabled(Vector4 position, bool enabled) =>
+                enabled ? position with { W = MathF.Max(position.W, 1e-6f) } : position with { W = 0f };
+        }
+
         public static unsafe void SetLights(Shader shader, ref Lighting lighting, long frameNumber)
         {
+            SetShadowData(shader);
             if (!lighting.Enabled)
             {
                 var disable = Vector4.Zero;
@@ -127,14 +194,16 @@ namespace LibreLancer.Render
                 return;
             }
 
+            // INI light/fog colours are display-referred: decode once here
+            // so the shader math runs linear (docs/LINEAR_AUDIT.md).
             var data = new ShaderLighting
             {
                 UseLighting = 1,
                 // fog
                 FogMode = (float) lighting.FogMode,
                 FogRange = lighting.FogRange,
-                FogColor = lighting.FogColor,
-                AmbientColor = lighting.Ambient
+                FogColor = ColorSpace.SrgbToLinear(lighting.FogColor),
+                AmbientColor = ColorSpace.SrgbToLinear(lighting.Ambient)
             };
 
             var lt = 0;
@@ -151,8 +220,8 @@ namespace LibreLancer.Render
                 lights[lt].Position = src.Position;
                 lights[lt].Attentuation = src.Attenuation;
                 lights[lt].Direction = src.Direction;
-                lights[lt].Diffuse = src.Color;
-                lights[lt].Ambient = src.Ambient;
+                lights[lt].Diffuse = ColorSpace.SrgbToLinear(src.Color);
+                lights[lt].Ambient = ColorSpace.SrgbToLinear(src.Ambient);
                 lights[lt].Range = src.Range;
 
                 if (src.Kind == LightKind.Spotlight)

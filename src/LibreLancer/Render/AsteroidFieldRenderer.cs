@@ -30,7 +30,9 @@ namespace LibreLancer.Render
         private Vector3 cameraPos;
         private float lightingRadius;
         private float renderDistSq;
-        private Random rand = new();
+        // Golden captures need deterministic decorative noise; normal play
+        // gets fresh randomness (task #39).
+        private Random rand = SiriusAutoplay.GoldenDir != null ? new Random(12345) : new Random();
         private SystemRenderer sys;
         private AsteroidBandMaterial bandMaterial = null!;
         private AsteroidCubeMesh cubeMesh = null!;
@@ -103,6 +105,15 @@ namespace LibreLancer.Render
 
         public void Update(ICamera camera)
         {
+            // Golden captures: field contents (billboards, dynamic rocks)
+            // are consumed from Random streams along the camera's flight
+            // path, so the pattern is never reproducible between runs. The
+            // whole field is decorative - skip it for screenshot parity.
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                return;
+            }
+
             _camera = camera;
             cameraPos = camera.Position;
 
@@ -113,7 +124,11 @@ namespace LibreLancer.Render
                     asteroidsTask = Task.Run(() => CalculateAsteroidsTask(camera));
                 }
 
-                if (field.BillboardCount != -1)
+                // Golden captures: dust billboards are consumed from a Random
+                // stream as the camera moves, so their pattern depends on the
+                // flight path before the director pose - never reproducible.
+                // Solid asteroids (deterministic from world position) stay.
+                if (field.BillboardCount != -1 && SiriusAutoplay.GoldenDir == null)
                 {
                     billboardTask = Task.Run(() => CalculateBillboards(camera));
                 }
@@ -314,6 +329,12 @@ namespace LibreLancer.Render
 
         public void Draw(ResourceManager res, SystemLighting lighting, CommandBuffer buffer, NebulaRenderer nr)
         {
+            // Golden captures: see Update - the whole field is skipped.
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                return;
+            }
+
             // Asteroids!
             if (Vector3.DistanceSquared(cameraPos, field.Zone!.Position) <= renderDistSq)
             {
@@ -393,7 +414,9 @@ namespace LibreLancer.Render
                     }
                 }
 
-                if (field.BillboardCount != -1)
+                // Matches the Update-side golden guard: stale billboards from
+                // before the director pose must not be drawn either.
+                if (field.BillboardCount != -1 && SiriusAutoplay.GoldenDir == null)
                 {
                     var cameraLights = RenderHelpers.ApplyLights(lighting, 0, cameraPos, 1, nr);
 

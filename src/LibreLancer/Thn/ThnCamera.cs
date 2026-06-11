@@ -5,7 +5,6 @@
 using System;
 using System.Numerics;
 using LibreLancer.Render;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace LibreLancer.Thn
 {

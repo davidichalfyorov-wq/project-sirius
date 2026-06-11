@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using LibreLancer.Data;
 using LibreLancer.Data.GameData;
 using LibreLancer.Data.GameData.World;
@@ -22,6 +23,7 @@ public class GameDataManager
     public GameItemDb Items;
     private Dictionary<string, string>? voicePathMap;
     private Dictionary<(string Voice, uint Hash), string>? looseVoiceLineMap;
+    private Dictionary<string, string>? looseAudioPathMap;
 
     public FileSystem VFS => Items.VFS;
 
@@ -83,6 +85,7 @@ public class GameDataManager
         }
 
         characterAnimations.Buffer.Commit();
+        FLLog.Info("Anim", $"Character animations loaded: {characterAnimations.Scripts.Count} scripts from {Items.Ini.Bodyparts.Animations.Count} files");
 
         return characterAnimations;
     }
@@ -249,34 +252,139 @@ public class GameDataManager
 
     public IEnumerable<Data.Schema.Audio.AudioEntry> AllSounds => Items.Ini.Audio.Entries;
 
+    // Missing audio (Discovery references sounds it never shipped) is
+    // looked up every emission otherwise - cache the misses and warn once.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> missingAudio =
+        new(StringComparer.InvariantCultureIgnoreCase);
+
     public Data.Schema.Audio.AudioEntry? GetAudioEntry(string id)
     {
-        var audio = Items.Ini.Audio.Entries.FirstOrDefault((arg) =>
-            string.Equals(arg.Nickname, id, StringComparison.InvariantCultureIgnoreCase));
-
-        if (audio == null)
+        if (missingAudio.ContainsKey(id))
         {
-            FLLog.Warning("Audio", $"Audio entry '{id}' not found");
+            return null;
         }
-
-        return audio;
-    }
-
-    public Stream? GetAudioStream(string id)
-    {
         var audio = Items.Ini.Audio.Entries.FirstOrDefault((arg) =>
             string.Equals(arg.Nickname, id, StringComparison.InvariantCultureIgnoreCase));
 
         if (audio != null)
         {
-            return Items.VFS.FileExists(Items.DataPath(audio.File))
-                ? Items.VFS.Open(Items.DataPath(audio.File)!)
-                : null;
+            return audio;
         }
 
-        FLLog.Warning("Audio", $"Audio entry '{id}' not found");
+        var fallback = GetLooseAudioPath(id);
+        if (fallback != null)
+        {
+            return new Data.Schema.Audio.AudioEntry
+            {
+                Nickname = id,
+                File = fallback,
+                Type = Data.Schema.Audio.AudioType.Normal,
+                Range = new Vector2(0, 2500),
+                Attenuation = 0
+            };
+        }
+
+        if (missingAudio.TryAdd(id, 0))
+        {
+            FLLog.Warning("Audio", $"Audio entry '{id}' not found");
+        }
+        return null;
+    }
+
+    public Stream? GetAudioStream(string id)
+    {
+        if (missingAudio.ContainsKey(id))
+        {
+            return null;
+        }
+        var audio = Items.Ini.Audio.Entries.FirstOrDefault((arg) =>
+            string.Equals(arg.Nickname, id, StringComparison.InvariantCultureIgnoreCase));
+
+        if (audio != null)
+        {
+            var path = Items.DataPath(audio.File);
+            if (path != null && Items.VFS.FileExists(path))
+            {
+                return Items.VFS.Open(path);
+            }
+        }
+
+        var fallback = GetLooseAudioPath(id);
+        if (fallback != null && Items.VFS.FileExists(fallback))
+        {
+            return Items.VFS.Open(fallback);
+        }
+
+        if (missingAudio.TryAdd(id, 0))
+        {
+            FLLog.Warning("Audio", $"Audio entry '{id}' not found");
+        }
         return null;
 
+    }
+
+
+    private void BuildLooseAudioPathMap()
+    {
+        if (looseAudioPathMap != null)
+        {
+            return;
+        }
+
+        looseAudioPathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var audioRoot = Items.Ini.Freelancer.DataPath + "AUDIO";
+
+        void Scan(string folder)
+        {
+            foreach (var file in Items.VFS.GetFiles(folder))
+            {
+                var ext = Path.GetExtension(file);
+                if (!ext.Equals(".wav", StringComparison.OrdinalIgnoreCase) &&
+                    !ext.Equals(".utf", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var relativePath = folder + "\\" + file;
+                var key = Path.GetFileNameWithoutExtension(file);
+                looseAudioPathMap.TryAdd(key, relativePath);
+                looseAudioPathMap.TryAdd(key.Replace('-', '_'), relativePath);
+            }
+
+            foreach (var dir in Items.VFS.GetDirectories(folder))
+            {
+                Scan(folder + "\\" + dir);
+            }
+        }
+
+        Scan(audioRoot);
+    }
+
+    private string? GetLooseAudioPath(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        BuildLooseAudioPathMap();
+        if (looseAudioPathMap == null)
+        {
+            return null;
+        }
+
+        if (looseAudioPathMap.TryGetValue(id, out var direct))
+        {
+            return direct;
+        }
+
+        var normalized = id.Replace('-', '_');
+        if (looseAudioPathMap.TryGetValue(normalized, out direct))
+        {
+            return direct;
+        }
+
+        return null;
     }
 
     private void BuildVoicePathMap()
@@ -388,6 +496,19 @@ public class GameDataManager
 
     public IntroScene GetIntroScene()
     {
+        // Golden-test determinism: autoplay runs always show the same intro,
+        // otherwise menu screenshots can never be compared between backends.
+        // SIRIUS_INTRO=N picks a specific scene for visual debugging.
+        if (Environment.GetEnvironmentVariable("SIRIUS_INTRO") is { } forced &&
+            int.TryParse(forced, out var forcedIndex) &&
+            forcedIndex >= 0 && forcedIndex < Items.IntroScenes.Count)
+        {
+            return Items.IntroScenes[forcedIndex];
+        }
+        if (SiriusAutoplay.Enabled)
+        {
+            return Items.IntroScenes[0];
+        }
         var rand = new Random();
         return Items.IntroScenes[rand.Next(0, Items.IntroScenes.Count)];
     }

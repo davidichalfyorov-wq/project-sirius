@@ -14,8 +14,15 @@ public static class AllShaders
     public static ShaderBundle Basic_PositionTexture = null!;
     public static ShaderBundle Basic_Skinned = null!;
     public static ShaderBundle Billboard = null!;
+    public static ShaderBundle BloomExtract = null!;
+    public static ShaderBundle BloomDownsample = null!;
+    public static ShaderBundle BloomUpsample = null!;
+    public static ShaderBundle BrdfLut = null!;
     public static ShaderBundle DetailMap2Dm1Msk2PassMaterial = null!;
     public static ShaderBundle DetailMapMaterial = null!;
+    public static ShaderBundle Fxaa = null!;
+    public static ShaderBundle GodRaysMask = null!;
+    public static ShaderBundle GodRaysBlur = null!;
     public static ShaderBundle IllumDetailMapMaterial = null!;
     public static ShaderBundle Masked2DetailMapMaterial = null!;
     public static ShaderBundle Navmap = null!;
@@ -27,9 +34,12 @@ public static class AllShaders
     public static ShaderBundle ParticleBeam = null!;
     public static ShaderBundle PBR = null!;
     public static ShaderBundle PhysicsDebug = null!;
+    public static ShaderBundle ShadowCaster = null!;
     public static ShaderBundle Sprite = null!;
+    public static ShaderBundle StarsphereCubemap = null!;
     public static ShaderBundle SunRadial = null!;
     public static ShaderBundle SunSpine = null!;
+    public static ShaderBundle Tonemap = null!;
     public static ShaderBundle ZoneVolume = null!;
 
     // ReSharper disable NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
@@ -60,8 +70,15 @@ public static class AllShaders
         Basic_PositionTexture ??= Compile(context, "Basic_PositionTexture");
         Basic_Skinned ??= Compile(context, "Basic_Skinned");
         Billboard ??= Compile(context, "Billboard");
+        BloomExtract ??= Compile(context, "BloomExtract");
+        BloomDownsample ??= Compile(context, "BloomDownsample");
+        BloomUpsample ??= Compile(context, "BloomUpsample");
+        BrdfLut ??= Compile(context, "BrdfLut");
         DetailMap2Dm1Msk2PassMaterial ??= Compile(context, "DetailMap2Dm1Msk2PassMaterial");
         DetailMapMaterial ??= Compile(context, "DetailMapMaterial");
+        Fxaa ??= Compile(context, "Fxaa");
+        GodRaysMask ??= Compile(context, "GodRaysMask");
+        GodRaysBlur ??= Compile(context, "GodRaysBlur");
         IllumDetailMapMaterial ??= Compile(context, "IllumDetailMapMaterial");
         Masked2DetailMapMaterial ??= Compile(context, "Masked2DetailMapMaterial");
         Navmap ??= Compile(context, "Navmap");
@@ -73,9 +90,12 @@ public static class AllShaders
         ParticleBeam ??= Compile(context, "ParticleBeam");
         PBR ??= Compile(context, "PBR");
         PhysicsDebug ??= Compile(context, "PhysicsDebug");
+        ShadowCaster ??= Compile(context, "ShadowCaster");
         Sprite ??= Compile(context, "Sprite");
+        StarsphereCubemap ??= Compile(context, "StarsphereCubemap");
         SunRadial ??= Compile(context, "SunRadial");
         SunSpine ??= Compile(context, "SunSpine");
+        Tonemap ??= Compile(context, "Tonemap");
         ZoneVolume ??= Compile(context, "ZoneVolume");
         // ReSharper restore NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
 

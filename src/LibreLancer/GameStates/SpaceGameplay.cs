@@ -102,6 +102,8 @@ World Time: {12:F2}
 
         public bool ShowHud = true;
 
+        private SiriusRecorderDriver? recorder;
+
         // Set to true when the mission system selection.Selected music on launch
         public bool RtcMusic = false;
         private bool musicTriggered = false;
@@ -241,6 +243,9 @@ World Time: {12:F2}
             _chaseCamera.Reset();
 
             activeCamera = _chaseCamera;
+
+            if (SiriusRecorder.Enabled)
+                recorder = new SiriusRecorderDriver(Game);
 
             sysrender = new SystemRenderer(_chaseCamera, Game.ResourceManager, Game);
             sysrender.ZOverride = true; // Draw all with regular Z
@@ -1147,6 +1152,10 @@ World Time: {12:F2}
 
         private ICamera GetCurrentCamera()
         {
+            if (recorder != null)
+            {
+                return recorder.Camera;
+            }
             if (Thn != null && Thn.Running)
             {
                 return Thn.CameraHandle;
@@ -1202,6 +1211,98 @@ World Time: {12:F2}
             return cruiseCameraLag;
         }
 
+        private int autoplayProbeStage;
+        private double autoplayProbeTimer;
+        private double autoplayStillTime;
+        private bool goldenWaypointLogged;
+
+        // SIRIUS_AUTOPLAY diagnostics. Golden mode: wait for the undock
+        // animation to finish and the ship to physically settle, then take
+        // one deterministic screenshot (same pad, same pose => comparable
+        // between render backends). Probe mode: screenshot, fly forward,
+        // screenshot again to detect skies tracking the camera.
+        private void UpdateAutoplayProbe(double dt)
+        {
+            // Golden mode uses stages 0..4 (incl. the no-UI twin shot);
+            // probe mode finishes at stage 3.
+            var doneStage = SiriusAutoplay.GoldenDir != null ? 4 : 3;
+            if (!SiriusAutoplay.Enabled || autoplayProbeStage >= doneStage)
+            {
+                return;
+            }
+            autoplayProbeTimer += dt;
+
+            if (SiriusAutoplay.GoldenDir != null)
+            {
+                // The SERVER teleports the ship to the director's pose at
+                // t=8 (see ServerWorld.Update) - it owns the authoritative
+                // transform. Here: freeze the presentation clock once the
+                // pose is pinned, give the chase camera three seconds to
+                // converge, then capture.
+                if (autoplayProbeStage == 0 && autoplayProbeTimer >= 9.0)
+                {
+                    // Fixed constant, not TotalTime: load times differ per
+                    // run, so freezing at "now" would still leave every
+                    // sin(t) animator at a different phase.
+                    RenderClock.Freeze(100.0);
+                    autoplayProbeStage = 1;
+                }
+                else if (autoplayProbeStage == 1 && autoplayProbeTimer >= 12.0)
+                {
+                    autoplayProbeStage = 3;
+                    // Census of everything non-static plus the current
+                    // selection: any mover left in the golden scene shows up
+                    // here with its position.
+                    var origin = player.WorldTransform.Position;
+                    FLLog.Info("GoldenCensus",
+                        $"selected={Selection.Selected?.Nickname ?? "none"} kind={Selection.Selected?.Kind}");
+                    foreach (var obj in world.Objects)
+                    {
+                        if (obj == player || !obj.Flags.HasFlag(GameObjectFlags.Exists) ||
+                            obj.Kind == GameObjectKind.Solar)
+                        {
+                            continue;
+                        }
+                        var d = Vector3.Distance(obj.WorldTransform.Position, origin);
+                        FLLog.Info("GoldenCensus",
+                            $"{obj.Nickname ?? "?"} kind={obj.Kind} d={d:F0} pos={obj.WorldTransform.Position}");
+                    }
+                    Game.Screenshot(System.IO.Path.Combine(SiriusAutoplay.GoldenDir, "space.png"));
+                    FLLog.Info("Autoplay", "golden: space.png");
+                    // Diagnostic twin without UI: separates world-render
+                    // artifacts from HUD ones when a diff zone is ambiguous.
+                    ui.Visible = false;
+                }
+                else if (autoplayProbeStage == 3 && autoplayProbeTimer >= 12.5)
+                {
+                    autoplayProbeStage = 4;
+                    Game.Screenshot(System.IO.Path.Combine(SiriusAutoplay.GoldenDir, "space_noui.png"));
+                    FLLog.Info("Autoplay", "golden: space_noui.png");
+                    ui.Visible = true;
+                }
+                return;
+            }
+
+            switch (autoplayProbeStage)
+            {
+                case 0 when autoplayProbeTimer >= 6.0:
+                    Game.Screenshots.TakeScreenshot();
+                    FLLog.Info("Autoplay", "probe screenshot A (before move)");
+                    shipInput.Throttle = 1;
+                    autoplayProbeStage = 1;
+                    break;
+                case 1 when autoplayProbeTimer >= 11.0:
+                    shipInput.Throttle = 0;
+                    autoplayProbeStage = 2;
+                    break;
+                case 2 when autoplayProbeTimer >= 12.0:
+                    Game.Screenshots.TakeScreenshot();
+                    FLLog.Info("Autoplay", "probe screenshot B (after move)");
+                    autoplayProbeStage = 3;
+                    break;
+            }
+        }
+
         public override void Update(double delta)
         {
             if (loading)
@@ -1216,6 +1317,8 @@ World Time: {12:F2}
                 return;
             }
 
+            UpdateAutoplayProbe(delta);
+
             if (ShowHud && !IsSpecialCamera())
             {
                 contactList.UpdateList();
@@ -1229,6 +1332,7 @@ World Time: {12:F2}
             Game.TextInputEnabled = ui.KeyboardGrabbed;
             TimeDilatedUpdate(delta);
             UpdateUserWaypointRoute();
+            recorder?.Update(delta);
             sysrender.Camera = GetCurrentCamera();
 
             if (frameCount < 2)
@@ -2220,7 +2324,7 @@ World Time: {12:F2}
 
             {
                 var dlist = Game.RenderContext.Renderer2D.CreateDrawList();
-                current_cur.Draw(dlist, Game.Mouse, Game.TotalTime);
+                current_cur.Draw(dlist, Game.Mouse, RenderClock.Get(Game.TotalTime));
                 dlist.Render();
             }
 
@@ -2359,6 +2463,13 @@ World Time: {12:F2}
                 else if (obj.Kind == GameObjectKind.Waypoint)
                 {
                     var (pos, visible) = ScreenPosition(obj);
+
+                    if (SiriusAutoplay.GoldenDir != null && autoplayProbeStage == 3 && !goldenWaypointLogged)
+                    {
+                        goldenWaypointLogged = true;
+                        FLLog.Info("GoldenCensus",
+                            $"waypoint '{obj.Nickname}' world={obj.WorldTransform.Position} screen={pos} visible={visible}");
+                    }
 
                     if (visible)
                     {

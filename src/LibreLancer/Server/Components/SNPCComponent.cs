@@ -5,6 +5,7 @@ using LibreLancer.Data.GameData;
 using LibreLancer.Data.Schema.Pilots;
 using LibreLancer.Missions;
 using LibreLancer.Server.Ai;
+using LibreLancer.Server.Comms;
 using LibreLancer.World;
 using LibreLancer.World.Components;
 using Pilot = LibreLancer.Data.GameData.Pilot;
@@ -49,7 +50,7 @@ namespace LibreLancer.Server.Components
         }
 
 
-        public SNPCComponent(GameObject parent, NPCManager manager, StateGraph stateGraph) : base(parent)
+        public SNPCComponent(GameObject parent, NPCManager manager, StateGraph? stateGraph) : base(parent)
         {
             this.manager = manager;
             StateGraph = stateGraph;
@@ -665,6 +666,43 @@ namespace LibreLancer.Server.Components
             lastStateChangeReason = reason;
         }
 
+        private GameObject? chatterLastTarget;
+        private double chatterAllClearTimer;
+
+        /// <summary>
+        /// Radio reactions to combat transitions, mirroring vanilla GCS:
+        /// first contact = sighting/engage call (and nearby friends join in),
+        /// hostiles gone = "all clear" a few seconds later.
+        /// </summary>
+        private void UpdateCombatChatter(GameObject? shootAt, double time)
+        {
+            if (shootAt != null && chatterLastTarget == null)
+            {
+                if (Parent.TryGetComponent<SChatterComponent>(out var chatter))
+                {
+                    var isWingLead = Parent.Formation != null && Parent.Formation.LeadShip == Parent;
+                    chatter.Say(isWingLead ? ChatterEvent.OrderEngage : ChatterEvent.EnemySighted);
+                }
+                manager.World.RequestAssistance(Parent, shootAt);
+                chatterAllClearTimer = 0;
+            }
+            else if (shootAt == null && chatterLastTarget != null)
+            {
+                chatterAllClearTimer = 8.0;
+            }
+
+            if (shootAt == null && chatterAllClearTimer > 0)
+            {
+                chatterAllClearTimer -= time;
+                if (chatterAllClearTimer <= 0)
+                {
+                    Parent.GetComponent<SChatterComponent>()?.Say(ChatterEvent.AllClear);
+                }
+            }
+
+            chatterLastTarget = shootAt;
+        }
+
         private double damageTimer = 3;
         private float damageTaken = 0;
 
@@ -707,6 +745,7 @@ namespace LibreLancer.Server.Components
             CurrentDirective?.Update(Parent, world, this, time);
 
             var shootAt = GetHostileAndFire(time, world);
+            UpdateCombatChatter(shootAt, time);
             lastShootAt = shootAt;
 
             var runningDirective = Parent.TryGetComponent<DirectiveRunnerComponent>(out var directiveRunner) &&

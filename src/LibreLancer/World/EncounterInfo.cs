@@ -7,6 +7,7 @@ namespace LibreLancer.World;
 public class EncounterInfo
 {
     public FormationDef? Formation;
+    public EncounterBehavior Behavior = EncounterBehavior.wander;
     public List<EncounterEntry> Ships = [];
 }
 

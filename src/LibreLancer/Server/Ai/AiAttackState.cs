@@ -30,6 +30,15 @@ namespace LibreLancer.Server.Ai
 
         public override void Update(GameObject obj, GameWorld world, SNPCComponent ai, double time)
         {
+            // The target can die, despawn (dock) or enter a tradelane with its
+            // physics body removed while we are attacking it - querying its
+            // pose then crashes the server thread. Stand down instead.
+            if (!target.Flags.HasFlag(GameObjectFlags.Exists) || target.PhysicsComponent?.Body == null)
+            {
+                ai.SetState(null, world);
+                return;
+            }
+
             if (obj.TryGetComponent<WeaponControlComponent>(out var weapons))
             {
                 weapons.AimPoint = ai.GetAimPosition(target, weapons, false); // Regular accuracy

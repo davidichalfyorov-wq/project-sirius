@@ -32,13 +32,36 @@ namespace LibreLancer
 				name += " " + new Random().Next();
 			}
 			names.Add(name);
-			g.Screenshot(Path.Combine(screenshotdir, name + ".png"));
+			// name already contains screenshotdir; combining again only
+			// worked while MyPictures resolved to an absolute path.
+			g.Screenshot(name + ".png");
 		}
 
-        public void Save(string filename, int width, int height, Bgra8[] data) => Task.Run(() =>
+        public void Save(string filename, int width, int height, Bgra8[] data)
         {
-            using var output = File.Create(filename);
-            ImageLib.PNG.Save(output, width, height, data, true);
-        });
+            // Headless test runs (SIRIUS_AUTOPLAY) get killed right after the
+            // capture - write synchronously there so the PNG always lands,
+            // and surface encoder errors instead of losing them in a Task.
+            if (SiriusAutoplay.Enabled)
+            {
+                try
+                {
+                    using var output = File.Create(filename);
+                    ImageLib.PNG.Save(output, width, height, data, true);
+                    FLLog.Info("Screenshot", $"Saved {filename}");
+                }
+                catch (Exception ex)
+                {
+                    FLLog.Error("Screenshot", $"Failed to save {filename}: {ex}");
+                }
+                return;
+            }
+
+            Task.Run(() =>
+            {
+                using var output = File.Create(filename);
+                ImageLib.PNG.Save(output, width, height, data, true);
+            });
+        }
 	}
 }

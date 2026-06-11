@@ -11,6 +11,8 @@ namespace LibreLancer.Render
 	public struct Lighting
 	{
 		public const int MAX_LIGHTS = 9;
+        /// <summary>Per-system IBL probe (roadmap 5.3); null = flat ambient.</summary>
+        public EnvironmentProbe? Environment;
 		public static Lighting Empty = new() { Enabled = false };
         private byte _enabled;
         public bool Enabled

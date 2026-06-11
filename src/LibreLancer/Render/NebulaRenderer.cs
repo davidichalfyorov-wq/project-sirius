@@ -50,7 +50,9 @@ namespace LibreLancer.Render
                 sprites.AddFile(f);
             }
 
-            rand = new Random();
+            // Golden captures need deterministic puff spawns; normal play
+            // gets fresh randomness (task #39).
+            rand = SiriusAutoplay.GoldenDir != null ? new Random(12345) : new Random();
 			if (n.HasInteriorClouds)
 			{
 				interiorPuffs = new InteriorPuff[n.InteriorCloudCount];

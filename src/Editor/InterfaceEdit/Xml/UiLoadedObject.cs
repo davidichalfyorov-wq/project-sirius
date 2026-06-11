@@ -266,7 +266,9 @@ internal abstract class UiLoadedProperty
 
     private static string LiteralFloat(float f)
     {
-        return f.ToString("0.###############");
+        // Lua literal: must be invariant regardless of the host locale
+        // (ru-RU ToString would emit "145,2" and break every scene).
+        return f.ToString("0.###############", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     protected static object ObjToString(object o)

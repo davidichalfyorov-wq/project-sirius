@@ -248,7 +248,10 @@ namespace LibreLancer.World.Components
                 return;
             }
 
-            accumTime += time;
+            // Identical to plain accumulation until a golden capture freezes
+            // the presentation clock - then looping animations (docking
+            // rings, gate sections) hold one fixed phase across runs.
+            accumTime = RenderClock.Get(accumTime + time);
             int c = animations.Count;
 
             for (int i = animations.Count - 1; i >= 0; i--)

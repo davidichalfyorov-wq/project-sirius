@@ -624,6 +624,66 @@ internal class GLRenderContext : IRenderContext
         }
         frameSyncs.Enqueue(currentFrame);
         currentFrame = new();
+        CollectPassTimings();
+    }
+
+    // --- GPU pass timers (ARB_timer_query) -----------------------------
+
+    private readonly Stack<uint> timerQueryPool = new();
+    private readonly Stack<(string Name, uint Begin)> timerStack = new();
+    private readonly Queue<(string Name, uint Begin, uint End)> pendingSpans = new();
+    private readonly List<PassTiming> collectedTimings = new();
+    private readonly List<PassTiming> lastTimings = new();
+
+    public IReadOnlyList<PassTiming> PassTimings => lastTimings;
+
+    public void BeginPassTimer(string name)
+    {
+        if (!GL.TimerQueriesAvailable)
+        {
+            return;
+        }
+        var query = timerQueryPool.Count > 0 ? timerQueryPool.Pop() : GL.GenQuery();
+        GL.QueryCounter(query);
+        timerStack.Push((name, query));
+    }
+
+    public void EndPassTimer()
+    {
+        if (!GL.TimerQueriesAvailable || timerStack.Count == 0)
+        {
+            return;
+        }
+        var (name, begin) = timerStack.Pop();
+        var query = timerQueryPool.Count > 0 ? timerQueryPool.Pop() : GL.GenQuery();
+        GL.QueryCounter(query);
+        pendingSpans.Enqueue((name, begin, query));
+    }
+
+    private void CollectPassTimings()
+    {
+        if (!GL.TimerQueriesAvailable)
+        {
+            return;
+        }
+        // Spans complete in submission order: stop at the first span whose
+        // end stamp hasn't landed yet, collect a full frame at a time.
+        var collectedAny = false;
+        while (pendingSpans.TryPeek(out var span) && GL.QueryResultAvailable(span.End))
+        {
+            pendingSpans.Dequeue();
+            var nanoseconds = GL.QueryResultU64(span.End) - GL.QueryResultU64(span.Begin);
+            collectedTimings.Add(new PassTiming(span.Name, nanoseconds / 1_000_000.0));
+            timerQueryPool.Push(span.Begin);
+            timerQueryPool.Push(span.End);
+            collectedAny = true;
+        }
+        if (collectedAny)
+        {
+            lastTimings.Clear();
+            lastTimings.AddRange(collectedTimings);
+            collectedTimings.Clear();
+        }
     }
 
     public Point GetDrawableSize(IntPtr sdlWindow)
@@ -644,6 +704,15 @@ internal class GLRenderContext : IRenderContext
     {
         GLBind.VertexArray(NullVAO);
         GL.DrawArrays(type.GLType(), 0, type.GetArrayLength(primitiveCount));
+    }
+
+    public unsafe void ReadBackBuffer(int width, int height, Bgra8[] destination)
+    {
+        GL.ReadBuffer(GL.GL_BACK);
+        fixed (Bgra8* ptr = destination)
+        {
+            GL.ReadPixels(0, 0, width, height, GL.GL_BGRA, GL.GL_UNSIGNED_BYTE, (IntPtr)ptr);
+        }
     }
 
     public IShader CreateShader(ReadOnlySpan<byte> program) =>

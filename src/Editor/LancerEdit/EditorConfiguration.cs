@@ -115,6 +115,35 @@ namespace LancerEdit
 
         float IRendererSettings.LodMultiplier => LodMultiplier;
 
+        // The editor's preview renderer keeps the classic direct output.
+        bool IRendererSettings.SelectedHdr => false;
+
+        TonemapMode IRendererSettings.SelectedTonemapper => TonemapMode.Off;
+
+        float IRendererSettings.SelectedExposure => 1f;
+
+        bool IRendererSettings.SelectedBloom => false;
+
+        float IRendererSettings.SelectedBloomThreshold => 0.85f;
+
+        float IRendererSettings.SelectedBloomIntensity => 0f;
+
+        float IRendererSettings.SelectedBloomRadius => 0.65f;
+
+        int IRendererSettings.SelectedBloomMips => 6;
+
+        bool IRendererSettings.SelectedGodRays => false;
+
+        float IRendererSettings.SelectedGodRaysIntensity => 0f;
+
+        int IRendererSettings.SelectedGodRaysSamples => 48;
+
+        PostAaMode IRendererSettings.SelectedPostAa => PostAaMode.Off;
+
+        bool IRendererSettings.SelectedIbl => false;
+
+        bool IRendererSettings.SelectedShadows => false;
+
         public string LastExportPath
         {
             get => Decode(lastExportPath);

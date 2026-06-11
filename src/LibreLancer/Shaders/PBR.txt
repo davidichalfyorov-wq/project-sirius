@@ -5,3 +5,4 @@ feature METALMAP 2
 feature ROUGHMAP 3
 feature ET_ENABLED 4
 feature VERTEX_TEXTURE2 5
+feature IBL 6

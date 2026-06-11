@@ -65,7 +65,11 @@ namespace LibreLancer.Render.Materials
 			rstate.BlendMode = BlendMode.Opaque;
             var sh = AllShaders.Masked2DetailMapMaterial.Get(rstate.HasFeature(GraphicsFeature.GLES) ? 1U : 0U);
             SetWorld(sh);
-            sh.SetUniformBlock(3, ref parameters);
+            // MAT colours are display-referred (LINEAR_AUDIT.md)
+            var linearParameters = parameters;
+            linearParameters.Ac = ColorSpace.SrgbToLinear(parameters.Ac);
+            linearParameters.Dc = ColorSpace.SrgbToLinear(parameters.Dc);
+            sh.SetUniformBlock(3, ref linearParameters);
             Vector4 noAnim = new Vector4(0, 0, 1, 1);
             sh.SetUniformBlock(4, ref noAnim);
 			BindTexture (rstate, 0, DtSampler, 0, DtFlags);

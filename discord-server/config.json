@@ -1,0 +1,145 @@
+{
+  "server": {
+    "name": "Project Sirius",
+    "description": "Modern open-source remake of Freelancer (2003) — LibreLancer engine + Discovery 4.86. To Freelancer what Black Mesa is to Half-Life.",
+    "icon_paths": ["assets/sirius_icon.png", "../assets/sirius_icon.png"],
+    "verification_level": "medium",
+    "explicit_content_filter": "all_members",
+    "default_notifications": "only_mentions",
+    "afk_timeout": 300,
+    "try_enable_community": true
+  },
+
+  "roles": [
+    {"name": "👑 Admiral",        "color": "#F1C40F", "hoist": true,  "mentionable": false, "admin": true},
+    {"name": "🛡️ Station Police", "color": "#3498DB", "hoist": true,  "mentionable": true,  "perms": ["kick_members", "ban_members", "moderate_members", "manage_messages", "manage_threads", "manage_nicknames", "mute_members", "deafen_members", "move_members", "view_audit_log"]},
+    {"name": "🤖 Bots",           "color": "#95A5A6", "hoist": false, "mentionable": false, "perms": []},
+    {"name": "⚙️ Shipwright",     "color": "#E67E22", "hoist": true,  "mentionable": true,  "perms": []},
+    {"name": "🎨 Artist",         "color": "#1ABC9C", "hoist": false, "mentionable": false, "perms": []},
+    {"name": "🧪 Test Pilot",     "color": "#9B59B6", "hoist": false, "mentionable": true,  "perms": []},
+    {"name": "💫 Ace",            "color": "#E91E63", "hoist": false, "mentionable": false, "perms": []},
+    {"name": "🚀 Pilot",          "color": "#85C1E9", "hoist": false, "mentionable": false, "perms": []},
+    {"name": "🌑 Docked",         "color": "#707B7C", "hoist": false, "mentionable": false, "perms": []},
+    {"name": "📡 Comm Relay",     "color": null,      "hoist": false, "mentionable": true,  "perms": []}
+  ],
+
+  "role_keys": {
+    "admin": "👑 Admiral",
+    "moderator": "🛡️ Station Police",
+    "bots": "🤖 Bots",
+    "developer": "⚙️ Shipwright",
+    "verified": "🚀 Pilot",
+    "unverified": "🌑 Docked",
+    "announce_ping": "📡 Comm Relay"
+  },
+
+  "categories": [
+    {
+      "name": "📡 STARPORT",
+      "access": "public_readonly",
+      "channels": [
+        {"name": "👋-welcome",      "type": "text", "topic": "Incoming transmissions — welcome aboard, pilot!", "key": "welcome"},
+        {"name": "📜-rules",        "type": "text", "topic": "Station regulations. Press the button below to launch.", "key": "rules"},
+        {"name": "📰-announcements","type": "text", "topic": "Official Project Sirius news and releases.", "key": "announcements", "news": true, "post_roles": ["admin", "moderator", "developer"]},
+        {"name": "🛠-dev-blog",     "type": "text", "topic": "Engine progress: PBR, multiplayer, LibreLancer internals.", "key": "devblog", "post_roles": ["admin", "developer"], "threads_for_all": true}
+      ]
+    },
+    {
+      "name": "🍻 THE BAR",
+      "access": "members",
+      "channels": [
+        {"name": "💬-general",   "type": "text", "topic": "Main hangout. Neutral territory — keep it civil.", "slowmode": 2, "key": "general"},
+        {"name": "🎲-off-topic", "type": "text", "topic": "Anything not about the project. Bar talk."},
+        {"name": "🖼-media",     "type": "text", "topic": "Screenshots, art, clips. Freelancer nostalgia welcome.", "slowmode": 5},
+        {"name": "😂-memes",     "type": "text", "topic": "Trade lane humor.", "slowmode": 5}
+      ]
+    },
+    {
+      "name": "🚀 PROJECT SIRIUS",
+      "access": "members",
+      "channels": [
+        {"name": "🧭-sirius-chat",     "type": "text", "topic": "General discussion of the remake: roadmap, ideas, questions.", "key": "sirius_chat"},
+        {"name": "⚙️-engine-dev",      "type": "text", "topic": "C# / .NET 10 / OpenGL / LibreLancer engine development."},
+        {"name": "🧩-content-modding", "type": "text", "topic": "Discovery 4.86 data, INI, UTF models, LancerEdit, modding tools."},
+        {"name": "🐛-bug-reports",     "type": "forum", "topic": "One bug = one post. Attach logs and FLSpew output.", "key": "bugs", "tags": ["Engine", "Rendering", "Content", "Multiplayer", "Tools", "Crash"]},
+        {"name": "🧪-testing",         "type": "text", "topic": "Test builds coordination. Test Pilots wanted.", "key": "testing"},
+        {"name": "💡-suggestions",     "type": "text", "topic": "Use /suggest — the crowd votes 👍/👎.", "key": "suggestions", "bot_only_posts": true},
+        {"name": "🎨-showcase",        "type": "text", "topic": "Renders, lookdev, WIP models and shaders.", "slowmode": 5, "key": "showcase"}
+      ]
+    },
+    {
+      "name": "🔊 COMM CHANNELS",
+      "access": "members",
+      "channels": [
+        {"name": "🔊 Bar Lounge",  "type": "voice"},
+        {"name": "🛰️ The Bridge",  "type": "voice"},
+        {"name": "👥 Wingman Duo", "type": "voice", "user_limit": 2},
+        {"name": "💤 AFK Dock",    "type": "voice", "key": "afk"}
+      ]
+    },
+    {
+      "name": "🛡️ STAFF",
+      "access": "staff",
+      "channels": [
+        {"name": "🔒-staff-chat", "type": "text", "topic": "Admiral & Station Police only.", "key": "staff"},
+        {"name": "📋-mod-log",    "type": "text", "topic": "Moderation actions, deleted/edited messages.", "key": "modlog"},
+        {"name": "🤖-bot-log",    "type": "text", "topic": "Anti-spam triggers, raid alerts, automod.", "key": "botlog"},
+        {"name": "🔊 Staff Room", "type": "voice"}
+      ]
+    }
+  ],
+
+  "antispam": {
+    "exempt_role_keys": ["admin", "moderator", "bots", "developer"],
+    "message_window_seconds": 6,
+    "max_messages_per_window": 5,
+    "duplicate_window_seconds": 30,
+    "max_duplicates": 3,
+    "max_mentions": 5,
+    "block_invites": true,
+    "scam_domains": ["dlscord", "discord-nitro", "discorcl", "steamcommunlty", "free-nitro", "nitro-gift"],
+    "caps_min_length": 12,
+    "caps_ratio": 0.78,
+    "max_emojis": 12,
+    "strike_decay_seconds": 900,
+    "escalation": ["warn", "timeout:600", "timeout:21600", "kick"],
+    "raid": {
+      "join_window_seconds": 60,
+      "join_threshold": 8,
+      "duration_seconds": 900,
+      "min_account_age_hours": 24
+    }
+  },
+
+  "automod": {
+    "mention_spam_limit": 6,
+    "keyword_presets": ["profanity", "sexual_content", "slurs"],
+    "scam_regex": ["(?:d[il1]scord|dlscord)\\.(?:gift|gifts)\\b", "free\\s+nitro", "@everyone\\s+.{0,20}(?:gift|nitro|airdrop)"],
+    "exempt_role_keys": ["admin", "moderator", "bots"]
+  },
+
+  "welcome": {
+    "message": "Welcome aboard, {mention}! You are pilot **#{count}** to dock at **Project Sirius** — the open-source Freelancer remake.\n\n📜 Read {rules} and hit **Launch** to leave the docking bay.\n🧭 Project talk → {sirius_chat} · 🐛 Found a bug? → {bugs}",
+    "dm_on_verify": "Clearance granted, pilot. Welcome to the Sirius sector. o7"
+  },
+
+  "suggestions": {"upvote": "👍", "downvote": "👎", "create_thread": true},
+
+  "seed_messages": {
+    "rules_title": "📜 Station Regulations — Project Sirius",
+    "rules": [
+      "**1. Respect every pilot.** No insults, harassment, hate speech or doxxing. We shoot ships, not people.",
+      "**2. English in public channels.** So everyone can follow along.",
+      "**3. No spam or self-promo.** No unsolicited invites, ads, crypto or 'free nitro'. Anti-spam is armed and will open fire.",
+      "**4. Keep content safe-for-work.** No NSFW/shock content, including avatars and nicknames.",
+      "**5. No piracy.** Don't share or request copyrighted game files. Bring your own legal copy of Freelancer/Discovery assets.",
+      "**6. Right channel, right topic.** Bugs → 🐛-bug-reports (one bug = one post, attach logs). Ideas → /suggest. Builds → 🧪-testing.",
+      "**7. Staff word is final.** Disagree? DM a 🛡️ Station Police officer — don't start a flame war.",
+      "**8. Follow Discord ToS and Community Guidelines.**"
+    ],
+    "rules_footer": "Press **🚀 Launch** below to verify and undock.",
+    "verify_button_label": "🚀 Launch",
+    "suggestions_intro": "💡 **How suggestions work:** run `/suggest` anywhere — your idea lands here as an embed. The community votes 👍/👎, staff marks the verdict. One idea per suggestion.",
+    "devblog_intro": "🛠 **Dev blog.** Engine milestones, PBR progress, multiplayer netcode, editor tooling. Replies open in threads — keep the main feed clean. o7"
+  }
+}

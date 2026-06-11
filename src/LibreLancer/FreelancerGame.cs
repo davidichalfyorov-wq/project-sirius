@@ -50,6 +50,7 @@ namespace LibreLancer
 		public FreelancerGame(GameConfig config) : base(config.BufferWidth, config.BufferHeight, false)
 		{
 			// DO NOT RUN CODE HERE. IT CAUSES THE STUPIDEST CRASH ON OSX KNOWN TO MAN
+			Title = "Project Sirius"; // plain field write until the window exists
 			_cfg = config;
             _cfg.Saved += CfgOnSaved;
 			ScreenshotSave += FreelancerGame_ScreenshotSave;
@@ -86,8 +87,11 @@ namespace LibreLancer
             });
 			// Move to stop _TSGetMainThread error on OSX
             MinimumWindowSize = new Point(640, 480);
-            SetFullScreen(Config.Settings.FullScreen);
-            SetVSync(Config.Settings.VSync);
+            // Recording runs windowed with vsync off: an occluded fullscreen
+            // swapchain can stall present on Wayland, and frame pacing is
+            // irrelevant when every frame is dumped to disk.
+            SetFullScreen(Config.Settings.FullScreen && !SiriusRecorder.Enabled);
+            SetVSync(Config.Settings.VSync && !SiriusRecorder.Enabled);
             SetAppIcon();
             Config.Settings.RenderContext = RenderContext;
             Config.Settings.Validate();
@@ -216,9 +220,16 @@ namespace LibreLancer
 			if (currentState != null)
 				currentState.Draw (elapsed);
             Typewriter.Render();
+            if (Render.PassTimingOverlay.Enabled)
+            {
+                passTimingOverlay ??= new Render.PassTimingOverlay(this);
+                passTimingOverlay.Render();
+            }
 			drawCallsPerFrame = VertexBuffer.TotalDrawcalls;
 			VertexBuffer.TotalDrawcalls = 0;
         }
+
+        private Render.PassTimingOverlay? passTimingOverlay;
 
 		private void FreelancerGame_ScreenshotSave(string? filename, int width, int height, Bgra8[] data)
 		{

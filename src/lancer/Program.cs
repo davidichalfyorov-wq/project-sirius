@@ -19,6 +19,11 @@ internal static class MainClass
             if (args.Length > 0)
                 filePath = () => args[0];
             var cfg = GameConfig.Create(true, filePath);
+            if (SiriusRecorder.RecordResolution is { } recordRes)
+            {
+                cfg.BufferWidth = recordRes.X;
+                cfg.BufferHeight = recordRes.Y;
+            }
             game = new FreelancerGame(cfg);
             game.Run();
         }, () => game?.Crashed());
