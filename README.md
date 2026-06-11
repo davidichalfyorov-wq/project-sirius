@@ -1,5 +1,7 @@
 # Project Sirius
 
+![Project Sirius — Freelancer Returns](assets/banner.png)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C#](https://img.shields.io/badge/C%23-13-239120?logo=csharp&logoColor=white)](#)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](#)
