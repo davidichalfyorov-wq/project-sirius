@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace LibreLancer;
 
@@ -20,4 +21,35 @@ public static class SiriusAutoplay
     /// </summary>
     public static readonly string? GoldenDir =
         Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR");
+
+    /// <summary>
+    /// The capture pose: SIRIUS_TELEPORT="x,y,z,yawDegrees" override, or
+    /// the default director pose. Single source for the server's per-tick
+    /// pin AND the client-side prediction pin (orientation drift between
+    /// the two randomly flipped the nose for a whole capture).
+    /// </summary>
+    public static Transform3D DirectorPose()
+    {
+        var value = Environment.GetEnvironmentVariable("SIRIUS_TELEPORT");
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            var parts = value.Split(',');
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            const System.Globalization.NumberStyles style =
+                System.Globalization.NumberStyles.Float;
+            if (parts.Length == 4 &&
+                float.TryParse(parts[0], style, inv, out var x) &&
+                float.TryParse(parts[1], style, inv, out var y) &&
+                float.TryParse(parts[2], style, inv, out var z) &&
+                float.TryParse(parts[3], style, inv, out var yaw))
+            {
+                return new Transform3D(
+                    new Vector3(x, y, z),
+                    Quaternion.CreateFromAxisAngle(Vector3.UnitY, yaw * MathF.PI / 180f));
+            }
+        }
+        return new Transform3D(
+            new Vector3(-33000, 500, -28000),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI));
+    }
 }

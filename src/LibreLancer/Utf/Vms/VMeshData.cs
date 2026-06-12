@@ -119,6 +119,9 @@ namespace LibreLancer.Utf.Vms
                 VertexResource = res,
                 Meshes = Meshes,
                 Indices = Indices,
+                SourceVertices = VertexBuffer,
+                SourceStride = VertexFormat.Stride,
+                SourceVertexCount = VertexCount,
             };
         }
 

@@ -10,7 +10,7 @@ struct Light
     float Range;
     //3x float4
     float3 Ambient;
-    float _pad1;
+    float CastsShadow;
     //4x float4
     float3 Attenuation;
     float _pad2;
@@ -56,6 +56,75 @@ cbuffer ShadowData : register(b6, UNIFORM_SPACE)
 Texture2D<float4> ShadowAtlas : register(t8, TEXTURE_SPACE);
 SamplerState ShadowSampler : register(s8, TEXTURE_SPACE);
 
+#if defined(RT_SHADOWS) || defined(RTAO) || defined(RT_REFLECTIONS)
+// Ray-traced effects (roadmap phase 4): the scene TLAS the renderer
+// rebuilds each frame. Bound by the backend, not the material.
+RaytracingAccelerationStructure SceneTLAS : register(t10, TEXTURE_SPACE);
+#endif
+
+#ifdef RT_REFLECTIONS
+// One mirror ray (phase 4 v1): hit shading is a distance-shaded flat
+// silhouette (no hit shaders / vertex fetch in the ray query tier) -
+// reflections read as geometry, exact hit colour comes with v2's
+// per-instance data buffer.
+float ComputeRtReflection(float3 worldPosition, float3 reflectDir, float3 surfaceNormal, out float hitShade)
+{
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> reflQuery;
+    RayDesc reflRay;
+    reflRay.Origin = worldPosition + surfaceNormal * 0.1;
+    reflRay.Direction = reflectDir;
+    reflRay.TMin = 0.05;
+    reflRay.TMax = 20000.0;
+    reflQuery.TraceRayInline(SceneTLAS, RAY_FLAG_NONE, 0xFF, reflRay);
+    while (reflQuery.Proceed()) {}
+    if (reflQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+    {
+        hitShade = lerp(0.55, 0.1, saturate(reflQuery.CommittedRayT() / 5000.0));
+        return 1.0;
+    }
+    hitShade = 0.0;
+    return 0.0;
+}
+#endif
+
+
+#ifdef RTAO
+// One cosine-weighted occlusion ray with a deterministic per-pixel hash
+// (no temporal input - golden gates stay reproducible).
+float ComputeRtao(float3 worldPosition, float3 n, float2 pixelCoord)
+{
+    uint hashState = (uint(pixelCoord.x) * 1973u + uint(pixelCoord.y) * 9277u) | 1u;
+    hashState ^= hashState >> 16; hashState *= 0x7feb352du;
+    hashState ^= hashState >> 15; hashState *= 0x846ca68bu;
+    hashState ^= hashState >> 16;
+    float xi1 = float(hashState & 0xFFFFu) / 65535.0;
+    float xi2 = float((hashState >> 16) & 0xFFFFu) / 65535.0;
+    float aoPhi = 6.2831853 * xi1;
+    float cosTheta = sqrt(1.0 - xi2);
+    float sinTheta = sqrt(xi2);
+    float3 tangentA = normalize(abs(n.z) < 0.9
+        ? cross(n, float3(0.0, 0.0, 1.0))
+        : cross(n, float3(1.0, 0.0, 0.0)));
+    float3 tangentB = cross(n, tangentA);
+    float3 aoDir = tangentA * (cos(aoPhi) * sinTheta) +
+        tangentB * (sin(aoPhi) * sinTheta) + n * cosTheta;
+    const float aoRange = 40.0;
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> aoQuery;
+    RayDesc aoRay;
+    aoRay.Origin = worldPosition + n * 0.08;
+    aoRay.Direction = aoDir;
+    aoRay.TMin = 0.05;
+    aoRay.TMax = aoRange;
+    aoQuery.TraceRayInline(SceneTLAS, RAY_FLAG_NONE, 0xFF, aoRay);
+    while (aoQuery.Proceed()) {}
+    if (aoQuery.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+    {
+        return lerp(0.25, 1.0, saturate(aoQuery.CommittedRayT() / aoRange));
+    }
+    return 1.0;
+}
+#endif
+
 // Local spotlight shadows (roadmap 5.5): 2x2 tile atlas, lights matched
 // by position (w of LocalShadowPos > 0 enables the slot).
 cbuffer LocalShadowData : register(b7, UNIFORM_SPACE)
@@ -99,14 +168,72 @@ float SampleLocalShadow(float3 worldPosition, float3 lightPosition)
     return 1.0;
 }
 
-// 1 = lit, 0 = fully shadowed. viewDistance picks the cascade.
-float SampleShadow(float3 worldPosition, float viewDistance)
+// Debug companion for the DEBUG_VIEW shadow channel: colour-codes the
+// early-out taken so a blank mask names its own cause.
+// red = shadows disabled, green = past last cascade, yellow = uv outside
+// the cascade tile, else grayscale shadow term.
+float4 SampleShadowDebug(float3 worldPosition, float3 normal, float3 surfaceToLight, float viewDistance)
+{
+    if (ShadowParams.x <= 0)
+        return float4(1.0, 0.0, 0.0, 1.0);
+    if (viewDistance >= ShadowSplits.z)
+        return float4(0.0, 1.0, 0.0, 1.0);
+#ifdef RT_SHADOWS
+    float originOffset = clamp(viewDistance * 0.0015, 0.05, 2.0);
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+    RayDesc ray;
+    ray.Origin = worldPosition + normal * originOffset;
+    ray.Direction = surfaceToLight;
+    ray.TMin = 0.05;
+    ray.TMax = 30000.0;
+    q.TraceRayInline(SceneTLAS, RAY_FLAG_NONE, 0xFF, ray);
+    while (q.Proceed()) {}
+    float rtTerm = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0 : 1.0;
+    return float4(rtTerm, rtTerm, 1.0, 1.0);
+#else
+    int cascade = viewDistance < ShadowSplits.x ? 0 : viewDistance < ShadowSplits.y ? 1 : 2;
+    float4x4 mat = cascade == 0 ? ShadowMatrix0 : cascade == 1 ? ShadowMatrix1 : ShadowMatrix2;
+    float4 lightClip = mul(float4(worldPosition, 1.0), mat);
+    float2 uv = lightClip.xy * 0.5 + 0.5;
+    if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0)
+        return float4(1.0, 1.0, 0.0, 1.0);
+    float reference = lightClip.z - ShadowParams.z;
+    float tiles = ShadowParams.y;
+    float2 atlasUv = float2((uv.x + cascade) * tiles, uv.y);
+    float3 packed = ShadowAtlas.Sample(ShadowSampler, atlasUv).rgb;
+    float term = UnpackShadowDepth(packed) >= reference ? 1.0 : 0.0;
+    return float4(term, term, term, 1.0);
+#endif
+}
+
+// 1 = lit, 0 = fully shadowed. viewDistance picks the cascade (raster)
+// or caps the shadowed range (RT); normal and surfaceToLight only feed
+// the RT path - the cascade path ignores them.
+float SampleShadow(float3 worldPosition, float3 normal, float3 surfaceToLight, float viewDistance)
 {
     if (ShadowParams.x <= 0)
         return 1.0;
-    int cascade = viewDistance < ShadowSplits.x ? 0 : viewDistance < ShadowSplits.y ? 1 : 2;
     if (viewDistance >= ShadowSplits.z)
         return 1.0;
+#ifdef RT_SHADOWS
+    // One ACCEPT_FIRST_HIT ray toward the sun. Normal-offset origin
+    // against self-intersection acne; no face culling (FL hulls are
+    // single-sided); opaque-only v1.
+    float originOffset = clamp(viewDistance * 0.0015, 0.05, 2.0);
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+    RayDesc ray;
+    ray.Origin = worldPosition + normal * originOffset;
+    ray.Direction = surfaceToLight;
+    ray.TMin = 0.05;
+    ray.TMax = 30000.0;
+    q.TraceRayInline(SceneTLAS, RAY_FLAG_NONE, 0xFF, ray);
+    while (q.Proceed()) {}
+    // 0.25 floor instead of pitch black: hulls in shadow still catch
+    // ambient bounce (space scenes have almost no ambient term, and a
+    // fully black player ship reads as a rendering bug).
+    return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.25 : 1.0;
+#else
+    int cascade = viewDistance < ShadowSplits.x ? 0 : viewDistance < ShadowSplits.y ? 1 : 2;
     float4x4 mat = cascade == 0 ? ShadowMatrix0 : cascade == 1 ? ShadowMatrix1 : ShadowMatrix2;
     float4 lightClip = mul(float4(worldPosition, 1.0), mat); // row-vector convention
     float2 uv = lightClip.xy * 0.5 + 0.5;
@@ -131,12 +258,18 @@ float SampleShadow(float3 worldPosition, float viewDistance)
         }
     }
     return lit * 0.25;
+#endif
 }
 
 #else
-float SampleShadow(float3 worldPosition, float viewDistance) { return 1.0; }
+float SampleShadow(float3 worldPosition, float3 normal, float3 surfaceToLight, float viewDistance) { return 1.0; }
+float4 SampleShadowDebug(float3 worldPosition, float3 normal, float3 surfaceToLight, float viewDistance) { return float4(1.0, 0.0, 1.0, 1.0); }
 float SampleLocalShadow(float3 worldPosition, float3 lightPosition) { return 1.0; }
 #endif
+
+// Written by RTAO-enabled fragments before the lighting call; only the
+// ambient terms consume it (direct light stays untouched, roadmap v2).
+static float AmbientOcclusionTerm = 1.0;
 
 float quadratic(float x, float3 params)
 {
@@ -283,7 +416,7 @@ float4 ApplyPixelLighting(
         if (Lights[i].Type == 0)
         {
             surfaceToLight = normalize(-Lights[i].Direction);
-            attenuation = SampleShadow(position, length(viewPosition.xyz));
+            attenuation = SampleShadow(position, n, surfaceToLight, length(viewPosition.xyz));
         }
         else
         {
@@ -293,6 +426,12 @@ float4 ApplyPixelLighting(
             attenuation = Lights[i].Type == 1.0
                 ? 1.0 / (curve.x + curve.y * distanceToLight + curve.z * (distanceToLight * distanceToLight))
                 : quadratic(distanceToLight / max(Lights[i].Range,1.), curve);
+            // FL suns are point lights; the renderer flags the one the
+            // cascade atlas (or RT pass) was built around.
+            if (Lights[i].CastsShadow > 0)
+            {
+                attenuation *= SampleShadow(position, n, surfaceToLight, length(viewPosition.xyz));
+            }
             if (Lights[i].Spotlight > 0)
             {
                 attenuation *= SampleLocalShadow(position, Lights[i].Position);
@@ -314,7 +453,8 @@ float4 ApplyPixelLighting(
         diffuseTerm += attenuation * diffuse;
         ambientTerm += attenuation * Lights[i].Ambient;
     }
-    float3 color = clamp(diffuseTerm + ac.rgb * (AmbientColor + ambientTerm), 0.0f, 1.0f);
+    float3 color = clamp(diffuseTerm +
+        ac.rgb * (AmbientColor + ambientTerm) * AmbientOcclusionTerm, 0.0f, 1.0f);
     float3 objectColor = (ec.rgb * tex.rgb) + (tex.rgb * dc.rgb * color);
     if (FogMode > 0)
     {

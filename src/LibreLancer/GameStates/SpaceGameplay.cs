@@ -1046,6 +1046,58 @@ World Time: {12:F2}
                 if (e.Key == Keys.R && (e.Modifiers & KeyModifiers.Control) != 0)
                     world.RenderDebugPoints = !world.RenderDebugPoints;
 #endif
+                if (e.Key == Keys.F10)
+                {
+                    SaveDebugSnapshot();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reproducible debug snapshot (roadmap 9.x capture UX): screenshot
+        /// + state.json with a ready-to-paste SIRIUS_TELEPORT line, the
+        /// system, settings and scene counters. A bug report becomes a
+        /// folder; reproducing it becomes one env var.
+        /// </summary>
+        private void SaveDebugSnapshot()
+        {
+            try
+            {
+                var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var dir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "SiriusCaptures", stamp);
+                System.IO.Directory.CreateDirectory(dir);
+                Game.Screenshot(System.IO.Path.Combine(dir, "screenshot.png"));
+
+                var pos = player.WorldTransform.Position;
+                var fwd = Vector3.Transform(-Vector3.UnitZ, player.WorldTransform.Orientation);
+                var yawDeg = MathHelper.RadiansToDegrees(MathF.Atan2(-fwd.X, -fwd.Z));
+                var json = new System.Text.StringBuilder();
+                json.AppendLine("{");
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"teleport\": \"SIRIUS_TELEPORT={pos.X:0.#},{pos.Y:0.#},{pos.Z:0.#},{yawDeg:0.#}\","));
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"spawn\": \"SIRIUS_SPAWN={session.PlayerSystem},{session.PlayerBase ?? "_"}\","));
+                json.AppendLine(FormattableString.Invariant($"  \"system\": \"{session.PlayerSystem}\","));
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"position\": [{pos.X:0.##}, {pos.Y:0.##}, {pos.Z:0.##}],"));
+                json.AppendLine(FormattableString.Invariant($"  \"yawDegrees\": {yawDeg:0.##},"));
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"renderer\": \"{Game.Renderer}\","));
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"objects\": {world.Objects.Count},"));
+                var settings = Game.Config.Settings;
+                json.AppendLine(FormattableString.Invariant(
+                    $"  \"settings\": {{ \"hdr\": {(settings.Hdr ? "true" : "false")}, \"bloom\": {(settings.Bloom ? "true" : "false")}, \"god_rays\": {(settings.GodRays ? "true" : "false")}, \"ibl\": {(settings.Ibl ? "true" : "false")}, \"shadows\": {(settings.Shadows ? "true" : "false")}, \"post_aa\": \"{settings.PostAA}\", \"tonemapper\": \"{settings.Tonemapper}\" }}"));
+                json.AppendLine("}");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "state.json"), json.ToString());
+                FLLog.Info("Snapshot", $"Debug snapshot saved: {dir}");
+                ((IClientPlayer)session).OnConsoleMessage($"Snapshot: {dir}");
+            }
+            catch (Exception ex)
+            {
+                FLLog.Warning("Snapshot", $"Failed: {ex.Message}");
             }
         }
 
@@ -1213,8 +1265,11 @@ World Time: {12:F2}
 
         private int autoplayProbeStage;
         private double autoplayProbeTimer;
+        private double autoplayCaptureBase;
+        private int autoplaySettledFrames;
         private double autoplayStillTime;
         private bool goldenWaypointLogged;
+        private readonly SiriusUiAutotest? uiProber = SiriusUiAutotest.CreateSpaceProber();
 
         // SIRIUS_AUTOPLAY diagnostics. Golden mode: wait for the undock
         // animation to finish and the ship to physically settle, then take
@@ -1228,26 +1283,64 @@ World Time: {12:F2}
             var doneStage = SiriusAutoplay.GoldenDir != null ? 4 : 3;
             if (!SiriusAutoplay.Enabled || autoplayProbeStage >= doneStage)
             {
+                // HUD click coverage runs after the golden shots are done.
+                if (SiriusAutoplay.Enabled && autoplayProbeStage >= doneStage &&
+                    uiProber is { Finished: false })
+                {
+                    uiProber.Update(ui, Game, dt);
+                }
                 return;
             }
             autoplayProbeTimer += dt;
 
             if (SiriusAutoplay.GoldenDir != null)
             {
+                // Kill the launch throttle once the server starts pinning
+                // the pose - client prediction otherwise resimulates thrust
+                // every correction and the hull equilibrates ~10m ahead of
+                // the pin with run-to-run jitter.
+                if (autoplayProbeTimer >= 8.0)
+                {
+                    shipInput.Throttle = 0;
+                    shipInput.AutopilotThrottle = 0;
+                    // Prediction owns the rendered hull: leftover steering
+                    // vs the server pin can leave the nose flipped for the
+                    // whole capture. Pin the predicted transform too.
+                    player.SetLocalTransform(SiriusAutoplay.DirectorPose());
+                    if (player.PhysicsComponent?.Body != null)
+                    {
+                        player.PhysicsComponent.Body.LinearVelocity = Vector3.Zero;
+                        player.PhysicsComponent.Body.AngularVelocity = Vector3.Zero;
+                    }
+                }
                 // The SERVER teleports the ship to the director's pose at
-                // t=8 (see ServerWorld.Update) - it owns the authoritative
-                // transform. Here: freeze the presentation clock once the
-                // pose is pinned, give the chase camera three seconds to
-                // converge, then capture.
+                // its OWN t=8 (see ServerWorld.Update) - slow loads make the
+                // wall-clock stages race it and capture a mid-flight pose
+                // (server corrections still dragging the hull). Stage 0
+                // therefore waits for the authoritative transform to settle
+                // AT the director pose for half a second before freezing.
                 if (autoplayProbeStage == 0 && autoplayProbeTimer >= 9.0)
                 {
-                    // Fixed constant, not TotalTime: load times differ per
-                    // run, so freezing at "now" would still leave every
-                    // sin(t) animator at a different phase.
-                    RenderClock.Freeze(100.0);
-                    autoplayProbeStage = 1;
+                    var directorPose = SiriusAutoplay.DirectorPose();
+                    var settled = Vector3.Distance(
+                        player.WorldTransform.Position, directorPose.Position) < 25f;
+                    autoplaySettledFrames = settled ? autoplaySettledFrames + 1 : 0;
+                    if (autoplaySettledFrames >= 30 || autoplayProbeTimer >= 40.0)
+                    {
+                        if (autoplayProbeTimer >= 40.0)
+                        {
+                            FLLog.Warning("Autoplay",
+                                "golden: pose never settled, capturing anyway");
+                        }
+                        // Fixed constant, not TotalTime: load times differ
+                        // per run, so freezing at "now" would still leave
+                        // every sin(t) animator at a different phase.
+                        RenderClock.Freeze(100.0);
+                        autoplayProbeStage = 1;
+                        autoplayCaptureBase = autoplayProbeTimer;
+                    }
                 }
-                else if (autoplayProbeStage == 1 && autoplayProbeTimer >= 12.0)
+                else if (autoplayProbeStage == 1 && autoplayProbeTimer >= autoplayCaptureBase + 3.0)
                 {
                     autoplayProbeStage = 3;
                     // Census of everything non-static plus the current
@@ -1273,12 +1366,20 @@ World Time: {12:F2}
                     // artifacts from HUD ones when a diff zone is ambiguous.
                     ui.Visible = false;
                 }
-                else if (autoplayProbeStage == 3 && autoplayProbeTimer >= 12.5)
+                else if (autoplayProbeStage == 3 && autoplayProbeTimer >= autoplayCaptureBase + 3.5)
                 {
                     autoplayProbeStage = 4;
+                    FLLog.Info("Autoplay",
+                        $"golden camera pos={_chaseCamera.Position} player={player.WorldTransform.Position}");
                     Game.Screenshot(System.IO.Path.Combine(SiriusAutoplay.GoldenDir, "space_noui.png"));
                     FLLog.Info("Autoplay", "golden: space_noui.png");
                     ui.Visible = true;
+                    // SIRIUS_CAPTURE_SPACE=1: RenderDoc-capture the settled
+                    // space frame (frame numbers drift under instrumentation).
+                    if (Environment.GetEnvironmentVariable("SIRIUS_CAPTURE_SPACE") == "1")
+                    {
+                        Render.RenderDocCapture.RequestCapture();
+                    }
                 }
                 return;
             }

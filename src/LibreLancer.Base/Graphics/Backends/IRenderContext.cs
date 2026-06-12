@@ -38,6 +38,11 @@ internal interface IRenderContext
 
     ITextureCube CreateTextureCube(int size, bool mipMap, SurfaceFormat format);
 
+    /// <summary>3D textures (phase 5 volumetrics). Vulkan-only: gate with
+    /// HasFeature(GraphicsFeature.Compute) before creating.</summary>
+    ITexture3D CreateTexture3D(int width, int height, int depth, SurfaceFormat format, bool storage = false) =>
+        throw new NotSupportedException("Texture3D requires the Vulkan backend");
+
     IDepthBuffer CreateDepthBuffer(int width, int height);
 
     IRenderTarget2D CreateRenderTarget2D(ITexture2D texture, IDepthBuffer buffer);
@@ -63,6 +68,20 @@ internal interface IRenderContext
     void SetTextureSlot(int slot, Texture? texture);
     void SetSamplerState(int slot, SamplerState state);
     void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount);
+    void DrawMeshTasks(uint groupsX, uint groupsY, uint groupsZ);
+    void SetShadingRate(int size);
+
+    // Compute (phase 5 foundation). No-ops/throws on backends without
+    // GraphicsFeature.Compute - gate call sites on HasFeature.
+    void DispatchCompute(uint groupsX, uint groupsY, uint groupsZ) { }
+    void SetStorageImage(int slot, Texture? texture) { }
+    void BarrierComputeToGraphics() { }
+    void BarrierGraphicsToCompute() { }
+    void BarrierComputeToCompute() { }
+
+    /// <summary>Copies a render target's depth into a sampled depth
+    /// texture (Vulkan-only; volumetric composite input).</summary>
+    void CopyDepthToTexture(IRenderTarget2D source, ITexture2D destination) { }
 
     /// <summary>Read the current backbuffer contents (screenshots).</summary>
     void ReadBackBuffer(int width, int height, Bgra8[] destination);
@@ -70,6 +89,12 @@ internal interface IRenderContext
     // GPU pass timers (graphics roadmap 9.3). Results arrive with a
     // frames-in-flight delay; backends without timer support no-op.
     void BeginPassTimer(string name) { }
+
+    /// <summary>Device memory held by backend allocators (0 when untracked).</summary>
+    long DeviceMemoryAllocated => 0;
+
+    /// <summary>Ray tracing services; null without ray-query support.</summary>
+    IRayTracing? RayTracing => null;
     void EndPassTimer() { }
     IReadOnlyList<PassTiming> PassTimings => Array.Empty<PassTiming>();
 }

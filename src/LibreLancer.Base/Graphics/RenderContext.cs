@@ -286,8 +286,40 @@ public class RenderContext
 
     public void SSBOMemoryBarrier() => impl.MemoryBarrier();
 
+    /// <summary>Dispatches the compute shader set via Shader (phase 5).
+    /// Ends any active render pass; gate on GraphicsFeature.Compute.</summary>
+    public void DispatchCompute(uint groupsX, uint groupsY, uint groupsZ)
+    {
+        Apply();
+        impl.DispatchCompute(groupsX, groupsY, groupsZ);
+    }
+
+    /// <summary>Binds a storage-capable texture to a compute UAV slot
+    /// (RWTexture2D/3D at register uN -> slot N).</summary>
+    public void SetStorageImage(int slot, Texture? texture) => impl.SetStorageImage(slot, texture);
+
+    /// <summary>Compute writes -> graphics reads barrier.</summary>
+    public void BarrierComputeToGraphics() => impl.BarrierComputeToGraphics();
+
+    /// <summary>Graphics writes -> compute reads barrier.</summary>
+    public void BarrierGraphicsToCompute() => impl.BarrierGraphicsToCompute();
+
+    /// <summary>Barrier between dependent compute dispatches.</summary>
+    public void BarrierComputeToCompute() => impl.BarrierComputeToCompute();
+
+    /// <summary>Copies a render target's depth into a sampled depth
+    /// texture (Vulkan-only no-op elsewhere; volumetrics input).</summary>
+    public void CopyDepth(RenderTarget2D source, Texture2D destination) =>
+        impl.CopyDepthToTexture(source.Backing, destination.Backing);
+
     /// <summary>GPU time markers around a render pass (debug overlay).</summary>
     public void BeginPassTimer(string name) => impl.BeginPassTimer(name);
+
+    /// <summary>Device memory held by backend allocators (Dev HUD).</summary>
+    public long DeviceMemoryAllocated => impl.DeviceMemoryAllocated;
+
+    /// <summary>Ray tracing services; null without ray-query support.</summary>
+    public IRayTracing? RayTracing => impl.RayTracing;
 
     public void EndPassTimer() => impl.EndPassTimer();
 
@@ -361,6 +393,16 @@ public class RenderContext
         impl.ApplyShader(tintShader.Backing);
         impl.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
     }
+
+    public void DrawMeshTasks(uint groupsX, uint groupsY, uint groupsZ)
+    {
+        Apply();
+        impl.DrawMeshTasks(groupsX, groupsY, groupsZ);
+    }
+
+    /// <summary>Per-draw fragment shading rate: 1 = full, 2 = 2x2 coarse.
+    /// Takes effect on subsequent draws; no-op without VRS support.</summary>
+    public void SetShadingRate(int size) => impl.SetShadingRate(size);
 
     public void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount)
     {

@@ -700,6 +700,16 @@ internal class GLRenderContext : IRenderContext
         }
     }
 
+    public void DrawMeshTasks(uint groupsX, uint groupsY, uint groupsZ)
+    {
+        // Mesh pipelines are Vulkan-only (GraphicsFeature.MeshShaders).
+    }
+
+    public void SetShadingRate(int size)
+    {
+        // VRS is Vulkan-only (GraphicsFeature.VariableRateShading).
+    }
+
     public void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount)
     {
         GLBind.VertexArray(NullVAO);

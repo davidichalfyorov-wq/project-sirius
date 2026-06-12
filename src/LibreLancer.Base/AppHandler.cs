@@ -171,6 +171,14 @@ public static class AppHandler
         var addVersion = j == 0;
         builder ??= new StringBuilder();
         builder.AppendLine(ex.Message);
+        // Script errors carry their chunk:line in DecoratedMessage (accessed
+        // by reflection - Base doesn't reference the interpreter).
+        if (ex.GetType().Name == "ScriptRuntimeException" &&
+            ex.GetType().GetProperty("DecoratedMessage")?.GetValue(ex) is string decorated &&
+            decorated != ex.Message)
+        {
+            builder.Append("Script location: ").AppendLine(decorated);
+        }
         builder.AppendLine(ex.StackTrace);
         j++;
         if (j > 100)

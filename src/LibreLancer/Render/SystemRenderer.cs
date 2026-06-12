@@ -3,6 +3,7 @@
 // LICENSE, which is part of this source code package
 
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
 using LibreLancer.Data.GameData;
@@ -286,7 +287,53 @@ namespace LibreLancer.Render
 
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
+        private Volumetrics.VolumetricFog? volumetricFog;
         private ShadowMapRenderer? shadowMaps;
+        private RayTracedScene? rtScene;
+        private bool rtShadowsWasActive;
+        private int rtDebugCountdown;
+        private static readonly bool MsDebugRequested =
+            Environment.GetEnvironmentVariable("SIRIUS_MS_DEBUG") == "1";
+
+        private static readonly int RtDebugMode =
+            int.TryParse(Environment.GetEnvironmentVariable("SIRIUS_RT_DEBUG"), out var m) ? m : 0;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct RtDebugUniforms
+        {
+            public Matrix4x4 InverseViewProjection;
+            public Vector4 CameraPosMode;
+        }
+
+        /// <summary>Fullscreen TLAS ray-cast overlay (SIRIUS_RT_DEBUG=1|2):
+        /// silhouettes must match the raster scene - the cheapest proof the
+        /// instance transforms (and the transpose) are right.</summary>
+        private void DrawRtDebug(ICamera camera)
+        {
+            if (!Matrix4x4.Invert(camera.ViewProjection, out var inverse))
+            {
+                return;
+            }
+            var shader = Shaders.AllShaders.RTDebug.Get(1); // RT_VIEW
+            var uniforms = new RtDebugUniforms
+            {
+                InverseViewProjection = inverse,
+                CameraPosMode = new Vector4(camera.Position, Math.Clamp(RtDebugMode, 1, 3))
+            };
+            var oldBlend = rstate.BlendMode;
+            var oldCull = rstate.Cull;
+            var oldDepth = rstate.DepthEnabled;
+            rstate.BlendMode = BlendMode.Opaque;
+            rstate.Cull = false;
+            rstate.DepthEnabled = false;
+            shader.SetUniformBlock(3, ref uniforms);
+            rstate.Shader = shader;
+            rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+            rstate.BlendMode = oldBlend;
+            rstate.Cull = oldCull;
+            rstate.DepthEnabled = oldDepth;
+        }
+
         private int _mwidth = -1, _mheight = -1;
         public CommandBuffer Commands;
         private int _twidth = -1, _theight = -1;
@@ -344,6 +391,8 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysSamples = Settings.SelectedGodRaysSamples;
             hdrPipeline.PostAa = Settings.SelectedPostAa;
             hdrPipeline.Begin(renderWidth, renderHeight);
+            volumetricFog ??= new Volumetrics.VolumetricFog(rstate);
+            volumetricFog.Enabled = Settings.SelectedVolumetricNebulae;
             rstate.BeginPassTimer("scene");
 
             RenderTarget? restoreTarget = rstate.RenderTarget;
@@ -367,32 +416,32 @@ namespace LibreLancer.Render
             rstate.AnisotropyLevel = Settings.SelectedAnisotropy;
             var nr = CheckNebulae(); // are we in a nebula?
 
-            // Cascaded sun shadows (roadmap 5.4): render the atlas before
-            // the scene camera takes over; receivers sample it via the
-            // ShadowData block SetLights publishes.
-            RenderMaterial.ActiveShadows = null;
-            // Space scenes only: a SunRenderer marks a real system scene.
-            // THN sets (bar/city backdrops) light their own way and the
-            // cascade fit around their cameras self-shadows everything.
-            if (Settings.SelectedShadows && HasSunRenderer() &&
-                FindDirectionalLight(out var sunDirection))
-            {
-                shadowMaps ??= new ShadowMapRenderer(rstate, resman);
-                shadowMaps.Draw(objects, SystemLighting.Lights, sunDirection, camera, resman);
-                RenderMaterial.ActiveShadows = shadowMaps;
-                rstate.Textures[8] = shadowMaps.AtlasTexture;
-                rstate.Samplers[8] = SamplerState.PointClamp;
-                rstate.Textures[9] = shadowMaps.LocalAtlasTexture;
-                rstate.Samplers[9] = SamplerState.PointClamp;
-            }
-
             rstate.SetCamera(camera);
             Commands.Camera = camera;
+            // Froxel volumetrics build before any scene draw: the compute
+            // dispatches end the (not-yet-started) render pass for free.
+            // RenderClock freezes drift in golden captures. The sun comes
+            // from the same picker the cascade shadows use.
+            var volSun = FindShadowLight(camera.Position, out var volSunDir, out var volSunLight);
+            var volSunColor = volSunLight != null
+                ? new Vector3(volSunLight.Light.Color.R, volSunLight.Light.Color.G, volSunLight.Light.Color.B)
+                : Vector3.One;
+            // CSM atlas is valid for the fog when the cascade pass actually
+            // runs (RT shadows skip it; the atlas would be stale).
+            var volCsmLive = Settings.SelectedShadows &&
+                rstate.HasFeature(GraphicsFeature.SceneShadows) &&
+                !(Settings.SelectedRtShadows && rstate.HasFeature(GraphicsFeature.RayQuery));
+            volumetricFog.RunDispatches(camera, Nebulae, RenderClock.Get(game.TotalTime),
+                volSunDir, volSunColor, volSun, shadowMaps, volCsmLive, nr,
+                renderWidth, renderHeight);
             var transitioned = false;
 
             if (nr != null)
             {
-                transitioned = nr.FogTransitioned() && DrawNebulae;
+                // Volumetrics never "transition": the starsphere stays and
+                // the gas itself swallows it physically (legacy hid the sky
+                // behind a fog-coloured clear once deep enough).
+                transitioned = nr.FogTransitioned() && DrawNebulae && !volumetricFog.Active;
             }
 
             rstate.DepthEnabled = true;
@@ -414,6 +463,100 @@ namespace LibreLancer.Render
                 n.UploadPuffs();
             QuadBuffer.EndUpload();
             Commands.BonesBuffer.EndStreaming(Commands.BonesMax);
+
+            // Cascaded sun shadows (roadmap 5.4): the atlas pass runs AFTER
+            // PrepareRender fills the object list - its gate and caster walk
+            // both read it (an earlier placement saw an always-empty list and
+            // silently disabled shadows on the first frame's state).
+            // Receivers sample it via the ShadowData block SetLights publishes.
+            RenderMaterial.ActiveShadows = null;
+            RenderMaterial.ShadowLight = null;
+            RenderMaterial.RtShadowsActive = false;
+            RenderMaterial.RtaoActive = false;
+            RenderMaterial.RtReflectionsActive = false;
+            // Space scenes only: a loaded star system marks a real space
+            // scene (THN sets light their own way and the cascade fit around
+            // their cameras self-shadows everything). NOT HasSunRenderer():
+            // the client only spawns solars inside its interest radius, so
+            // the sun object usually doesn't exist - the light data comes
+            // from the system INI and is always present.
+            if (Settings.SelectedShadows && starSystem != null &&
+                rstate.HasFeature(GraphicsFeature.SceneShadows) &&
+                FindShadowLight(camera.Position, out var sunDirection, out var shadowLight))
+            {
+                shadowMaps ??= new ShadowMapRenderer(rstate, resman);
+                // RT shadows replace the sun cascades entirely - skip their
+                // GPU passes but keep the matrices/splits (the RT shader
+                // reuses them for its early-outs and range cap).
+                var rtSunShadows = Settings.SelectedRtShadows && rstate.RayTracing != null;
+                shadowMaps.Draw(objects, SystemLighting.Lights, sunDirection, camera, resman,
+                    skipSunCascades: rtSunShadows);
+                RenderMaterial.ActiveShadows = shadowMaps;
+                RenderMaterial.ShadowLight = shadowLight;
+                rstate.Textures[8] = shadowMaps.AtlasTexture;
+                rstate.Samplers[8] = SamplerState.PointClamp;
+                rstate.Textures[9] = shadowMaps.LocalAtlasTexture;
+                rstate.Samplers[9] = SamplerState.PointClamp;
+                // The caster pass leaves its own camera bound.
+                rstate.SetCamera(camera);
+            }
+
+            // Ray-traced scene structures (roadmap phase 4): BLAS cache +
+            // per-frame TLAS. Walks World.Objects, NOT the visible list -
+            // off-screen geometry must still cast shadows / occlude rays.
+            if (rstate.RayTracing is { } rayTracing &&
+                (RtDebugMode > 0 || Settings.SelectedRtShadows || Settings.SelectedRtao ||
+                 Settings.SelectedRtReflections))
+            {
+                rtScene ??= new RayTracedScene(rayTracing);
+                rstate.BeginPassTimer("rt_build");
+                rtScene.BeginFrame();
+                const float rtRangeSq = 25000f * 25000f;
+                int dbgObjects = 0, dbgModels = 0, dbgParts = 0;
+                var rtOrigin = camera.Position;
+                for (var oi = 0; oi < World.Objects.Count; oi++)
+                {
+                    var worldObj = World.Objects[oi];
+                    dbgObjects++;
+                    if (worldObj.RenderComponent is not ModelRenderer { Model: { } rtModel } rtMr)
+                    {
+                        continue;
+                    }
+                    if (Vector3.DistanceSquared(rtMr.World.Translation, rtOrigin) > rtRangeSq)
+                    {
+                        continue;
+                    }
+                    dbgModels++;
+                    foreach (var part in rtModel.AllParts)
+                    {
+                        if (part.Active && part.Mesh != null)
+                        {
+                            dbgParts++;
+                            rtScene.AddPart(part, rtMr.World);
+                        }
+                    }
+                }
+                if (rtDebugCountdown-- <= 0)
+                {
+                    rtDebugCountdown = 300;
+                    FLLog.Info("RayTracing", $"collector: {dbgObjects} objects, {dbgModels} models, {dbgParts} parts");
+                }
+                rtScene.EndFrame();
+                // RT shadows replace the CSM sample only when this frame
+                // actually has a sun shadow pass to inherit range/params from.
+                RenderMaterial.RtShadowsActive = Settings.SelectedRtShadows &&
+                    RenderMaterial.ActiveShadows != null;
+                RenderMaterial.RtaoActive = Settings.SelectedRtao;
+                RenderMaterial.RtReflectionsActive = Settings.SelectedRtReflections;
+                if (RenderMaterial.RtShadowsActive != rtShadowsWasActive)
+                {
+                    rtShadowsWasActive = RenderMaterial.RtShadowsActive;
+                    FLLog.Info("RayTracing",
+                        $"rt shadows active={rtShadowsWasActive} (setting={Settings.SelectedRtShadows}, csm={RenderMaterial.ActiveShadows != null})");
+                }
+                rstate.EndPassTimer();
+            }
+
 
             if (transitioned)
             {
@@ -459,7 +602,11 @@ namespace LibreLancer.Render
             for (var i = 0; i < AsteroidFields!.Count; i++)
                 AsteroidFields[i].Draw(resman, SystemLighting, Commands, nr!);
 
-            if (DrawNebulae)
+            // The volumetric path REPLACES the legacy billboard nebula
+            // (exterior puffs, fill quad, interior puffs): drawing both
+            // doubled the fog with hard-edged sprite blobs on top of the
+            // real gas (the "ромбы и рваные углы" report).
+            if (DrawNebulae && !volumetricFog.Active)
             {
                 if (nr == null)
                 {
@@ -480,6 +627,12 @@ namespace LibreLancer.Render
             // Opaque Pass
             rstate.DepthEnabled = true;
             Commands.DrawOpaque(rstate);
+            // Mesh-shader cube fields (roadmap 7.5): immediate dispatches
+            // run here, after the opaque pass settles viewport/state.
+            for (var i = 0; i < AsteroidFields!.Count; i++)
+            {
+                AsteroidFields[i].DrawMeshPath(resman);
+            }
 
             if ((!transitioned || !DrawNebulae) && DrawStarsphere)
             {
@@ -500,8 +653,10 @@ namespace LibreLancer.Render
                     rstate.SetCamera(thn2);
                 }
 
-                if (nr != null && DrawNebulae)
+                if (nr != null && DrawNebulae && !volumetricFog.Active)
                 {
+                    // Legacy fullscreen fog tint - the volumetric composite
+                    // owns the in-cloud look now.
                     nr.RenderFogTransition(rstate);
                 }
 
@@ -509,6 +664,15 @@ namespace LibreLancer.Render
             }
 
             OpaqueHook?.Invoke();
+            // Volumetric fog composites over opaque+starsphere, before the
+            // transparent pass (ships sink into the fog; engine trails and
+            // glass still draw on top - V8 teaches them the fog itself).
+            // MSAA path is excluded: multisampled depth can't be copied.
+            if (volumetricFog is { Active: true } && Settings.SelectedMSAA <= 0 &&
+                hdrPipeline.CurrentSceneTarget is { } volSceneTarget)
+            {
+                volumetricFog.Composite(volSceneTarget, renderWidth, renderHeight);
+            }
             // Transparent Pass
             rstate.DepthWrite = false;
             Commands.DrawTransparent(rstate);
@@ -563,6 +727,23 @@ namespace LibreLancer.Render
             }
 
             rstate.DepthEnabled = true;
+            // RT debug overlay covers the finished frame (UI still lands on
+            // top - it renders later in the state's Draw).
+            if (RtDebugMode > 0 && rstate.RayTracing != null && rtScene != null)
+            {
+                DrawRtDebug(camera);
+            }
+            // Mesh shader smoke test (roadmap 7.5 / C1): one mesh-emitted
+            // triangle as an overlay proves the whole pipeline path.
+            if (MsDebugRequested && Shaders.AllShaders.MSDebug != null)
+            {
+                rstate.Shader = Shaders.AllShaders.MSDebug.Get(
+                    Environment.GetEnvironmentVariable("SIRIUS_MS_DEBUG_BIG") == "1" ? 1u : 0u);
+                rstate.DepthEnabled = false;
+                rstate.BlendMode = BlendMode.Normal;
+                rstate.DrawMeshTasks(1, 1, 1);
+                rstate.DepthEnabled = true;
+            }
             objects.Clear();
         }
 
@@ -578,17 +759,42 @@ namespace LibreLancer.Render
             return false;
         }
 
-        private bool FindDirectionalLight(out Vector3 direction)
+        // FL space systems author the sun as a huge-range point source, not
+        // a directional light - at station scale its direction is constant,
+        // so the dominant point light doubles as the cascade sun. A true
+        // directional light (THN sets author those) still wins.
+        private bool FindShadowLight(Vector3 nearPosition, out Vector3 direction, out DynamicLight? shadowLight)
         {
+            DynamicLight? sun = null;
             foreach (var light in SystemLighting.Lights)
             {
-                if (light.Light.Kind == LightKind.Directional && light.Active)
+                if (!light.Active)
+                {
+                    continue;
+                }
+                if (light.Light.Kind == LightKind.Directional)
                 {
                     direction = Vector3.Normalize(light.Light.Direction);
+                    shadowLight = light;
+                    return true;
+                }
+                if (sun == null || light.Light.Range > sun.Light.Range)
+                {
+                    sun = light;
+                }
+            }
+            if (sun != null)
+            {
+                var toScene = nearPosition - sun.Light.Position;
+                if (toScene.LengthSquared() > 1)
+                {
+                    direction = Vector3.Normalize(toScene);
+                    shadowLight = sun;
                     return true;
                 }
             }
             direction = Vector3.UnitY;
+            shadowLight = null;
             return false;
         }
 
@@ -627,6 +833,31 @@ namespace LibreLancer.Render
 
 
         private void DrawStarsphereLayers()
+        {
+            // VRS (roadmap 7.6): the starsphere is low-frequency content -
+            // 2x2 coarse shading there is visually free. Ships, HUD and
+            // text keep full rate (the rate resets right after).
+            var vrs = Settings.SelectedVrs &&
+                rstate.HasFeature(GraphicsFeature.VariableRateShading) &&
+                Environment.GetEnvironmentVariable("SIRIUS_VRS_HOOK_OFF") != "1";
+            if (vrs)
+            {
+                rstate.SetShadingRate(2);
+            }
+            try
+            {
+                DrawStarsphereLayersInner();
+            }
+            finally
+            {
+                if (vrs)
+                {
+                    rstate.SetShadingRate(1);
+                }
+            }
+        }
+
+        private void DrawStarsphereLayersInner()
         {
             if (useSystemCubemapStarspheres && cubemapStarspheres is { AllLoaded: true })
             {
@@ -698,6 +929,7 @@ namespace LibreLancer.Render
         {
             msaa?.Dispose();
             hdrPipeline?.Dispose();
+            volumetricFog?.Dispose();
             cubemapStarspheres?.Dispose();
 
             Polyline.Dispose();

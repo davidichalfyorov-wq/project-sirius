@@ -10,13 +10,29 @@ local msaa_levels = {
 // Post-process AA shares the ANTI-ALIASING selector with MSAA: the
 // entries after the MSAA levels select post_aa instead (roadmap 4.7).
 local post_aa_levels = {
-	"FXAA"
+	"FXAA",
+	"SMAA"
+}
+
+// ini value for each post_aa_levels entry, by offset past msaamax
+local post_aa_values = {
+	"fxaa",
+	"smaa"
 }
 
 local function post_aa_to_idx(s, msaamax)
 {
-	if (s == "fxaa") return msaamax + 1;
+	for (i in 1..post_aa_values.length) {
+		if (s == post_aa_values[i]) return msaamax + i;
+	}
 	return 0
+}
+
+local function idx_to_post_aa(idx, msaamax)
+{
+	local i = idx - msaamax
+	if (i >= 1 && i <= post_aa_values.length) return post_aa_values[i];
+	return "off"
 }
 
 local function val_selection(left, right, display, values, vmin, vmax, vcurrent)
@@ -162,6 +178,16 @@ class options : options_Designer with Modal
 		e.godrays_intensity.Value = this.opts.GodRaysIntensity / 0.8
 		this.Ibl = val_selection(e.ibl_left, e.ibl_right, e.ibl_display, bloom_modes, 1, 2, this.opts.Ibl ? 2 : 1)
 		this.Shadows = val_selection(e.shadows_left, e.shadows_right, e.shadows_display, bloom_modes, 1, 2, this.opts.Shadows ? 2 : 1)
+		// RT toggles lock to OFF when the device has no ray query support
+		local rtmax = this.opts.RayTracingSupported() ? 2 : 1
+		this.RtShadows = val_selection(e.rtshadows_left, e.rtshadows_right, e.rtshadows_display, bloom_modes, 1, rtmax, (rtmax == 2 and this.opts.RtShadows) ? 2 : 1)
+		this.Rtao = val_selection(e.rtao_left, e.rtao_right, e.rtao_display, bloom_modes, 1, rtmax, (rtmax == 2 and this.opts.Rtao) ? 2 : 1)
+		this.RtReflections = val_selection(e.rtrefl_left, e.rtrefl_right, e.rtrefl_display, bloom_modes, 1, rtmax, (rtmax == 2 and this.opts.RtReflections) ? 2 : 1)
+		local pipeline_modes = { "CLASSIC", "MESH SHADER" }
+		local msmax = this.opts.MeshShadersSupported() ? 2 : 1
+		this.MeshAsteroids = val_selection(e.meshast_left, e.meshast_right, e.meshast_display, pipeline_modes, 1, msmax, (msmax == 2 and this.opts.MeshAsteroids) ? 2 : 1)
+		local vrsmax = this.opts.VrsSupported() ? 2 : 1
+		this.Vrs = val_selection(e.vrs_left, e.vrs_right, e.vrs_display, bloom_modes, 1, vrsmax, (vrsmax == 2 and this.opts.Vrs) ? 2 : 1)
 
 		this.controlcategories = { e.cat_ship, e.cat_ui, e.cat_mp }
 		e.cat_ship.OnClick(() => this.setcontrolcategory(1))
@@ -179,7 +205,7 @@ class options : options_Designer with Modal
 		this.opts.VoiceVolume = e.voicevol.Value
 		if (this.MSAA.vcurrent > this.MSAAMax) {
 			this.opts.MSAA = 0
-			this.opts.PostAA = "fxaa"
+			this.opts.PostAA = idx_to_post_aa(this.MSAA.vcurrent, this.MSAAMax)
 		} else {
 			this.opts.MSAA = idx_to_msaa(this.MSAA.vcurrent)
 			this.opts.PostAA = "off"
@@ -193,6 +219,11 @@ class options : options_Designer with Modal
 		this.opts.GodRaysIntensity = e.godrays_intensity.Value * 0.8
 		this.opts.Ibl = this.Ibl.vcurrent == 2
 		this.opts.Shadows = this.Shadows.vcurrent == 2
+		this.opts.RtShadows = this.RtShadows.vcurrent == 2
+		this.opts.Rtao = this.Rtao.vcurrent == 2
+		this.opts.RtReflections = this.RtReflections.vcurrent == 2
+		this.opts.MeshAsteroids = this.MeshAsteroids.vcurrent == 2
+		this.opts.Vrs = this.Vrs.vcurrent == 2
 		this.keymap.Save();
 		Game.ApplySettings(this.opts)
 		if (this.isModal) {

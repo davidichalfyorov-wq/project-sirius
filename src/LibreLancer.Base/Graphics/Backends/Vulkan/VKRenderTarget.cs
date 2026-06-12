@@ -24,7 +24,9 @@ internal unsafe class VKDepthBuffer : IDepthBuffer
             MipLevels = 1,
             ArrayLayers = 1,
             Samples = 1,
-            Usage = 0x22, // DEPTH_STENCIL_ATTACHMENT | TRANSFER_DST (initial clear)
+            // DEPTH_STENCIL_ATTACHMENT | TRANSFER_DST (initial clear)
+            // | TRANSFER_SRC (phase 5 depth copy for volumetric composite)
+            Usage = 0x23,
             InitialLayout = VkImageLayout.Undefined
         };
         ulong image;

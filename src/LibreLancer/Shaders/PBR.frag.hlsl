@@ -41,6 +41,9 @@ struct Input
 #endif
     float4 color: TEXCOORD4;
     float4 viewPosition: TEXCOORD5;
+#ifdef RTAO
+    float4 screenPos: SV_Position;
+#endif
 };
 
 cbuffer PBRParameters : register(b3, UNIFORM_SPACE)
@@ -50,6 +53,7 @@ cbuffer PBRParameters : register(b3, UNIFORM_SPACE)
     float Oc;
     float Roughness;
     float Metallic;
+    float DebugMode;
 };
 
 cbuffer TexCoordSelectors : register(b5, UNIFORM_SPACE)
@@ -210,7 +214,8 @@ float4 main(Input input) : SV_Target0
         if (Lights[i].Type == 0)
         {
             surfaceToLight = normalize(-Lights[i].Direction);
-            attenuation = SampleShadow(input.worldPosition, length(input.viewPosition.xyz));
+            attenuation = SampleShadow(input.worldPosition, n, surfaceToLight,
+                length(input.viewPosition.xyz));
         }
         else
         {
@@ -223,6 +228,12 @@ float4 main(Input input) : SV_Target0
             attenuation = Lights[i].Type == 1.0
                 ? 1.0 / (curve.x + curve.y * distanceToLight + curve.z * (distanceToLight * distanceToLight))
                 : quadratic(distanceToLight / max(Lights[i].Range,1.), curve);
+            // FL suns are point lights; the renderer flags the shadowed one.
+            if (Lights[i].CastsShadow > 0)
+            {
+                attenuation *= SampleShadow(input.worldPosition, n, surfaceToLight,
+                    length(input.viewPosition.xyz));
+            }
             if (Lights[i].Spotlight > 0)
             {
                 attenuation *= SampleLocalShadow(input.worldPosition, Lights[i].Position);
@@ -269,6 +280,14 @@ float4 main(Input input) : SV_Target0
         float3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
         color += NdotL * Lights[i].Diffuse * attenuation * (diffuseContrib + specContrib);
     }
+#ifdef RTAO
+    // Ray-traced AO (phase 4, v1): see ComputeRtao in Lighting.hlsl.
+    // Modulates ONLY the ambient/IBL terms; direct light is untouched.
+    float rtao = ComputeRtao(input.worldPosition, n, input.screenPos.xy);
+#endif
+#ifdef DEBUG_VIEW
+    float3 debugIbl = float3(0.0, 0.0, 0.0);
+#endif
 #ifdef IBL
     // Roadmap 5.3: cosine irradiance for diffuse, roughness-mip prefilter
     // + split-sum LUT for specular. Probe faces store sRGB bytes.
@@ -279,17 +298,74 @@ float4 main(Input input) : SV_Target0
         float specMip = perceptualRoughness * 4.0; // SpecularMips - 1
         float3 prefiltered = SRGBtoLinear(PrefilteredMap.SampleLevel(PrefilteredSampler, reflected, specMip)).rgb;
         float2 lutSample = BrdfLutMap.Sample(BrdfLutSampler, float2(NdotVa, perceptualRoughness)).rg;
+#ifdef RTAO
+        irradiance *= rtao;
+        prefiltered *= rtao;
+#endif
         color += irradiance * diffuseColor;
         color += prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
+#ifdef DEBUG_VIEW
+        debugIbl = irradiance * diffuseColor +
+            prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
+#endif
     }
 #else
+#ifdef RTAO
+    color += AmbientColor.xyz * baseColor.xyz * rtao;
+#else
     color += AmbientColor.xyz * baseColor.xyz;
+#endif
 #endif
 
     #ifdef ET_ENABLED
     color += SRGBtoLinear(EtTexture.Sample(EtSampler, GetTexCoord(1, input))).xyz;
     #endif
 
+#ifdef RT_REFLECTIONS
+    // Smooth metals mirror scene geometry (one ray, silhouette shading);
+    // rough surfaces keep the IBL prefilter result untouched.
+    if (perceptualRoughness < 0.25)
+    {
+        float3 reflDir = reflect(-v, n);
+        float reflShade;
+        if (ComputeRtReflection(input.worldPosition, reflDir, n, reflShade) > 0.5)
+        {
+            color += specularColor * reflShade * (1.0 - perceptualRoughness * 4.0);
+        }
+    }
+#endif
+#ifdef DEBUG_VIEW
+    // Channel views (roadmap 9.4, SIRIUS_DEBUG_VIEW): raw material data
+    // replaces the lit colour. The tonemap pass still runs - set
+    // tonemapper=off for exact values.
+    if (DebugMode > 0.5)
+    {
+        int debugChannel = (int)(DebugMode + 0.5);
+        if (debugChannel == 1) return float4(baseColor.rgb, 1.0);
+        if (debugChannel == 2) return float4(n * 0.5 + 0.5, 1.0);
+        if (debugChannel == 3) return float4(perceptualRoughness, perceptualRoughness, perceptualRoughness, 1.0);
+        if (debugChannel == 4) return float4(metallic, metallic, metallic, 1.0);
+        if (debugChannel == 5)
+        {
+            float4 shadowDebug = float4(0.5, 0.0, 0.5, 1.0);
+            for (int debugLight = 0; debugLight < MAX_LIGHTS; debugLight++)
+            {
+                if (debugLight >= int(LightCount)) break;
+                if (Lights[debugLight].Type == 0 || Lights[debugLight].CastsShadow > 0)
+                {
+                    float3 toLight = Lights[debugLight].Type == 0
+                        ? normalize(-Lights[debugLight].Direction)
+                        : normalize(Lights[debugLight].Position - input.worldPosition);
+                    shadowDebug = SampleShadowDebug(input.worldPosition, n,
+                        toLight, length(input.viewPosition.xyz));
+                    break;
+                }
+            }
+            return shadowDebug;
+        }
+        if (debugChannel == 6) return float4(debugIbl, 1.0);
+    }
+#endif
     // Linear HDR out - the tonemap pass owns the display encode
     // (phase 2 linear workflow, docs/LINEAR_AUDIT.md).
     return float4(color, baseColor.a);

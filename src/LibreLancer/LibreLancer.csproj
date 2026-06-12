@@ -58,6 +58,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Interface\Default\interface.json" />
     <EmbeddedResource Include="..\Common\icon.png" />
+    <EmbeddedResource Include="Shaders\SMAA\AreaTex.bin" LogicalName="SMAA.AreaTex.bin" />
+    <EmbeddedResource Include="Shaders\SMAA\SearchTex.bin" LogicalName="SMAA.SearchTex.bin" />
   </ItemGroup>
 
   <ItemGroup>

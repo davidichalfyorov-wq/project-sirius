@@ -259,6 +259,38 @@ internal class SDL3Game : IGame
         OnScreenshotSave?.Invoke(_screenShotPath, Width, height, colordata);
     }
 
+    // SIRIUS_DUMPFRAMES=<dir> writes every Nth frame as PNG on ANY backend
+    // (SIRIUS_DUMPINTERVAL, default 120) - the backend-agnostic counterpart
+    // of SIRIUS_VK_DUMPFRAMES for GL/VK flicker comparisons.
+    private static readonly string? dumpFramesDir =
+        Environment.GetEnvironmentVariable("SIRIUS_DUMPFRAMES");
+    private static readonly int dumpFramesInterval =
+        int.TryParse(Environment.GetEnvironmentVariable("SIRIUS_DUMPINTERVAL"), out var dfi) && dfi > 0 ? dfi : 120;
+    private long dumpFrameCounter;
+
+    private void DumpFrameIfRequested()
+    {
+        if (dumpFramesDir == null)
+        {
+            return;
+        }
+        dumpFrameCounter++;
+        if (dumpFrameCounter % dumpFramesInterval != dumpFramesInterval / 2)
+        {
+            return;
+        }
+        var pixels = new Bgra8[Width * height];
+        RenderContext.Backend.ReadBackBuffer(Width, height, pixels);
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            pixels[i].A = 0xFF;
+        }
+        using var file = System.IO.File.Create(
+            System.IO.Path.Combine(dumpFramesDir, $"frame_{dumpFrameCounter:D5}.png"));
+        // ReadBackBuffer returns bottom-up rows (GL convention): flip on save.
+        ImageLib.PNG.Save(file, Width, height, pixels, true);
+    }
+
     private bool isVsync = false;
 
     public void SetVSync(bool vsync)
@@ -272,6 +304,61 @@ internal class SDL3Game : IGame
     {
         SDL3.SDL_SetWindowFullscreen(windowptr, fullscreen);
         IsFullScreen = fullscreen;
+    }
+
+    /// <summary>
+    /// Deterministic framebuffer size for test/golden captures. Window
+    /// managers may maximise or tile a plain window regardless of the
+    /// configured size, so instead the window goes fullscreen with an
+    /// explicit display mode: Wayland emulates arbitrary modes by viewport
+    /// scaling, which keeps the swapchain at exactly the requested size.
+    /// SIRIUS_WINDOW_SIZE=WxH picks the size; SIRIUS_GOLDEN_DIR alone
+    /// defaults to 2560x1440 (the current baseline resolution).
+    /// </summary>
+    private void ApplyTestWindowSetup(IntPtr sdlWin)
+    {
+        var sizeEnv = Environment.GetEnvironmentVariable("SIRIUS_WINDOW_SIZE");
+        var golden = Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR") != null;
+        if (string.IsNullOrWhiteSpace(sizeEnv) && !golden)
+            return;
+        int w = 2560, h = 1440;
+        if (!string.IsNullOrWhiteSpace(sizeEnv))
+        {
+            var parts = sizeEnv.Split('x', 'X', ',');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out w) || !int.TryParse(parts[1], out h) ||
+                w <= 0 || h <= 0)
+            {
+                FLLog.Warning("Game", $"Bad SIRIUS_WINDOW_SIZE '{sizeEnv}', using 2560x1440");
+                w = 2560;
+                h = 1440;
+            }
+        }
+
+        SDL3.SDL_SetWindowResizable(sdlWin, false);
+        SDL3.SDL_SetWindowSize(sdlWin, w, h);
+        // The mode must come from the display's own list (it carries an
+        // internal driver handle); Wayland exposes emulated modes for the
+        // common resolutions and scales them with a viewport.
+        var display = SDL3.SDL_GetDisplayForWindow(sdlWin);
+        if (!SDL3.SDL_GetClosestFullscreenDisplayMode(display, w, h, 0f, false, out var mode))
+        {
+            FLLog.Warning("Game", $"No fullscreen mode close to {w}x{h}: {SDL3.SDL_GetError()}");
+        }
+        else
+        {
+            if (mode.w != w || mode.h != h)
+                FLLog.Warning("Game", $"Closest fullscreen mode to {w}x{h} is {mode.w}x{mode.h}");
+            if (!SDL3.SDL_SetWindowFullscreenMode(sdlWin, ref mode))
+                FLLog.Warning("Game", $"SDL_SetWindowFullscreenMode {mode.w}x{mode.h} failed: {SDL3.SDL_GetError()}");
+            if (!SDL3.SDL_SetWindowFullscreen(sdlWin, true))
+                FLLog.Warning("Game", $"SDL_SetWindowFullscreen failed: {SDL3.SDL_GetError()}");
+            FLLog.Info("Game", $"Test window setup: fullscreen mode {mode.w}x{mode.h}@{mode.refresh_rate}");
+        }
+        // The initial cursor position is wherever the OS pointer happens
+        // to sit over the new window - it differs per run, changes button
+        // hover state and draws the cursor sprite at a random spot. Park
+        // it in the bottom-right corner.
+        SDL3.SDL_WarpMouseInWindow(sdlWin, w - 8, h - 8);
     }
 
     private Point minWindowSize = Point.Zero;
@@ -414,18 +501,7 @@ internal class SDL3Game : IGame
 
         SDL3.SDL_SetEventEnabled((uint)SDL3.SDL_EventType.SDL_EVENT_DROP_FILE, true);
         windowptr = sdlWin;
-        if (Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR") != null)
-        {
-            // Golden captures need a fixed framebuffer: window managers may
-            // maximise or tile the window regardless of the configured size.
-            SDL3.SDL_SetWindowResizable(sdlWin, false);
-            SDL3.SDL_SetWindowSize(sdlWin, 1024, 768);
-            // The initial cursor position is wherever the OS pointer happens
-            // to sit over the new window - it differs per run, changes button
-            // hover state and draws the cursor sprite at a random spot. Park
-            // it in the bottom-right corner.
-            SDL3.SDL_WarpMouseInWindow(sdlWin, 1016, 760);
-        }
+        ApplyTestWindowSetup(sdlWin);
         IRenderContext? renderBackend =
             RenderBackendSelector.Kind == RenderBackendKind.Vulkan && !vulkanWindowFailed
                 ? VKRenderContext.Create(sdlWin)
@@ -452,12 +528,7 @@ internal class SDL3Game : IGame
                 SDL3.SDL_SetWindowMinimumSize(sdlWin, minWindowSize.X, minWindowSize.Y);
             }
             windowptr = sdlWin;
-            if (Environment.GetEnvironmentVariable("SIRIUS_GOLDEN_DIR") != null)
-            {
-                SDL3.SDL_SetWindowResizable(sdlWin, false);
-                SDL3.SDL_SetWindowSize(sdlWin, 1024, 768);
-                SDL3.SDL_WarpMouseInWindow(sdlWin, 1016, 760);
-            }
+            ApplyTestWindowSetup(sdlWin);
             renderBackend = GLRenderContext.Create(sdlWin);
         }
         if (renderBackend == null)
@@ -703,6 +774,7 @@ internal class SDL3Game : IGame
                 TakeScreenshot();
                 _screenshot = false;
             }
+            DumpFrameIfRequested();
 
             RenderContext.Backend.SwapWindow(sdlWin, isVsync, IsFullScreen);
             // Stutter forensics: one line per slow frame saying where the

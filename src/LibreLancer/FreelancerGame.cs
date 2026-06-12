@@ -156,6 +156,14 @@ namespace LibreLancer
             Services.Add(Typewriter);
             try
             {
+            Render.RenderDocCapture.Initialize();
+            Keyboard.KeyDown += e =>
+            {
+                if (e.Key == Keys.F12)
+                {
+                    Render.RenderDocCapture.RequestCapture();
+                }
+            };
             try { Debug = new DebugView(this) { Enabled = Config.Settings.Debug }; }
             catch (Exception ex) { FLLog.Warning("Game", $"DebugView unavailable: {ex.Message}"); }
             }
@@ -208,6 +216,7 @@ namespace LibreLancer
         private const double FPS_INTERVAL = 0.25;
         private double fps_updatetimer = 0;
         private int drawCallsPerFrame = 0;
+        public int DrawCallsPerFrame => drawCallsPerFrame;
 		protected override void Draw (double elapsed)
 		{
 			RenderContext.ReplaceViewport(0, 0, Width, Height);
@@ -225,11 +234,27 @@ namespace LibreLancer
                 passTimingOverlay ??= new Render.PassTimingOverlay(this);
                 passTimingOverlay.Render();
             }
+            devHud ??= new Render.DevHudOverlay(this);
+            devHud.Render(elapsed);
+            Render.RenderDocCapture.Tick();
+            if (Render.RtSelfTest.Enabled)
+            {
+                rtSelfTest ??= new Render.RtSelfTest();
+                rtSelfTest.Tick(RenderContext);
+            }
+            if (Render.ComputeSmokeTest.Enabled)
+            {
+                computeSmoke ??= new Render.ComputeSmokeTest();
+                computeSmoke.Tick(RenderContext, elapsed);
+            }
 			drawCallsPerFrame = VertexBuffer.TotalDrawcalls;
 			VertexBuffer.TotalDrawcalls = 0;
         }
 
         private Render.PassTimingOverlay? passTimingOverlay;
+        private Render.DevHudOverlay? devHud;
+        private Render.RtSelfTest? rtSelfTest;
+        private Render.ComputeSmokeTest? computeSmoke;
 
 		private void FreelancerGame_ScreenshotSave(string? filename, int width, int height, Bgra8[] data)
 		{

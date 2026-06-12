@@ -19,11 +19,13 @@ static class DXC
         return Shell.Which("dxc");
     }
 
-    static string StageTarget(ShaderStage stage) => stage switch
+    static string StageTarget(ShaderStage stage, bool sm65 = false) => stage switch
     {
-        ShaderStage.Vertex => "vs_6_0",
-        ShaderStage.Fragment => "ps_6_0",
-        ShaderStage.Compute => "cs_6_0",
+        // Ray query (inline raytracing) needs shader model 6.5.
+        ShaderStage.Vertex => sm65 ? "vs_6_5" : "vs_6_0",
+        ShaderStage.Fragment => sm65 ? "ps_6_5" : "ps_6_0",
+        ShaderStage.Compute => sm65 ? "cs_6_5" : "cs_6_0",
+        ShaderStage.Mesh => "ms_6_5",
         _ => throw new InvalidOperationException()
     };
 
@@ -32,19 +34,22 @@ static class DXC
         ShaderStage.Vertex => "VERTEX",
         ShaderStage.Fragment => "FRAGMENT",
         ShaderStage.Compute => "COMPUTE",
+        ShaderStage.Mesh => "MESH",
         _ => throw new InvalidOperationException()
     };
 
     static string TextureSpaceDefine(ShaderStage stage) => stage switch
     {
-        ShaderStage.Vertex => "-DTEXTURE_SPACE=space0",
+        // Mesh and compute stages own the vertex-stage descriptor sets
+        // (4-set scheme; sets 2/3 stay empty for compute).
+        ShaderStage.Vertex or ShaderStage.Mesh or ShaderStage.Compute => "-DTEXTURE_SPACE=space0",
         ShaderStage.Fragment => "-DTEXTURE_SPACE=space2",
         _ => throw new InvalidOperationException()
     };
 
     static string UniformSpaceDefine(ShaderStage stage) => stage switch
     {
-        ShaderStage.Vertex => "-DUNIFORM_SPACE=space1",
+        ShaderStage.Vertex or ShaderStage.Mesh or ShaderStage.Compute => "-DUNIFORM_SPACE=space1",
         ShaderStage.Fragment => "-DUNIFORM_SPACE=space3",
         _ => throw new InvalidOperationException()
     };
@@ -173,7 +178,8 @@ static class DXC
         }
     }
 
-    public static async Task<byte[]> CompileSPIRV(string hlslFile, ShaderStage stage, List<string> defines)
+    public static async Task<byte[]> CompileSPIRV(string hlslFile, ShaderStage stage, List<string> defines,
+        bool rayQuery = false)
     {
         var path = GetDXCPath();
         if (path == null)
@@ -189,9 +195,19 @@ static class DXC
             args.Add("-D");
             args.Add(d);
         }
+        if (stage == ShaderStage.Mesh)
+        {
+            // SPV_EXT_mesh_shader needs the vulkan1.3 target environment.
+            args.Add("-fspv-target-env=vulkan1.3");
+        }
+        else if (rayQuery)
+        {
+            // SPV_KHR_ray_query lives in the vulkan1.2 target environment.
+            args.Add("-fspv-target-env=vulkan1.2");
+        }
         args.AddRange([
             "-T",
-            StageTarget(stage),
+            StageTarget(stage, rayQuery),
             "-D",
             StageDefine(stage),
             UniformSpaceDefine(stage),

@@ -15,6 +15,7 @@ internal enum VkResult
     NotReady = 1,
     Timeout = 2,
     Incomplete = 5,
+    ErrorExtensionNotPresent = -7,
     ErrorOutOfDateKHR = -1000001004,
     SuboptimalKHR = 1000001003
 }
@@ -22,6 +23,27 @@ internal enum VkResult
 internal enum VkStructureType
 {
     ApplicationInfo = 0,
+    DebugUtilsObjectNameInfoEXT = 1000128000,
+    DebugUtilsLabelEXT = 1000128002,
+    PhysicalDeviceVulkan12Features = 51,
+    PhysicalDeviceProperties2 = 1000059001,
+    MemoryAllocateFlagsInfo = 1000060000,
+    BufferDeviceAddressInfo = 1000244001,
+    AccelerationStructureBuildGeometryInfoKHR = 1000150000,
+    AccelerationStructureDeviceAddressInfoKHR = 1000150002,
+    AccelerationStructureGeometryInstancesDataKHR = 1000150004,
+    AccelerationStructureGeometryTrianglesDataKHR = 1000150005,
+    AccelerationStructureGeometryKHR = 1000150006,
+    WriteDescriptorSetAccelerationStructureKHR = 1000150007,
+    PhysicalDeviceAccelerationStructureFeaturesKHR = 1000150013,
+    PhysicalDeviceAccelerationStructurePropertiesKHR = 1000150014,
+    AccelerationStructureCreateInfoKHR = 1000150017,
+    AccelerationStructureBuildSizesInfoKHR = 1000150020,
+    PhysicalDeviceRayQueryFeaturesKHR = 1000348013,
+    PhysicalDeviceMeshShaderFeaturesEXT = 1000328000,
+    PhysicalDeviceMeshShaderPropertiesEXT = 1000328001,
+    PhysicalDeviceFragmentShadingRateFeaturesKHR = 1000226003,
+    PhysicalDeviceFragmentShadingRatePropertiesKHR = 1000226004,
     InstanceCreateInfo = 1,
     DeviceQueueCreateInfo = 2,
     DeviceCreateInfo = 3,
@@ -44,6 +66,7 @@ internal enum VkStructureType
     PipelineColorBlendStateCreateInfo = 26,
     PipelineDynamicStateCreateInfo = 27,
     GraphicsPipelineCreateInfo = 28,
+    ComputePipelineCreateInfo = 29,
     PipelineLayoutCreateInfo = 30,
     SamplerCreateInfo = 31,
     DescriptorSetLayoutCreateInfo = 32,
@@ -54,7 +77,6 @@ internal enum VkStructureType
     CommandBufferAllocateInfo = 40,
     CommandBufferBeginInfo = 42,
     PhysicalDeviceFeatures2 = 1000059000,
-    PhysicalDeviceVulkan12Features = 49,
     PhysicalDeviceVulkan13Features = 53,
     SwapchainCreateInfoKHR = 1000001000,
     PresentInfoKHR = 1000001001,
@@ -97,9 +119,13 @@ internal static class VkConst
     public const ulong StageAllCommands = 0x10000UL;
     public const ulong StageClear = 0x80000UL;
     public const ulong StageColorAttachmentOutput = 0x400UL;
+    public const ulong StageComputeShader = 0x800UL;
+    public const ulong StageFragmentShader = 0x80UL;
     public const ulong AccessTransferWrite = 0x1000UL;
     public const ulong AccessMemoryRead = 0x8000UL;
     public const ulong AccessMemoryWrite = 0x10000UL;
+    public const ulong AccessShaderRead = 0x20UL;
+    public const ulong AccessShaderWrite = 0x40UL;
     public const ulong WholeSize = ~0UL;
 }
 
@@ -469,10 +495,22 @@ internal unsafe struct VkPipelineShaderStageCreateInfo
     public VkStructureType SType;
     public void* PNext;
     public uint Flags;
-    public uint Stage; // 1 = vertex, 16 = fragment
+    public uint Stage; // 1 = vertex, 16 = fragment, 0x20 = compute, 0x80 = mesh
     public ulong Module;
     public byte* PName;
     public void* PSpecializationInfo;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkComputePipelineCreateInfo
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint Flags;
+    public VkPipelineShaderStageCreateInfo Stage; // by value, not a pointer
+    public ulong Layout;
+    public ulong BasePipelineHandle;
+    public int BasePipelineIndex;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -934,11 +972,302 @@ internal struct VkImageBlit
     public VkOffset3D DstOffset1;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+internal struct VkImageCopy
+{
+    public VkImageSubresourceLayers SrcSubresource;
+    public VkOffset3D SrcOffset;
+    public VkImageSubresourceLayers DstSubresource;
+    public VkOffset3D DstOffset;
+    public uint ExtentWidth;
+    public uint ExtentHeight;
+    public uint ExtentDepth;
+}
+
 /// <summary>
 /// Vulkan command table. Instance-level pointers are resolved from
 /// SDL_Vulkan_GetVkGetInstanceProcAddr; device-level pointers are
 /// re-resolved per device for direct dispatch.
 /// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkDebugUtilsObjectNameInfoEXT
+{
+    public VkStructureType SType; // 1000128000
+    public void* PNext;
+    public int ObjectType; // VkObjectType
+    public ulong ObjectHandle;
+    public byte* PObjectName;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkDebugUtilsLabelEXT
+{
+    public VkStructureType SType; // 1000128002
+    public void* PNext;
+    public byte* PLabelName;
+    public fixed float Color[4];
+}
+
+/// <summary>Vulkan 1.2 core feature toggles as a flat VkBool32 array (47
+/// entries, spec order) - safer than 47 hand-counted named fields. Indexed
+/// by the constants below.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceVulkan12Features
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public fixed uint Features[47];
+
+    public const int DescriptorIndexing = 9;
+    public const int BufferDeviceAddress = 38;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceAccelerationStructureFeaturesKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint AccelerationStructure;
+    public uint AccelerationStructureCaptureReplay;
+    public uint AccelerationStructureIndirectBuild;
+    public uint AccelerationStructureHostCommands;
+    public uint DescriptorBindingAccelerationStructureUpdateAfterBind;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceRayQueryFeaturesKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint RayQuery;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPipelineFragmentShadingRateStateCreateInfoKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint FragmentSizeWidth;
+    public uint FragmentSizeHeight;
+    public int CombinerOp0; // KEEP
+    public int CombinerOp1; // KEEP
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceFragmentShadingRateFeaturesKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint PipelineFragmentShadingRate;
+    public uint PrimitiveFragmentShadingRate;
+    public uint AttachmentFragmentShadingRate;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceFragmentShadingRateKHR
+{
+    public VkStructureType SType; // 1000226004
+    public void* PNext;
+    public uint SampleCounts;
+    public uint FragmentSizeWidth;
+    public uint FragmentSizeHeight;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceMeshShaderFeaturesEXT
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint TaskShader;
+    public uint MeshShader;
+    public uint MultiviewMeshShader;
+    public uint PrimitiveFragmentShadingRateMeshShader;
+    public uint MeshShaderQueries;
+}
+
+// VK_EXT_mesh_shader properties: 32 uints + 4 bools, addressed by index
+// (the asteroid pipeline only reads the output vertex/primitive caps).
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceMeshShaderPropertiesEXT
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public fixed uint Values[36];
+
+    public const int MaxMeshWorkGroupTotalCount = 11;
+    public const int MaxMeshOutputVertices = 24;
+    public const int MaxMeshOutputPrimitives = 25;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceAccelerationStructurePropertiesKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public ulong MaxGeometryCount;
+    public ulong MaxInstanceCount;
+    public ulong MaxPrimitiveCount;
+    public uint MaxPerStageDescriptorAccelerationStructures;
+    public uint MaxPerStageDescriptorUpdateAfterBindAccelerationStructures;
+    public uint MaxDescriptorSetAccelerationStructures;
+    public uint MaxDescriptorSetUpdateAfterBindAccelerationStructures;
+    public uint MinAccelerationStructureScratchOffsetAlignment;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkPhysicalDeviceProperties2
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public fixed byte Properties[824];
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkExtensionProperties
+{
+    public fixed byte ExtensionName[256];
+    public uint SpecVersion;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkMemoryAllocateFlagsInfo
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint Flags; // 0x2 = DEVICE_ADDRESS_BIT
+    public uint DeviceMask;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkBufferDeviceAddressInfo
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public ulong Buffer;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureCreateInfoKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint CreateFlags;
+    public ulong Buffer;
+    public ulong Offset;
+    public ulong Size;
+    public int Type; // 0 = TOP_LEVEL, 1 = BOTTOM_LEVEL
+    public ulong DeviceAddress;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureGeometryTrianglesDataKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public int VertexFormat; // 106 = R32G32B32_SFLOAT
+    public ulong VertexData; // device address
+    public ulong VertexStride;
+    public uint MaxVertex;
+    public int IndexType; // 0 = UINT16, 1 = UINT32
+    public ulong IndexData;
+    public ulong TransformData;
+}
+
+/// <summary>VkAccelerationStructureGeometryKHR with the triangles union
+/// member. The union is 64 bytes (triangles is the largest member);
+/// triangles fills it exactly.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureGeometryKHR_Triangles
+{
+    public VkStructureType SType; // AccelerationStructureGeometryKHR
+    public void* PNext;
+    public int GeometryType; // 0 = TRIANGLES
+    public VkAccelerationStructureGeometryTrianglesDataKHR Triangles;
+    public uint Flags; // 0x1 = OPAQUE
+}
+
+/// <summary>VkAccelerationStructureGeometryKHR with the instances union
+/// member (32 bytes used, padded to the 64-byte union size).</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureGeometryKHR_Instances
+{
+    public VkStructureType SType; // AccelerationStructureGeometryKHR
+    public void* PNext;
+    public int GeometryType; // 2 = INSTANCES
+    // The union member starts 8-aligned (it contains pointers); C# packs
+    // the next int right after GeometryType without this explicit pad.
+    public uint GeometryTypePad;
+    public VkStructureType InstSType; // AccelerationStructureGeometryInstancesDataKHR
+    public void* InstPNext;
+    public uint ArrayOfPointers;
+    public ulong Data; // device address of VkAccelerationStructureInstanceKHR array
+    public fixed byte UnionPad[32];
+    public uint Flags;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureBuildGeometryInfoKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public int Type; // 0 = TOP_LEVEL, 1 = BOTTOM_LEVEL
+    public uint Flags; // 0x1 PREFER_FAST_TRACE, 0x8 PREFER_FAST_BUILD (build-pref bits: 4/8)
+    public int Mode; // 0 = BUILD
+    public ulong SrcAccelerationStructure;
+    public ulong DstAccelerationStructure;
+    public uint GeometryCount;
+    public void* PGeometries;
+    public void** PpGeometries;
+    public ulong ScratchData; // device address
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureBuildRangeInfoKHR
+{
+    public uint PrimitiveCount;
+    public uint PrimitiveOffset;
+    public uint FirstVertex;
+    public uint TransformOffset;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureBuildSizesInfoKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public ulong AccelerationStructureSize;
+    public ulong UpdateScratchSize;
+    public ulong BuildScratchSize;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureDeviceAddressInfoKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public ulong AccelerationStructure;
+}
+
+/// <summary>TLAS instance record (64 bytes): 3x4 row-major transform for
+/// column vectors - transpose System.Numerics row-vector matrices.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkAccelerationStructureInstanceKHR
+{
+    public fixed float Transform[12];
+    public uint InstanceCustomIndexAndMask; // low 24: custom index, high 8: mask
+    public uint InstanceShaderBindingTableRecordOffsetAndFlags;
+    public ulong AccelerationStructureReference;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct VkWriteDescriptorSetAccelerationStructureKHR
+{
+    public VkStructureType SType;
+    public void* PNext;
+    public uint AccelerationStructureCount;
+    public ulong* PAccelerationStructures;
+}
+
 internal static unsafe class Vk
 {
     private static delegate* unmanaged[Cdecl]<IntPtr, byte*, IntPtr> getInstanceProcAddr;
@@ -997,6 +1326,7 @@ internal static unsafe class Vk
     public static delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorSetLayoutCreateInfo*, void*, ulong*, VkResult> CreateDescriptorSetLayout;
     public static delegate* unmanaged[Cdecl]<IntPtr, VkPipelineLayoutCreateInfo*, void*, ulong*, VkResult> CreatePipelineLayout;
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkGraphicsPipelineCreateInfo*, void*, ulong*, VkResult> CreateGraphicsPipelines;
+    public static delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkComputePipelineCreateInfo*, void*, ulong*, VkResult> CreateComputePipelines;
     public static delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorPoolCreateInfo*, void*, ulong*, VkResult> CreateDescriptorPool;
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkResult> ResetDescriptorPool;
     public static delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorSetAllocateInfo*, ulong*, VkResult> AllocateDescriptorSets;
@@ -1019,8 +1349,108 @@ internal static unsafe class Vk
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, ulong, uint, VkBufferCopy*, void> CmdCopyBuffer;
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, ulong, VkImageLayout, uint, VkBufferImageCopy*, void> CmdCopyBufferToImage;
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, VkImageLayout, uint, VkImageBlit*, int, void> CmdBlitImage;
+    public static delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, VkImageLayout, uint, VkImageCopy*, void> CmdCopyImage;
+    public static delegate* unmanaged[Cdecl]<IntPtr, uint, uint, uint, void> CmdDispatch;
     public static delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, uint, VkBufferImageCopy*, void> CmdCopyImageToBuffer;
     public static delegate* unmanaged[Cdecl]<IntPtr, uint, VkClearAttachment*, uint, VkClearRect*, void> CmdClearAttachments;
+
+    // Instance-level probing entry points (loaded in LoadInstance)
+    public static delegate* unmanaged[Cdecl]<IntPtr, byte*, uint*, VkExtensionProperties*, VkResult> EnumerateDeviceExtensionProperties;
+    public static delegate* unmanaged[Cdecl]<IntPtr, void*, void> GetPhysicalDeviceFeatures2;
+    public static delegate* unmanaged[Cdecl]<IntPtr, void*, void> GetPhysicalDeviceProperties2;
+    public static delegate* unmanaged[Cdecl]<IntPtr, uint*, VkPhysicalDeviceFragmentShadingRateKHR*, VkResult> GetPhysicalDeviceFragmentShadingRatesKHR;
+
+    // VK_KHR_acceleration_structure / ray_query / buffer_device_address
+    // (optional; loaded via LoadDeviceRT)
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkAccelerationStructureCreateInfoKHR*, void*, ulong*, VkResult> CreateAccelerationStructureKHR;
+    public static delegate* unmanaged[Cdecl]<IntPtr, ulong, void*, void> DestroyAccelerationStructureKHR;
+    public static delegate* unmanaged[Cdecl]<IntPtr, int, VkAccelerationStructureBuildGeometryInfoKHR*, uint*, VkAccelerationStructureBuildSizesInfoKHR*, void> GetAccelerationStructureBuildSizesKHR;
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkAccelerationStructureDeviceAddressInfoKHR*, ulong> GetAccelerationStructureDeviceAddressKHR;
+    public static delegate* unmanaged[Cdecl]<IntPtr, uint, VkAccelerationStructureBuildGeometryInfoKHR*, VkAccelerationStructureBuildRangeInfoKHR**, void> CmdBuildAccelerationStructuresKHR;
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkBufferDeviceAddressInfo*, ulong> GetBufferDeviceAddress;
+
+    /// <summary>Device-level entry point that may be absent: IntPtr.Zero
+    /// instead of throwing.</summary>
+    public static IntPtr DeviceOptional(IntPtr device, string name)
+    {
+        Span<byte> utf8 = stackalloc byte[name.Length + 1];
+        for (var i = 0; i < name.Length; i++)
+        {
+            utf8[i] = (byte)name[i];
+        }
+        utf8[name.Length] = 0;
+        fixed (byte* p = utf8)
+        {
+            return GetDeviceProcAddr(device, p);
+        }
+    }
+
+    /// <summary>Loads ray-query path entry points; returns false when any
+    /// are missing (extensions not enabled).</summary>
+    public static bool LoadDeviceRT(IntPtr device)
+    {
+        CreateAccelerationStructureKHR = (delegate* unmanaged[Cdecl]<IntPtr, VkAccelerationStructureCreateInfoKHR*, void*, ulong*, VkResult>)
+            DeviceOptional(device, "vkCreateAccelerationStructureKHR");
+        DestroyAccelerationStructureKHR = (delegate* unmanaged[Cdecl]<IntPtr, ulong, void*, void>)
+            DeviceOptional(device, "vkDestroyAccelerationStructureKHR");
+        GetAccelerationStructureBuildSizesKHR = (delegate* unmanaged[Cdecl]<IntPtr, int, VkAccelerationStructureBuildGeometryInfoKHR*, uint*, VkAccelerationStructureBuildSizesInfoKHR*, void>)
+            DeviceOptional(device, "vkGetAccelerationStructureBuildSizesKHR");
+        GetAccelerationStructureDeviceAddressKHR = (delegate* unmanaged[Cdecl]<IntPtr, VkAccelerationStructureDeviceAddressInfoKHR*, ulong>)
+            DeviceOptional(device, "vkGetAccelerationStructureDeviceAddressKHR");
+        CmdBuildAccelerationStructuresKHR = (delegate* unmanaged[Cdecl]<IntPtr, uint, VkAccelerationStructureBuildGeometryInfoKHR*, VkAccelerationStructureBuildRangeInfoKHR**, void>)
+            DeviceOptional(device, "vkCmdBuildAccelerationStructuresKHR");
+        GetBufferDeviceAddress = (delegate* unmanaged[Cdecl]<IntPtr, VkBufferDeviceAddressInfo*, ulong>)
+            DeviceOptional(device, "vkGetBufferDeviceAddress");
+        return CreateAccelerationStructureKHR != null &&
+               DestroyAccelerationStructureKHR != null &&
+               GetAccelerationStructureBuildSizesKHR != null &&
+               GetAccelerationStructureDeviceAddressKHR != null &&
+               CmdBuildAccelerationStructuresKHR != null &&
+               GetBufferDeviceAddress != null;
+    }
+
+    // VK_KHR_fragment_shading_rate (optional; loaded via LoadDeviceVrs)
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkExtent2D*, int*, void> CmdSetFragmentShadingRateKHR;
+
+    /// <summary>Loads the per-draw shading rate entry point.</summary>
+    public static bool LoadDeviceVrs(IntPtr device)
+    {
+        CmdSetFragmentShadingRateKHR = (delegate* unmanaged[Cdecl]<IntPtr, VkExtent2D*, int*, void>)
+            DeviceOptional(device, "vkCmdSetFragmentShadingRateKHR");
+        return CmdSetFragmentShadingRateKHR != null;
+    }
+
+    // VK_EXT_mesh_shader (optional; loaded via LoadDeviceMesh)
+    public static delegate* unmanaged[Cdecl]<IntPtr, uint, uint, uint, void> CmdDrawMeshTasksEXT;
+
+    /// <summary>Loads the mesh shader draw entry point; false when the
+    /// extension was not enabled on the device.</summary>
+    public static bool LoadDeviceMesh(IntPtr device)
+    {
+        CmdDrawMeshTasksEXT = (delegate* unmanaged[Cdecl]<IntPtr, uint, uint, uint, void>)
+            DeviceOptional(device, "vkCmdDrawMeshTasksEXT");
+        return CmdDrawMeshTasksEXT != null;
+    }
+
+    // VK_EXT_debug_utils (optional; loaded via LoadDebugUtils)
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkDebugUtilsObjectNameInfoEXT*, VkResult> SetDebugUtilsObjectNameEXT;
+    public static delegate* unmanaged[Cdecl]<IntPtr, VkDebugUtilsLabelEXT*, void> CmdBeginDebugUtilsLabelEXT;
+    public static delegate* unmanaged[Cdecl]<IntPtr, void> CmdEndDebugUtilsLabelEXT;
+
+    /// <summary>Loads VK_EXT_debug_utils entry points (instance extension);
+    /// returns false when the extension wasn't enabled.</summary>
+    public static bool LoadDebugUtils(IntPtr instance)
+    {
+        SetDebugUtilsObjectNameEXT = (delegate* unmanaged[Cdecl]<IntPtr, VkDebugUtilsObjectNameInfoEXT*, VkResult>)
+            InstanceOptional(instance, "vkSetDebugUtilsObjectNameEXT");
+        CmdBeginDebugUtilsLabelEXT = (delegate* unmanaged[Cdecl]<IntPtr, VkDebugUtilsLabelEXT*, void>)
+            InstanceOptional(instance, "vkCmdBeginDebugUtilsLabelEXT");
+        CmdEndDebugUtilsLabelEXT = (delegate* unmanaged[Cdecl]<IntPtr, void>)
+            InstanceOptional(instance, "vkCmdEndDebugUtilsLabelEXT");
+        return SetDebugUtilsObjectNameEXT != null &&
+               CmdBeginDebugUtilsLabelEXT != null &&
+               CmdEndDebugUtilsLabelEXT != null;
+    }
 
     public static void LoadGlobal(IntPtr vkGetInstanceProcAddr)
     {
@@ -1049,6 +1479,14 @@ internal static unsafe class Vk
             Instance(instance, "vkGetDeviceProcAddr");
         GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<IntPtr, void*, void>)
             Instance(instance, "vkGetPhysicalDeviceMemoryProperties");
+        EnumerateDeviceExtensionProperties = (delegate* unmanaged[Cdecl]<IntPtr, byte*, uint*, VkExtensionProperties*, VkResult>)
+            Instance(instance, "vkEnumerateDeviceExtensionProperties");
+        GetPhysicalDeviceFeatures2 = (delegate* unmanaged[Cdecl]<IntPtr, void*, void>)
+            Instance(instance, "vkGetPhysicalDeviceFeatures2");
+        GetPhysicalDeviceProperties2 = (delegate* unmanaged[Cdecl]<IntPtr, void*, void>)
+            Instance(instance, "vkGetPhysicalDeviceProperties2");
+        GetPhysicalDeviceFragmentShadingRatesKHR = (delegate* unmanaged[Cdecl]<IntPtr, uint*, VkPhysicalDeviceFragmentShadingRateKHR*, VkResult>)
+            Instance(instance, "vkGetPhysicalDeviceFragmentShadingRatesKHR");
     }
 
     public static void LoadDevice(IntPtr device)
@@ -1089,6 +1527,7 @@ internal static unsafe class Vk
         CreateDescriptorSetLayout = (delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorSetLayoutCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreateDescriptorSetLayout");
         CreatePipelineLayout = (delegate* unmanaged[Cdecl]<IntPtr, VkPipelineLayoutCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreatePipelineLayout");
         CreateGraphicsPipelines = (delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkGraphicsPipelineCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreateGraphicsPipelines");
+        CreateComputePipelines = (delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkComputePipelineCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreateComputePipelines");
         CreateDescriptorPool = (delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorPoolCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreateDescriptorPool");
         ResetDescriptorPool = (delegate* unmanaged[Cdecl]<IntPtr, ulong, uint, VkResult>)Device(device, "vkResetDescriptorPool");
         AllocateDescriptorSets = (delegate* unmanaged[Cdecl]<IntPtr, VkDescriptorSetAllocateInfo*, ulong*, VkResult>)Device(device, "vkAllocateDescriptorSets");
@@ -1111,6 +1550,8 @@ internal static unsafe class Vk
         CmdCopyBuffer = (delegate* unmanaged[Cdecl]<IntPtr, ulong, ulong, uint, VkBufferCopy*, void>)Device(device, "vkCmdCopyBuffer");
         CmdCopyBufferToImage = (delegate* unmanaged[Cdecl]<IntPtr, ulong, ulong, VkImageLayout, uint, VkBufferImageCopy*, void>)Device(device, "vkCmdCopyBufferToImage");
         CmdBlitImage = (delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, VkImageLayout, uint, VkImageBlit*, int, void>)Device(device, "vkCmdBlitImage");
+        CmdCopyImage = (delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, VkImageLayout, uint, VkImageCopy*, void>)Device(device, "vkCmdCopyImage");
+        CmdDispatch = (delegate* unmanaged[Cdecl]<IntPtr, uint, uint, uint, void>)Device(device, "vkCmdDispatch");
         CmdCopyImageToBuffer = (delegate* unmanaged[Cdecl]<IntPtr, ulong, VkImageLayout, ulong, uint, VkBufferImageCopy*, void>)Device(device, "vkCmdCopyImageToBuffer");
         CmdClearAttachments = (delegate* unmanaged[Cdecl]<IntPtr, uint, VkClearAttachment*, uint, VkClearRect*, void>)Device(device, "vkCmdClearAttachments");
         CreateQueryPool = (delegate* unmanaged[Cdecl]<IntPtr, VkQueryPoolCreateInfo*, void*, ulong*, VkResult>)Device(device, "vkCreateQueryPool");
@@ -1154,6 +1595,22 @@ internal static unsafe class Vk
                 throw new InvalidOperationException($"Vulkan device entry point '{name}' not found");
             }
             return fn;
+        }
+    }
+
+    /// <summary>Instance-level entry point that may be absent (extension
+    /// not enabled): returns IntPtr.Zero instead of throwing.</summary>
+    public static IntPtr InstanceOptional(IntPtr instance, string name)
+    {
+        Span<byte> utf8 = stackalloc byte[name.Length + 1];
+        for (var i = 0; i < name.Length; i++)
+        {
+            utf8[i] = (byte)name[i];
+        }
+        utf8[name.Length] = 0;
+        fixed (byte* p = utf8)
+        {
+            return getInstanceProcAddr(instance, p);
         }
     }
 

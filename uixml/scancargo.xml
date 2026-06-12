@@ -3,7 +3,7 @@
 	<!--<ImageFile Fill="true" Path="scancargo.png"/>-->
 	<Panel Anchor="Center" X="2" Y="-37" Width="429" Height="271" ID="background">
 		<Panel.Background>
-			<DisplayModel model="char_infowindow"/>
+			<DisplayImage image="sirius_panelwide"/>
 		</Panel.Background>
 		<Panel Width="429" Height="271" ID="contents">
 			<TextBlock id="title" Anchor="TopCenter" Width="427" Height="40" TextSize="14" Y="2" TextColor="text" TextShadow="black" Strid="3019"></TextBlock>

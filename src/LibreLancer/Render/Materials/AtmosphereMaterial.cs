@@ -35,18 +35,31 @@ namespace LibreLancer.Render.Materials
             public Color4 Ac;
             public float Oc;
             public float Fade;
+            public float ShellScale;
+            public float Pad0;
+            public Vector4 PlanetCenter;
         }
 
         public override unsafe void Use(RenderContext rstate, IVertexType vertextype, ref Lighting lights, int userData)
         {
             var sh = AllShaders.Atmosphere.Get(rstate.HasFeature(GraphicsFeature.GLES) ? 1U : 0U);
             SetWorld(sh);
-            var p = new AtmosphereParameters() { Dc = ColorSpace.SrgbToLinear(Dc), Ac = ColorSpace.SrgbToLinear(Ac), Fade = Fade, Oc = Alpha };
+            var w = Matrix4x4.CreateScale(Scale) * World.Source[0];
+            var p = new AtmosphereParameters()
+            {
+                Dc = ColorSpace.SrgbToLinear(Dc),
+                Ac = ColorSpace.SrgbToLinear(Ac),
+                Fade = Fade,
+                Oc = Alpha,
+                // The scatter shader recovers planet/shell radii from the
+                // fragment position, the center and this ratio alone.
+                ShellScale = Scale,
+                PlanetCenter = new Vector4(w.Translation, 0)
+            };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
             sh.SetUniformBlock(3, ref p);
             BindTexture(rstate, 0, DtSampler, 0, DtFlags);
-            var w = Matrix4x4.CreateScale(Scale) * World.Source[0];
             var normalmat = w;
             Matrix4x4.Invert(normalmat, out normalmat);
             normalmat = Matrix4x4.Transpose(normalmat);
@@ -62,5 +75,10 @@ namespace LibreLancer.Render.Materials
         {
             get { return true; }
         }
+
+        // Visible from inside during atmosphere entry.
+        public override bool DisableCull => true;
+
+        public override bool DisableDepthWrite => true;
     }
 }

@@ -2,7 +2,7 @@
 <Panel Width="640" Height="480" Anchor="Center">
 <Panel Anchor="Center" Width="588" Height="255" Y="-34" ID="background">
 	<Panel.Background>
-		<DisplayModel model="chat_background"/>
+		<DisplayImage image="sirius_panelchat"/>
 	</Panel.Background>
 	<Panel Width="588" Height="255" ID="contents">
 		<Button id="close" Anchor="TopRight" X="12" Y="12" Style="xbutton"/>

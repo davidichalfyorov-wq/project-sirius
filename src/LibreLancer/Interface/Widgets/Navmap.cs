@@ -106,6 +106,32 @@ namespace LibreLancer.Interface
         private const string SelectSound = "ui_item_select";
         private string systemName = "";
 
+        // UI 2.0 interactive layer: hover/selection glow, player marker,
+        // smooth wheel zoom, universe hover labels.
+        private static readonly Color4 AccentColor = new(0.373f, 0.827f, 0.969f, 1f); // #5FD3F7
+        private const float HoverFadeTime = 0.12f;
+        private const float WheelZoomDuration = 0.22f;
+        private const float MaxWheelZoom = 6f;
+        private uint hoverHash;
+        private float hoverAmount;
+        private Vector2 hoverScreenPos;
+        private float hoverIconSize;
+        private string? hoverName;
+        private CachedRenderString? hoverLabelCache;
+        private SectorStar? hoverStar;
+        private float hoverStarAmount;
+        private CachedRenderString? hoverStarLabelCache;
+        private string? currentSystemNickname;
+        private readonly Dictionary<SectorStar, string> starNames = [];
+        private float zoomAnimDuration = ZoomAnimationDuration;
+
+        private static float MoveToward(float current, float target, float maxDelta)
+        {
+            if (current < target)
+                return MathF.Min(target, current + maxDelta);
+            return MathF.Max(target, current - maxDelta);
+        }
+
         private enum SectorViewState
         {
             System,
@@ -342,6 +368,9 @@ namespace LibreLancer.Interface
 
             zones.Sort((x, y) => x.Sort.CompareTo(y.Sort));
             systemName = ctx.Data.Infocards!.GetStringResource(sys.IdsName);
+            currentSystemNickname = sys.Nickname;
+            hoverHash = 0;
+            hoverAmount = 0;
         }
 
         private static int LabelPriority(ArchetypeType type) => type switch
@@ -456,6 +485,32 @@ namespace LibreLancer.Interface
                 var background = context.Data.NavmapIcons.GetBackground();
                 background.DrawWithClip(context, drawList,
                     new RectangleF(rect.X - OffsetX, rect.Y - OffsetY, rect.Width, rect.Height), rectNoScale, systemAlpha);
+
+                // Subtle vector grid tracking zoom/pan + a glowing frame.
+                var gridLine = AccentColor;
+                gridLine.A = 0.06f * systemAlpha;
+                for (int i = 1; i < 8; i++)
+                {
+                    var gx = rectNoScale.X + (rectNoScale.Width / 8f * i * Zoom) - OffsetX;
+                    if (gx > rectNoScale.X && gx < rectNoScale.X + rectNoScale.Width)
+                    {
+                        drawList.DrawLine(gridLine,
+                            context.PointsToPixelsF(new Vector2(gx, rectNoScale.Y)),
+                            context.PointsToPixelsF(new Vector2(gx, rectNoScale.Y + rectNoScale.Height)));
+                    }
+
+                    var gy = rectNoScale.Y + (rectNoScale.Height / 8f * i * Zoom) - OffsetY;
+                    if (gy > rectNoScale.Y && gy < rectNoScale.Y + rectNoScale.Height)
+                    {
+                        drawList.DrawLine(gridLine,
+                            context.PointsToPixelsF(new Vector2(rectNoScale.X, gy)),
+                            context.PointsToPixelsF(new Vector2(rectNoScale.X + rectNoScale.Width, gy)));
+                    }
+                }
+
+                var frame = AccentColor;
+                frame.A = 0.30f * systemAlpha;
+                drawList.DrawRectangle(context.PointsToPixels(rectNoScale), frame, 1);
             }
 
             if (sectorAlpha > 0)
@@ -464,6 +519,7 @@ namespace LibreLancer.Interface
                 sectorBackground.DrawWithClip(context, drawList, rectNoScale, rectNoScale, sectorAlpha);
                 DrawSectorConnections(context, drawList, rectNoScale, sectorAlpha);
                 DrawSectorStars(context, drawList, rectNoScale, sectorAlpha);
+                DrawSectorHover(context, drawList, rectNoScale, sectorAlpha, parentRect);
                 if (AcceptInput && viewState.Active(SectorViewState.Sector))
                     DrawSelectorMenu(context, drawList, rectNoScale, false);
             }
@@ -568,6 +624,13 @@ namespace LibreLancer.Interface
             jj = 0;
             labelCandidates.Clear();
 
+            var mousePts = new Vector2(context.MouseX, context.MouseY);
+            DrawObject? hoverCandidate = null;
+            var hoverCandidatePos = Vector2.Zero;
+            float hoverCandidateSize = 0;
+            var hoverBestDist = float.MaxValue;
+            bool mouseInMap = AcceptInput && rectNoScale.Contains(mousePts.X, mousePts.Y);
+
             foreach (var obj in objects)
             {
                 if (!isVisited(obj.Hash))
@@ -578,8 +641,27 @@ namespace LibreLancer.Interface
                     MinimumObjectIconSize);
                 var originIcon = szIcon / 2;
 
+                if (mouseInMap)
+                {
+                    var hitRadius = MathF.Max(originIcon, 9f);
+                    var dist = Vector2.DistanceSquared(mousePts, posAbs);
+                    if (dist <= hitRadius * hitRadius && dist < hoverBestDist)
+                    {
+                        hoverBestDist = dist;
+                        hoverCandidate = obj;
+                        hoverCandidatePos = posAbs;
+                        hoverCandidateSize = szIcon;
+                    }
+                }
+
                 if (obj.Renderable != null)
                 {
+                    // Ambient halo so every station/planet blooms softly
+                    // against the dark backdrop.
+                    var halo = AccentColor;
+                    halo.A = 0.12f * systemAlpha;
+                    NavmapFx.DrawGlow(context, drawList, posAbs, szIcon * 2.4f, halo);
+
                     var objRect = new RectangleF(posAbs.X - originIcon, posAbs.Y - originIcon, szIcon, szIcon);
                     obj.Renderable.Draw(context, drawList, objRect, systemAlpha);
                 }
@@ -620,16 +702,84 @@ namespace LibreLancer.Interface
                     label.Object.Name!, systemAlpha);
             }
 
+            // Tradelanes as layered glow lines instead of single hairlines.
+            var pxRatio = context.ViewportHeight / 480f;
             foreach (var tl in tradelanes)
             {
                 var posA = context.PointsToPixels(WorldToMap(tl.StartXZ));
                 var posB = context.PointsToPixels(WorldToMap(tl.EndXZ));
-                var color = Color4.CornflowerBlue;
-                color.A *= systemAlpha;
-                drawList.DrawLine(color, posA, posB);
+                var lane = AccentColor;
+                lane.A = 0.08f * systemAlpha;
+                drawList.DrawLine(lane, posA, posB, 5.5f * pxRatio);
+                lane.A = 0.20f * systemAlpha;
+                drawList.DrawLine(lane, posA, posB, 2.2f * pxRatio);
+                lane.A = 0.80f * systemAlpha;
+                drawList.DrawLine(lane, posA, posB, 1f * pxRatio);
             }
 
             DrawUserWaypointRoute(context, drawList, WorldToMap, systemAlpha);
+
+            // Hover highlight: expanding ring + bright label, faded smoothly.
+            var newHover = hoverCandidate?.Hash ?? 0;
+            if (newHover != 0)
+            {
+                hoverHash = newHover;
+                hoverScreenPos = hoverCandidatePos;
+                hoverIconSize = hoverCandidateSize;
+                hoverName = hoverCandidate!.Name;
+            }
+            hoverAmount = MoveToward(hoverAmount, newHover != 0 ? 1f : 0f,
+                (float)context.DeltaTime / HoverFadeTime);
+            if (hoverAmount > 0 && hoverHash != 0)
+            {
+                var t = (float)context.GlobalTime;
+                var ringSize = MathF.Max(hoverIconSize * 1.9f, 16f) + (MathF.Sin(t * 3f) * 1.2f);
+                var hov = AccentColor;
+                hov.A = 0.75f * hoverAmount * systemAlpha;
+                NavmapFx.DrawRing(context, drawList, hoverScreenPos, ringSize, hov);
+                hov.A = 0.30f * hoverAmount * systemAlpha;
+                NavmapFx.DrawGlow(context, drawList, hoverScreenPos, ringSize * 2.1f, hov);
+
+                if (!string.IsNullOrWhiteSpace(hoverName))
+                {
+                    var labelRect = new RectangleF(hoverScreenPos.X - 70,
+                        hoverScreenPos.Y + (ringSize / 2f) + 1.5f, 140, 14);
+                    RenderText(context, drawList, ref hoverLabelCache, labelRect,
+                        12f * (parentRect.Height / 480), font, InterfaceColor.White,
+                        new InterfaceColor() { Color = Color4.Black }, HorizontalAlignment.Center,
+                        VerticalAlignment.Top, false, hoverName!, systemAlpha * hoverAmount);
+                }
+            }
+
+            // Player position: pulsing beacon.
+            if (playerPositionProvider != null)
+            {
+                var pp = playerPositionProvider();
+                var pPos = WorldToMap(new Vector2(pp.X, pp.Z));
+                if (rectNoScale.Contains(pPos.X, pPos.Y))
+                {
+                    var t = (float)context.GlobalTime;
+                    var pulse = 13f + (MathF.Sin(t * 2.6f) * 2.2f);
+                    var pc = AccentColor;
+                    pc.A = 0.85f * systemAlpha;
+                    NavmapFx.DrawRing(context, drawList, pPos, pulse, pc);
+                    pc.A = 0.35f * systemAlpha;
+                    NavmapFx.DrawGlow(context, drawList, pPos, pulse * 1.8f, pc);
+                    pc.A = 0.95f * systemAlpha;
+                    NavmapFx.DrawGlow(context, drawList, pPos, 5.5f, pc);
+                }
+            }
+
+            // Selection marker pulse around the radial menu anchor.
+            if (selectorMapPosition is { } selectedPos && viewState.Active(SectorViewState.System))
+            {
+                var sPos = MapToScreenPosition(rectNoScale, selectedPos);
+                var t = (float)context.GlobalTime;
+                var sc = AccentColor;
+                sc.A = (0.45f + (0.22f * MathF.Sin(t * 4f))) * systemAlpha;
+                NavmapFx.DrawRing(context, drawList, sPos,
+                    (SelectorSize * 1.9f) + (MathF.Sin(t * 4f) * 1.5f), sc);
+            }
 
             if (AcceptInput && viewState.Active(SectorViewState.System))
                 DrawSelectorMenu(context, drawList, rectNoScale, true);
@@ -707,13 +857,61 @@ namespace LibreLancer.Interface
             if (sectorConnections.Count == 0 || alpha <= 0)
                 return;
 
-            var lineColor = new Color4(0.000f, 0.255f, 0.506f, alpha);
+            // Jump lanes as layered glow: wide soft wash + a bright core.
+            var pxRatio = context.ViewportHeight / 480f;
             foreach (var connection in sectorConnections)
             {
                 var start = context.PointsToPixels(SectorPositionToMap(rect, connection.Source));
                 var end = context.PointsToPixels(SectorPositionToMap(rect, connection.Target));
-                drawList.DrawLine(lineColor, start, end, SectorConnectionThickness);
+                var lane = new Color4(0.10f, 0.45f, 0.75f, 1f);
+                lane.A = 0.10f * alpha;
+                drawList.DrawLine(lane, start, end, SectorConnectionThickness * 1.6f * pxRatio / 3f);
+                lane.A = 0.28f * alpha;
+                drawList.DrawLine(lane, start, end, SectorConnectionThickness * 0.55f * pxRatio / 3f);
+                lane.A = 0.65f * alpha;
+                drawList.DrawLine(lane, start, end, MathF.Max(1f, 0.35f * pxRatio));
             }
+        }
+
+        private string GetStarName(UiContext context, SectorStar star)
+        {
+            if (starNames.TryGetValue(star, out var name))
+                return name;
+            var resolved = context.Data.Infocards?.GetStringResource(star.System.IdsName);
+            if (string.IsNullOrWhiteSpace(resolved))
+                resolved = star.System.Nickname;
+            starNames[star] = resolved!;
+            return resolved!;
+        }
+
+        private void DrawSectorHover(UiContext context, DrawList2D drawList, RectangleF rect, float alpha,
+            RectangleF parentRect)
+        {
+            var hovered = AcceptInput && viewState.Active(SectorViewState.Sector)
+                ? SectorStarAt(rect, new Vector2(context.MouseX, context.MouseY))
+                : null;
+            if (hovered != null)
+                hoverStar = hovered;
+            hoverStarAmount = MoveToward(hoverStarAmount, hovered != null ? 1f : 0f,
+                (float)context.DeltaTime / HoverFadeTime);
+
+            if (hoverStar == null || hoverStarAmount <= 0 || alpha <= 0)
+                return;
+
+            var center = SectorPositionToMap(rect, hoverStar.Position);
+            var t = (float)context.GlobalTime;
+            var ringSize = (hoverStar.Size * 3.0f) + (MathF.Sin(t * 3f) * 1.2f);
+            var hov = AccentColor;
+            hov.A = 0.8f * hoverStarAmount * alpha;
+            NavmapFx.DrawRing(context, drawList, center, ringSize, hov);
+            hov.A = 0.30f * hoverStarAmount * alpha;
+            NavmapFx.DrawGlow(context, drawList, center, ringSize * 2.2f, hov);
+
+            var labelRect = new RectangleF(center.X - 70, center.Y + (ringSize / 2f) + 1.5f, 140, 14);
+            RenderText(context, drawList, ref hoverStarLabelCache, labelRect,
+                11.5f * (parentRect.Height / 480), context.Data.GetFont("$NavMap800"), InterfaceColor.White,
+                new InterfaceColor() { Color = Color4.Black }, HorizontalAlignment.Center,
+                VerticalAlignment.Top, false, GetStarName(context, hoverStar), alpha * hoverStarAmount);
         }
 
         private void DrawSectorStars(UiContext context, DrawList2D drawList, RectangleF rect, float alpha)
@@ -730,7 +928,24 @@ namespace LibreLancer.Interface
                 var pulse = 0.5f + (0.5f * MathF.Sin(((float)context.GlobalTime * 1.8f) + star.Phase));
                 var brightness = 0.45f + (0.55f * pulse);
                 star.Tint!.Color = SectorStarTint(star.TintOffset, brightness);
+
+                // Soft halo in the star's own tint, breathing with the pulse.
+                var halo = star.Tint.Color;
+                halo.A = 0.28f * alpha * brightness;
+                NavmapFx.DrawGlow(context, drawList, center, star.Size * 3.1f, halo);
+
                 star.Renderable!.Draw(context, drawList, Centered(center, star.Size, star.Size), alpha * brightness);
+
+                // "You are here": pulsing ring on the player's current system.
+                if (currentSystemNickname != null &&
+                    string.Equals(star.System.Nickname, currentSystemNickname, StringComparison.OrdinalIgnoreCase))
+                {
+                    var t = (float)context.GlobalTime;
+                    var here = AccentColor;
+                    here.A = (0.50f + (0.22f * MathF.Sin(t * 2.4f))) * alpha;
+                    NavmapFx.DrawRing(context, drawList, center,
+                        (star.Size * 2.6f) + (MathF.Sin(t * 2.4f) * 1.4f), here);
+                }
             }
         }
 
@@ -947,12 +1162,12 @@ namespace LibreLancer.Interface
 
         private void UpdateZoomAnimation(UiContext context, RectangleF mapRect)
         {
-            if (zoomAnimationTime < ZoomAnimationDuration)
+            if (zoomAnimationTime < zoomAnimDuration)
             {
                 zoomAnimationTime = MathF.Min(
-                    ZoomAnimationDuration,
+                    zoomAnimDuration,
                     zoomAnimationTime + (float)context.DeltaTime);
-                var t = zoomAnimationTime / ZoomAnimationDuration;
+                var t = zoomAnimationTime / zoomAnimDuration;
                 t = t * t * (3 - (2 * t));
                 Zoom = MathHelper.Lerp(startZoom, targetZoom, t);
                 var offset = Vector2.Lerp(startOffset, targetOffset, t);
@@ -966,6 +1181,33 @@ namespace LibreLancer.Interface
                 OffsetY = targetOffset.Y;
             }
             ClampOffset(mapRect);
+        }
+
+        public override void OnMouseWheel(UiContext context, RectangleF parentRectangle, float delta)
+        {
+            if (!AcceptInput || delta == 0 || !viewState.Active(SectorViewState.System))
+                return;
+            var mapRect = GetMapRectangle(context, parentRectangle);
+            var mouse = new Vector2(context.MouseX, context.MouseY);
+            if (!mapRect.Contains(mouse.X, mouse.Y))
+                return;
+
+            var newZoom = MathHelper.Clamp(targetZoom * MathF.Pow(1.18f, delta), 1f, MaxWheelZoom);
+            if (MathF.Abs(newZoom - targetZoom) < 0.0001f)
+                return;
+
+            // Keep the map point under the cursor anchored while zooming.
+            // Chained wheel ticks retarget from the in-flight target state.
+            var local = mouse - new Vector2(mapRect.X, mapRect.Y);
+            var mapPoint = (local + targetOffset) / targetZoom;
+            startZoom = Zoom;
+            startOffset = new Vector2(OffsetX, OffsetY);
+            targetZoom = newZoom;
+            targetOffset = (mapPoint * newZoom) - local;
+            zoomAnimDuration = WheelZoomDuration;
+            zoomAnimationTime = 0;
+            zoomed = newZoom > 1.001f;
+            ClampTargetOffset(mapRect, targetZoom);
         }
 
         private Vector2 ScreenToMapPosition(RectangleF mapRect, Vector2 point) =>
@@ -1102,6 +1344,7 @@ namespace LibreLancer.Interface
             zoomed = enabled;
             startZoom = Zoom;
             startOffset = new Vector2(OffsetX, OffsetY);
+            zoomAnimDuration = ZoomAnimationDuration;
             zoomAnimationTime = 0;
             targetZoom = enabled ? ZoomedScale : 1f;
             if (enabled && selectorMapPosition is { } selector)
@@ -1121,6 +1364,7 @@ namespace LibreLancer.Interface
         {
             if (!viewState.Active(SectorViewState.System))
                 return;
+            FLLog.Info("Navmap", "ShowSectorView: switching to universe view");
             viewState.Switch(SectorViewState.Sector, FadeOutDuration, FadeInDuration);
 
             selectorMapPosition = null;
@@ -1137,7 +1381,12 @@ namespace LibreLancer.Interface
             startZoom = 1f;
             OffsetX = OffsetY = 0;
             startOffset = targetOffset = Vector2.Zero;
+            zoomAnimDuration = ZoomAnimationDuration;
             zoomAnimationTime = ZoomAnimationDuration;
+            hoverHash = 0;
+            hoverAmount = 0;
+            hoverStar = null;
+            hoverStarAmount = 0;
             mouseDownOnMap = false;
             draggingMap = false;
             zoomInButton.HeldDown = zoomInButton.Dragging = false;
@@ -1222,6 +1471,7 @@ namespace LibreLancer.Interface
                     ZoomButtonRectangle(mapRect).Contains(context.MouseX, context.MouseY))
                 {
                     context.PlaySound(ZoomInSound);
+                    FLLog.Info("Navmap", $"Entering system {selectedSectorStar.System.Nickname} from universe view");
                     pendingSectorSystem = selectedSectorStar.System;
                     selectedSectorStar = null;
                     selectorMapPosition = null;

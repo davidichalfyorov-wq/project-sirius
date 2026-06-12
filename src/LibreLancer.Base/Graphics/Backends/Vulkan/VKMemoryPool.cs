@@ -25,6 +25,9 @@ internal sealed unsafe class VKMemoryPool
     private readonly uint memoryTypeIndex;
     private readonly bool hostVisible;
     private readonly List<Block> blocks = new();
+
+    /// <summary>Bytes of device memory held by this pool's blocks.</summary>
+    public ulong AllocatedBytes => (ulong)blocks.Count * BlockSize;
     private readonly object poolLock = new();
 
     public VKMemoryPool(IntPtr device, uint memoryTypeIndex, bool hostVisible)

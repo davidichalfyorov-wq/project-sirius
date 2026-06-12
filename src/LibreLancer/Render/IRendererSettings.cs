@@ -38,4 +38,10 @@ public interface IRendererSettings
     PostAaMode SelectedPostAa { get; }
     bool SelectedIbl { get; }
     bool SelectedShadows { get; }
+    bool SelectedRtShadows { get; }
+    bool SelectedRtao { get; }
+    bool SelectedRtReflections { get; }
+    bool SelectedMeshAsteroids { get; }
+    bool SelectedVrs { get; }
+    bool SelectedVolumetricNebulae { get; }
 }

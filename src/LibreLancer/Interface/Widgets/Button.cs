@@ -126,6 +126,43 @@ namespace LibreLancer.Interface
 
         public bool Hovered { get; set; }
 
+        // Smooth state transitions: hover crossfades over ~0.12s, presses
+        // pop the button down over ~0.06s with a spring back on release.
+        private float hoverAmount;
+        private float pressAmount;
+        private const float HoverFadeTime = 0.12f;
+        private const float PressPopTime = 0.06f;
+        private const float PressPopScale = 0.962f;
+        private InterfaceColor? blendedText;
+        private InterfaceColor? blendedShadow;
+
+        private static float MoveToward(float current, float target, float maxDelta)
+        {
+            if (current < target)
+                return MathF.Min(target, current + maxDelta);
+            return MathF.Max(target, current - maxDelta);
+        }
+
+        private InterfaceColor BlendColor(ref InterfaceColor? cache, InterfaceColor? from, InterfaceColor? to,
+            float amount, double time)
+        {
+            var a = from?.GetColor(time) ?? Color4.White;
+            var b = to?.GetColor(time) ?? a;
+            cache ??= new InterfaceColor();
+            cache.Color = Color4.Lerp(a, b, amount);
+            return cache;
+        }
+
+        private static RectangleF ScaledAboutCenter(RectangleF rect, float scale)
+        {
+            var w = rect.Width * scale;
+            var h = rect.Height * scale;
+            return new RectangleF(
+                rect.X + ((rect.Width - w) / 2f),
+                rect.Y + ((rect.Height - h) / 2f),
+                w, h);
+        }
+
         public override void Render(UiContext context, DrawList2D drawList, RectangleF parentRectangle)
         {
             if (!Visible) return;
@@ -135,16 +172,14 @@ namespace LibreLancer.Interface
 
             string txt = GetText(context);
 
-            if (myRectangle.Contains(context.MouseX, context.MouseY))
+            bool mouseInside = myRectangle.Contains(context.MouseX, context.MouseY);
+            if (mouseInside)
             {
                 activeStyle = style?.Hover;
                 if (!DrawText && !string.IsNullOrWhiteSpace(txt))
                 {
                     context.SetTooltip(txt, myRectangle);
                 }
-            }
-            else
-            {
             }
 
             if (HeldDown)
@@ -156,10 +191,33 @@ namespace LibreLancer.Interface
                 context.SetRollover(Strid);
             }
 
+            var dt = (float)context.DeltaTime;
+            hoverAmount = MoveToward(hoverAmount, mouseInside || HeldDown ? 1f : 0f, dt / HoverFadeTime);
+            pressAmount = MoveToward(pressAmount, HeldDown ? 1f : 0f, dt / PressPopTime);
+
+            bool instantState = Selected || !Enabled;
             if (Selected) activeStyle = style?.Selected;
             if (!Enabled) activeStyle = style?.Disabled;
-            var bk = Cascade(style?.Normal?.Background, activeStyle?.Background, Background);
-            bk?.Draw(context, drawList, myRectangle);
+
+            // Press pop: shrink everything slightly around the center.
+            if (pressAmount > 0)
+                myRectangle = ScaledAboutCenter(myRectangle, MathHelper.Lerp(1f, PressPopScale, pressAmount));
+
+            float stateBlend = instantState ? 1f : MathF.Max(hoverAmount, pressAmount);
+            if (Background != null || instantState || activeStyle?.Background == null || stateBlend >= 1f)
+            {
+                // Widget override, checked/disabled states and the settled
+                // end-state draw exactly as before.
+                var bk = Cascade(style?.Normal?.Background, activeStyle?.Background, Background);
+                bk?.Draw(context, drawList, myRectangle);
+            }
+            else
+            {
+                // Crossfade: normal appearance below, active fading in above.
+                style?.Normal?.Background?.Draw(context, drawList, myRectangle);
+                if (stateBlend > 0)
+                    activeStyle.Background.Draw(context, drawList, myRectangle, stateBlend);
+            }
 
             float mLeft = Cascade(style?.Normal?.MarginLeft, activeStyle?.MarginLeft, MarginLeft);
             float mRight = Cascade(style?.Normal?.MarginRight, activeStyle?.MarginRight, MarginRight);
@@ -175,6 +233,17 @@ namespace LibreLancer.Interface
                     drawList.DrawRectangle(context.PointsToPixels(textRect), Color4.Aqua, 1);
                 }
 
+                var normalText = Cascade(style?.Normal?.TextColor, null, TextColor);
+                var activeText = Cascade(style?.Normal?.TextColor, activeStyle?.TextColor, TextColor);
+                var normalShadow = Cascade(style?.Normal?.TextShadow, null, TextShadow);
+                var activeShadow = Cascade(style?.Normal?.TextShadow, activeStyle?.TextShadow, TextShadow);
+                var textColor = instantState
+                    ? activeText
+                    : BlendColor(ref blendedText, normalText, activeText, stateBlend, context.GlobalTime);
+                var shadowColor = instantState
+                    ? activeShadow
+                    : BlendColor(ref blendedShadow, normalShadow, activeShadow, stateBlend, context.GlobalTime);
+
                 RenderText(
                     context,
                     drawList,
@@ -182,8 +251,8 @@ namespace LibreLancer.Interface
                     textRect,
                     Cascade(style?.Normal?.TextSize, activeStyle?.TextSize, TextSize),
                     Cascade(style?.Normal?.FontFamily, activeStyle?.FontFamily, FontFamily),
-                    Cascade(style?.Normal?.TextColor, activeStyle?.TextColor, TextColor),
-                    Cascade(style?.Normal?.TextShadow, activeStyle?.TextShadow, TextShadow),
+                    textColor,
+                    shadowColor,
                     Cascade(style?.Normal?.HorizontalAlignment, activeStyle?.HorizontalAlignment, HorizontalAlignment),
                     Cascade(style?.Normal?.VerticalAlignment, activeStyle?.VerticalAlignment, VerticalAlignment),
                     true,

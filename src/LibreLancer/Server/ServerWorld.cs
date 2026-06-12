@@ -1436,13 +1436,7 @@ namespace LibreLancer.Server
                 // Re-pin EVERY tick: idle physics drift (engine wash,
                 // damping) shifts the hull a few pixels per run otherwise.
                 var ship = Players.Values.First();
-                var pose = teleportOverride is { } pin
-                    ? new Transform3D(
-                        new Vector3(pin.X, pin.Y, pin.Z),
-                        Quaternion.CreateFromAxisAngle(Vector3.UnitY, pin.W * MathF.PI / 180f))
-                    : new Transform3D(
-                        new Vector3(-33000, 500, -28000),
-                        Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI));
+                var pose = SiriusAutoplay.DirectorPose();
                 ship.SetLocalTransform(pose);
                 if (ship.PhysicsComponent?.Body != null)
                 {

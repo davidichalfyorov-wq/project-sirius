@@ -62,14 +62,18 @@ public sealed class ShadowMapRenderer : IDisposable
     /// <summary>Renders all cascades; call before the main scene pass.</summary>
     public void Draw(System.Collections.Generic.List<ObjectRenderer> objects,
         System.Collections.Generic.List<DynamicLight> lights,
-        Vector3 lightDirection, ICamera viewCamera, ResourceManager resources)
+        Vector3 lightDirection, ICamera viewCamera, ResourceManager resources,
+        bool skipSunCascades = false)
     {
         rstate.BeginPassTimer("shadow");
         var restoreTarget = rstate.RenderTarget;
-        rstate.RenderTarget = Atlas;
-        rstate.PushViewport(new Rectangle(0, 0, TileSize * Cascades, TileSize));
-        rstate.ClearAll();
-        rstate.PopViewport();
+        if (!skipSunCascades)
+        {
+            rstate.RenderTarget = Atlas;
+            rstate.PushViewport(new Rectangle(0, 0, TileSize * Cascades, TileSize));
+            rstate.ClearAll();
+            rstate.PopViewport();
+        }
 
         var lighting = Lighting.Empty;
         for (var cascade = 0; cascade < Cascades; cascade++)
@@ -92,6 +96,10 @@ public sealed class ShadowMapRenderer : IDisposable
             LightViewProjection[cascade] = view * projection;
 
             shadowCamera.Set(view, projection, center);
+            if (skipSunCascades)
+            {
+                continue; // matrices/splits computed above stay valid
+            }
             rstate.SetCamera(shadowCamera);
             rstate.PushViewport(new Rectangle(cascade * TileSize, 0, TileSize, TileSize));
             casterMaterial.InverseFarPlane = 1f / LightRange;

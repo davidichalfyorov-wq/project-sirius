@@ -10,7 +10,8 @@ local objects = {
 	ListItem = ClrTypes.LibreLancer_Interface_ListItem.__new,
 	Panel = ClrTypes.LibreLancer_Interface_Panel.__new,
 	TextBlock = ClrTypes.LibreLancer_Interface_TextBlock.__new,
-	Gauge = ClrTypes.LibreLancer_Interface_Gauge.__new
+	Gauge = ClrTypes.LibreLancer_Interface_Gauge.__new,
+	DisplayImage = ClrTypes.LibreLancer_Interface_DisplayImage.__new
 }
 
 function NewObject(obj)

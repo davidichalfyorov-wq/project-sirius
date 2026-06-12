@@ -4,7 +4,7 @@
 #   golden_gate.sh [gl|vulkan] [--update]   (--update: refresh the baseline)
 set -e
 set -o pipefail
-ROOT="/run/media/ddavidich/Disk/Project Sirius"
+ROOT="/run/media/ddavidich/Disk1/Project Sirius"
 RENDERER="${1:-gl}"
 OUT=$(mktemp -d /tmp/golden_gate.XXXX)
 "$ROOT/scripts/golden_capture.sh" "$OUT" "$RENDERER" >/dev/null

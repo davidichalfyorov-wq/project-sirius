@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd "/run/media/ddavidich/Disk/Project Sirius/build/v3"
+cd "/run/media/ddavidich/Disk1/Project Sirius/build/v3"
 exec dotnet lancer.dll "$@"

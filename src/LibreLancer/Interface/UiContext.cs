@@ -95,6 +95,11 @@ namespace LibreLancer.Interface
                 return;
             }
 
+            if (SiriusUiAutotest.HermeticInput)
+            {
+                return;
+            }
+
             if ((e.Buttons & MouseButtons.Left) == MouseButtons.Left)
             {
                 OnMouseDoubleClick();
@@ -115,7 +120,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnMouseUp(MouseEventArgs e)
         {
-            if (game?.Debug?.CaptureMouse == true)
+            if (game?.Debug?.CaptureMouse == true || SiriusUiAutotest.HermeticInput)
             {
                 return;
             }
@@ -129,7 +134,7 @@ namespace LibreLancer.Interface
 
         private void MouseOnMouseDown(MouseEventArgs e)
         {
-            if (game?.Debug?.CaptureMouse == true)
+            if (game?.Debug?.CaptureMouse == true || SiriusUiAutotest.HermeticInput)
             {
                 return;
             }
@@ -233,8 +238,21 @@ namespace LibreLancer.Interface
             return (int) Math.Floor(pixels);
         }
 
+        // Autotest hermetic input: the walker's synthetic cursor persists
+        // between its updates and real mouse state is ignored, so a stray
+        // physical click on the (fullscreen) test window can't drive the UI.
+        private int testMouseX;
+        private int testMouseY;
+        private bool testMouseDown;
+
         public void Update(double globalTime, int mouseX, int mouseY, bool leftDown)
         {
+            if (SiriusUiAutotest.HermeticInput)
+            {
+                testMouseX = mouseX;
+                testMouseY = mouseY;
+                testMouseDown = leftDown;
+            }
             GlobalTime = globalTime;
             var inputRatio = 480 / ViewportHeight;
             MouseX = mouseX * inputRatio;
@@ -248,6 +266,11 @@ namespace LibreLancer.Interface
         {
             ViewportWidth = game.Width;
             ViewportHeight = game.Height;
+            if (SiriusUiAutotest.HermeticInput)
+            {
+                Update(RenderClock.Get(game.TotalTime), testMouseX, testMouseY, testMouseDown);
+                return;
+            }
             Update(RenderClock.Get(game.TotalTime), game.Mouse.X, game.Mouse.Y,
                 game.Mouse.IsButtonDown(MouseButtons.Left));
         }
@@ -298,6 +321,55 @@ namespace LibreLancer.Interface
 
         private RectangleF GetRectangle() => new(0, 0, 480 * (ViewportWidth / ViewportHeight), 480);
 
+        /// <summary>Finds a widget by ID in the active scene (autotest/diagnostics).</summary>
+        public UiWidget? FindWidget(string id) => baseWidget?.GetElement(id);
+
+        /// <summary>
+        /// Resolves a widget's design-space screen rectangle by ID, walking
+        /// the container chain the same way input dispatch does (panels lay
+        /// children out inside their own rectangle; scenes pass the parent
+        /// rect through). Autotest/diagnostics.
+        /// </summary>
+        public bool TryGetWidgetScreenRectangle(string id, out RectangleF rect)
+        {
+            rect = default;
+            return baseWidget != null && FindWidgetRect(baseWidget, GetRectangle(), id, ref rect);
+        }
+
+        private bool FindWidgetRect(UiWidget w, RectangleF parent, string id, ref RectangleF rect)
+        {
+            if (id.Equals(w.ID, StringComparison.OrdinalIgnoreCase))
+            {
+                var d = w.GetDimensions();
+                var p = AnchorPosition(parent, w.Anchor, w.X, w.Y, d.X, d.Y);
+                rect = new RectangleF(p.X, p.Y, d.X, d.Y);
+                return true;
+            }
+
+            if (w is Container c)
+            {
+                var childParent = parent;
+                if (w is Panel)
+                {
+                    var pos = AnchorPosition(parent, w.Anchor, w.X, w.Y, w.Width, w.Height);
+                    childParent = new RectangleF(pos.X, pos.Y, w.Width, w.Height);
+                }
+
+                foreach (var ch in c.Children)
+                {
+                    if (FindWidgetRect(ch, childParent, id, ref rect))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Design-space rectangle of the whole screen (480pt tall).</summary>
+        public RectangleF ScreenRectangle => GetRectangle();
+
         private UiWidget? baseWidget;
         private List<ModalState> modals = [];
 
@@ -308,6 +380,7 @@ namespace LibreLancer.Interface
                 m.Widget.Dispose();
             modals = [];
             baseWidget = widget;
+            FLLog.Info("Interface", $"SetWidget: {widget}");
         }
 
         private int _h = 0;
@@ -396,9 +469,19 @@ namespace LibreLancer.Interface
             GetActive()?.OnEscapePressed();
         }
 
-        public void OnMouseDown() => GetActive()?.OnMouseDown(this, GetRectangle());
+        public void OnMouseDown()
+        {
+            FLLog.Info("UiInput", $"MouseDown at {MouseX:F1},{MouseY:F1}");
+            GetActive()?.OnMouseDown(this, GetRectangle());
+        }
+
         public void OnMouseUp() => GetActive()?.OnMouseUp(this, GetRectangle());
-        public void OnMouseClick() => GetActive()?.OnMouseClick(this, GetRectangle());
+
+        public void OnMouseClick()
+        {
+            FLLog.Info("UiInput", $"MouseClick at {MouseX:F1},{MouseY:F1}");
+            GetActive()?.OnMouseClick(this, GetRectangle());
+        }
 
         public void OnMouseDoubleClick() => GetActive()?.OnMouseDoubleClick(this, GetRectangle());
 
@@ -451,7 +534,7 @@ namespace LibreLancer.Interface
                 return;
             }
 
-            if (game != null && game.Mouse.Wheel != 0)
+            if (game != null && game.Mouse.Wheel != 0 && !SiriusUiAutotest.HermeticInput)
             {
                 OnMouseWheel(game.Mouse.Wheel);
             }

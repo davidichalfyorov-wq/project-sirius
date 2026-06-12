@@ -559,16 +559,24 @@
 		</ButtonStyle.Pressed>
 	</NavmapStyle.AddWaypointButton>
     </NavmapStyle>
-	<!-- Menu -->
+	<!-- Menu — UI 2.0 glass buttons -->
 	<ButtonStyle Width="162" Height="43" Name="menubutton" MouseEnterSound="ui_rollover">
 		<ButtonStyle.Normal TextColor="text" TextShadow="black" TextSize="16" FontFamily="$ButtonText">
 			<ButtonAppearance.Background>
-				<DisplayModel model="fullbutton_animating"/>
+				<DisplayImage image="sirius_menubtn"/>
 			</ButtonAppearance.Background>
 		</ButtonStyle.Normal>
-		<ButtonStyle.Hover TextColor="text_hover"/>
+		<ButtonStyle.Hover TextColor="text_hover">
+			<ButtonAppearance.Background>
+				<DisplayImage image="sirius_menubtn_hover"/>
+			</ButtonAppearance.Background>
+		</ButtonStyle.Hover>
         <ButtonStyle.Disabled TextColor="#666"/>
-        <ButtonStyle.Selected TextColor="yellow"/>
+        <ButtonStyle.Selected TextColor="yellow">
+			<ButtonAppearance.Background>
+				<DisplayImage image="sirius_menubtn_sel"/>
+			</ButtonAppearance.Background>
+        </ButtonStyle.Selected>
 	</ButtonStyle>
 	<ButtonStyle Width="162" Height="36" Name="wirebutton" MouseEnterSound="ui_rollover">
 		<ButtonStyle.Normal TextColor="text" TextShadow="black" TextSize="16" FontFamily="$ButtonText">

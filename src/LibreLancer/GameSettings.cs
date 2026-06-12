@@ -82,6 +82,25 @@ namespace LibreLancer
         public bool Ibl = true;
         [Entry("shadows")]
         public bool Shadows = true;
+        // Phase 4 ray-traced sun shadows; requires ray query support.
+        [Entry("rt_shadows")]
+        public bool RtShadows = false;
+        // Phase 4 ray-traced ambient occlusion (1 ray, ambient terms only).
+        [Entry("rtao")]
+        public bool Rtao = false;
+        // Phase 4 ray-traced reflections (glass/smooth surfaces, 1 ray).
+        [Entry("rt_reflections")]
+        public bool RtReflections = false;
+        // Roadmap 7.5: asteroid cube fields through the mesh-shader path.
+        [Entry("mesh_asteroids")]
+        public bool MeshAsteroids = false;
+        // Roadmap 7.6: variable rate shading (2x2 on background passes).
+        [Entry("vrs")]
+        public bool Vrs = false;
+        // Phase 5 track V: froxel volumetric nebulae (Vulkan/compute only).
+        // Default off until the V12 acceptance flips it.
+        [Entry("volumetric_nebulae")]
+        public bool VolumetricNebulae = false;
 
         float IRendererSettings.LodMultiplier => LodMultiplier;
 
@@ -109,6 +128,12 @@ namespace LibreLancer
         int IRendererSettings.SelectedGodRaysSamples => GodRaysSamples;
         bool IRendererSettings.SelectedIbl => Ibl;
         bool IRendererSettings.SelectedShadows => Shadows;
+        bool IRendererSettings.SelectedRtShadows => Shadows && RtShadows;
+        bool IRendererSettings.SelectedRtao => Rtao;
+        bool IRendererSettings.SelectedRtReflections => RtReflections;
+        bool IRendererSettings.SelectedMeshAsteroids => MeshAsteroids;
+        bool IRendererSettings.SelectedVrs => Vrs;
+        bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulae;
         PostAaMode IRendererSettings.SelectedPostAa => !Hdr
             ? PostAaMode.Off
             : PostAA.ToLowerInvariant() switch
@@ -120,6 +145,9 @@ namespace LibreLancer
 
         public int[]? AnisotropyLevels() => RenderContext.GetAnisotropyLevels();
         public int MaxMSAA() => RenderContext.MaxSamples;
+        public bool RayTracingSupported() => RenderContext.HasFeature(GraphicsFeature.RayQuery);
+        public bool MeshShadersSupported() => RenderContext.HasFeature(GraphicsFeature.MeshShaders);
+        public bool VrsSupported() => RenderContext.HasFeature(GraphicsFeature.VariableRateShading);
 
         [WattleScriptHidden]
         public void Write(TextWriter writer)
@@ -154,6 +182,12 @@ namespace LibreLancer
             writer.WriteLine($"post_aa = {PostAA}");
             writer.WriteLine($"ibl = {(Ibl ? "true" : "false")}");
             writer.WriteLine($"shadows = {(Shadows ? "true" : "false")}");
+            writer.WriteLine($"rt_shadows = {(RtShadows ? "true" : "false")}");
+            writer.WriteLine($"rtao = {(Rtao ? "true" : "false")}");
+            writer.WriteLine($"rt_reflections = {(RtReflections ? "true" : "false")}");
+            writer.WriteLine($"mesh_asteroids = {(MeshAsteroids ? "true" : "false")}");
+            writer.WriteLine($"vrs = {(Vrs ? "true" : "false")}");
+            writer.WriteLine($"volumetric_nebulae = {(VolumetricNebulae ? "true" : "false")}");
         }
 
         [WattleScriptHidden]
@@ -190,7 +224,12 @@ namespace LibreLancer
                 GodRaysSamples = GodRaysSamples,
                 PostAA = PostAA,
                 Ibl = Ibl,
-                Shadows = Shadows
+                Shadows = Shadows,
+                RtShadows = RtShadows,
+                Rtao = Rtao,
+                RtReflections = RtReflections,
+                MeshAsteroids = MeshAsteroids,
+                Vrs = Vrs
             };
 
             return gs;
@@ -222,6 +261,36 @@ namespace LibreLancer
             BloomMips = System.Math.Clamp(BloomMips, 2, 7);
             GodRaysIntensity = System.Math.Clamp(GodRaysIntensity, 0.0f, 2.0f);
             GodRaysSamples = System.Math.Clamp(GodRaysSamples, 16, 96);
+            if (RtShadows && !RenderContext.HasFeature(GraphicsFeature.RayQuery))
+            {
+                FLLog.Info("Config", "rt_shadows requires ray query support, disabling.");
+                RtShadows = false;
+            }
+            if (Rtao && !RenderContext.HasFeature(GraphicsFeature.RayQuery))
+            {
+                FLLog.Info("Config", "rtao requires ray query support, disabling.");
+                Rtao = false;
+            }
+            if (RtReflections && !RenderContext.HasFeature(GraphicsFeature.RayQuery))
+            {
+                FLLog.Info("Config", "rt_reflections requires ray query support, disabling.");
+                RtReflections = false;
+            }
+            if (MeshAsteroids && !RenderContext.HasFeature(GraphicsFeature.MeshShaders))
+            {
+                FLLog.Info("Config", "mesh_asteroids requires mesh shader support, disabling.");
+                MeshAsteroids = false;
+            }
+            if (Vrs && !RenderContext.HasFeature(GraphicsFeature.VariableRateShading))
+            {
+                FLLog.Info("Config", "vrs requires fragment shading rate support, disabling.");
+                Vrs = false;
+            }
+            if (VolumetricNebulae && !RenderContext.HasFeature(GraphicsFeature.Compute))
+            {
+                FLLog.Info("Config", "volumetric_nebulae requires compute support, disabling.");
+                VolumetricNebulae = false;
+            }
             if (!PostAA.Equals("off", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("fxaa", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("smaa", System.StringComparison.OrdinalIgnoreCase))

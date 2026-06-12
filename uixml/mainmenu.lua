@@ -37,11 +37,15 @@ class mainmenu : mainmenu_Designer
 	{
 		Timer(delay, () => PlaySound('ui_motion_swish'))
 		local scn = this.Elements;
+		scn.emblem.Animate('flyinleft', delay, 0.5)
+		scn.wordmark.Animate('flyinleft', delay + 0.05, 0.55)
+		scn.chip_indev.Animate('flyinleft', delay + 0.15, 0.5)
 		scn.newgame.Animate('flyinleft', delay + 0.1, 0.65)
 		scn.loadgame.Animate('flyinleft', delay + 0.25, 0.65)
 		scn.multiplayer.Animate('flyinleft', delay + 0.4, 0.65)
 		scn.options.Animate('flyinleft', delay + 0.55, 0.65)
 		scn.exit.Animate('flyinleft', delay + 0.7, 0.65)
+		scn.bottombar.Animate('flyinbottom', delay + 0.5, 0.5)
 	}
 
 	ExitAnimation(f)
@@ -53,6 +57,10 @@ class mainmenu : mainmenu_Designer
 		e.multiplayer.Animate('flyoutleft', 0.1, 0.6)
 		e.loadgame.Animate('flyoutleft', 0.15, 0.6)
 		e.newgame.Animate('flyoutleft', 0.2, 0.6)
+		e.bottombar.Animate('flyoutbottom', 0, 0.5)
+		e.chip_indev.Animate('flyoutleft', 0.18, 0.5)
+		e.wordmark.Animate('flyoutleft', 0.22, 0.55)
+		e.emblem.Animate('flyoutleft', 0.26, 0.5)
 		Timer(0.8, f)
 	}
 }

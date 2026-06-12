@@ -8,7 +8,7 @@
 	<Panel.Background>
 		<DisplayModel model="front_loadingbar.cmp"/>
 	</Panel.Background>
-	<TextBlock Width="266" Height="20" Y="-2" Anchor="Center" Text="LOADING" Font="Agency FB" TextColor="text" TextShadow="black" TextSize="14"/>
+	<TextBlock Width="266" Height="20" Y="-2" Anchor="Center" Text="LOADING" Font="$ButtonText" TextColor="text" TextShadow="black" TextSize="14"/>
 </Panel>
 </Scene>
 

@@ -504,10 +504,10 @@ public class GameResourceManager : ResourceManager, IDisposable
 
         foreach (var kv in m.Materials)
         {
-            if (!materials.ContainsKey(kv.Key))
+            if (!materials.TryGetValue(kv.Key, out var existing) || existing == null)
             {
                 kv.Value.Initialize(this);
-                materials.Add(kv.Key, kv.Value);
+                materials[kv.Key] = kv.Value;
                 materialfiles[kv.Key] = filename;
             }
         }

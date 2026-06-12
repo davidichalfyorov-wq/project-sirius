@@ -17,6 +17,14 @@ public static class SpvcReflection
         return new GPUProgram(ReflectShader(vertex, ShaderStage.Vertex), ReflectShader(fragment, ShaderStage.Fragment));
     }
 
+    /// <summary>Compute bundles: the compute stage rides in the vertex slot
+    /// (sets 0/1 like vertex/mesh), the fragment slot is an empty stub.</summary>
+    public static GPUProgram ReflectComputeProgram(byte[] compute)
+    {
+        return new GPUProgram(ReflectShader(compute, ShaderStage.Compute),
+            new ReflectedShader("none", Array.Empty<byte>()));
+    }
+
     static unsafe ReflectedShader ReflectShader(byte[] spirv, ShaderStage stage)
     {
         using var ctx = ContextHandle.Create();

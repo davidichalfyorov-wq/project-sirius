@@ -4,5 +4,6 @@ public enum ShaderStage
 {
     Vertex,
     Fragment,
-    Compute
+    Compute,
+    Mesh
 }

@@ -1,0 +1,40 @@
+=== Planet Manhattan PBR — установка (Project Sirius / Discovery FL 4.86) ===
+Дата: 2026-06-12. Сборка: Claude (процедурный фотореалистичный набор, сид 20030304).
+
+ЧТО УЖЕ СДЕЛАНО АВТОМАТИЧЕСКИ (файлы на этом диске уже отредактированы):
+1. DATA/SOLAR/solararch.ini — в конец добавлен архетип planet_manhattan_pbr_4000
+   (клон planet_earthgrncld_4000, ссылается на новый .mat; ванильный sph и
+   детейл-карты/атмосфера переиспользуются).
+2. DATA/UNIVERSE/SYSTEMS/LI01/li01.ini — у объекта Li01_01 (Манхеттен):
+   archetype = planet_manhattan_pbr_4000   (было: planet_earthgrncld_4000)
+
+РАЗМЕЩЕНИЕ ФАЙЛА (обновлено 2026-06-12, после первого теста):
+planet_manhattan_pbr.mat лежит прямо в DATA/SOLAR/PLANETS/ — solararch.ini
+теперь указывает на solar\planets\planet_manhattan_pbr.mat.
+(Розовая планета в первом тесте = старый путь в solararch, исправлено.)
+
+ЧТО ВНУТРИ .MAT:
+- Texture library: manhattan01..04, manhattancap1/2 — 6 граней кубосферы
+  2048x2048, DXT5 + полная мип-цепочка (12 уровней). В RGB запечены:
+  albedo + облака с тенями + дневная подсветка городов. Alpha = маска
+  суша/океан для Masked2DetailMapMaterial (detailmap_rock01 / detailmap_ocean).
+- Material library: planet_earthgrncld_cap1/side1..4/cap2 (имена как в ванильном
+  .sph — поэтому геометрия не трогалась) + planet_earthgrncld_atmosphere.
+
+ПРОВЕРКА: запустить игру, прилететь к Манхеттену (Li01, Нью-Йорк).
+Опционально: открыть .mat в LancerEdit и убедиться, что текстуры читаются.
+
+ОТКАТ:
+1. В li01.ini вернуть: archetype = planet_earthgrncld_4000 (строка помечена
+   комментарием ";Claude PBR 2026-06-12").
+2. Удалить блок "Project Sirius: Planet Manhattan PBR" в конце solararch.ini.
+3. Удалить папку PLANET_MANHATTAN_PBR.
+
+ЗАМЕЧАНИЯ:
+- Если играете на официальном сервере Discovery: серверные проверки файлов могут
+  не пускать изменённые DATA — используйте только в своей сборке/синглплеере.
+- Полные 8K PBR-мастера (albedo/normal/ORM/emissive/height/clouds, PNG) — в
+  zip-карточке чата (li01_planet_manhattan.zip): пригодятся для HD-рендереров,
+  Librelancer или пересборки граней.
+- Если на стыках граней заметите шов/зеркальность — напишите Claude, переставлю
+  порядок граней (это быстрая пересборка только .mat).

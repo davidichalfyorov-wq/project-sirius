@@ -4,7 +4,7 @@
 		<Panel.Background>
 			<DisplayModel model="front_loadingbar.cmp" tint="lightgreen"/>
 		</Panel.Background>
-		<TextBlock Width="266" Height="20" Y="-2" Anchor="Center" Strid="124" Font="Agency FB" TextColor="text" TextShadow="black" TextSize="14"/>
+		<TextBlock Width="266" Height="20" Y="-2" Anchor="Center" Strid="124" Font="$ButtonText" TextColor="text" TextShadow="black" TextSize="14"/>
 	</Panel>
 </Scene>
 

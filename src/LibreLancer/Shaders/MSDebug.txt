@@ -1,0 +1,3 @@
+meshshader MSDebug.mesh.hlsl
+fragment MSDebug.frag.hlsl
+feature BIG 1

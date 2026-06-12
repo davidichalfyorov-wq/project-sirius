@@ -1,5 +1,206 @@
 # CHANGELOG — Project Sirius Discovery 4.86 compatibility pass
 
+## 2026-06-12 — Графика, фаза 5 (часть 1): compute-фундамент движка; фиксы DXT1-альфы, гонки частиц и сциссора
+
+- **Compute shaders (фаза 5, трек F)**: полный стек с нуля.
+  Тулчейн: директива `computeshader X.comp.hlsl` (SPIR-V-only бандлы,
+  маркер EntryPoint "CSMain" по образцу mesh, формат v1 не тронут),
+  space-конвенция compute = space0/space1 (вертексные сеты, 2/3 пустые),
+  rayQuery-пермутации cs_6_5+vulkan1.2. Рантайм: vkCreateComputePipelines
+  + vkCmdDispatch (кэш по shader.Id — PipelineKey не используется,
+  graphics-стейт для compute мусор), bind point COMPUTE в
+  CmdBindPipeline/CmdBindDescriptorSets, публичные
+  `DispatchCompute/SetStorageImage/BarrierComputeToGraphics/
+  GraphicsToCompute/ComputeToCompute` (+ реализация пустовавшего
+  `MemoryBarrier()`), диспатч рвёт активный рендер-пасс штатно
+  (EndRenderingIfActive — прецедент блитов). Storage images: рефлексия
+  OpTypeImage Sampled==2 (+Is3D), DescriptorType 3 в пулах/лейаутах,
+  GENERAL-layout навсегда (без layout-трекинга), guard на коллизию
+  t/u-регистров при загрузке, обязательная `[[vk::image_format]]`
+  (warning при пропуске). Texture3D: VKTexture3D (ImageType 2, single
+  mip, storage-флаг) + публичный класс + фабрика; 3D-фоллбеки 1×1×2.
+  Sampled depth: `CopyDepth(rt, tex)` — D32→D32 vkCmdCopyImage с
+  round-trip барьерами (живой depth-аттачмент несэмплируем by design).
+  `GraphicsFeature.Compute` (queue-family бит + `SIRIUS_NO_COMPUTE=1`),
+  GL не тронут (default-методы, бандлы за HasFeature). Смоук
+  `SIRIUS_COMPUTE_SMOKE=1`: compute пишет градиент в RWTexture3D 32³,
+  фрагментный виз сэмплит анимированный слайс — подтверждено скрином;
+  валидация 0; голдены GL 0.99997 / VK 0.99985 / RT-гейт PASS.
+- **Фикс: DXT1-текстуры теряли альфу на Vulkan** — VKFormats маппил Dxt1
+  в BC1_RGB (131), отбрасывая 1-битную punch-through альфу, которую GL
+  честно грузит (COMPRESSED_RGBA_S3TC_DXT1). Все DXT1-прозрачности на VK
+  рисовались непрозрачными: дым лавовой интро-сцены шёл жёсткими
+  тёмными квадами и «гасил» огонь при сорт-перестановках (мерцание,
+  репорт пользователя). Теперь BC1_RGBA (133) — пиксель-в-пиксель с GL.
+- **Фикс: CPU/GPU-гонка стриминговых storage-буферов** — частицы (и
+  кости) пишутся хостом в начале кадра ДО fence-ожидания предыдущего,
+  GPU ещё читал тот же persistently-mapped буфер → рваные/мусорные
+  квады частиц на плотных эффектах. VKStorageBuffer теперь кольцо ×3,
+  BeginStreaming ротирует буфер (статичные клиенты без BeginStreaming
+  остаются на буфере 0 — CubeField не задет).
+- **Фикс: сциссор-фоллбек без Y-флипа на свопчейне** — при выключенном
+  scissor клип брался из viewport-ректа в GL bottom-left конвенции без
+  конверсии: любой не-полноэкранный PushViewport на свопчейн-пассе давал
+  пустое пересечение viewport×scissor и молча не рисовал НИЧЕГО
+  (полноэкранные ректы совпадают в обеих конвенциях — потому не болело).
+  Сциссор-фоллбек теперь флипается вместе с viewport.
+- **Инструменты**: `SIRIUS_VK_DUMPINTERVAL=N` (плотность VK-дампов),
+  `SIRIUS_DUMPFRAMES`/`SIRIUS_DUMPINTERVAL` — бэкенд-агностичные дампы
+  кадров через ReadBackBuffer (GL/VK сравнение мерцаний); конвенции
+  авторинга compute в src/Shader Readme.txt.
+
+## 2026-06-12 — Графика, фаза 4 (часть 4): VRS, финал фазы; атмосфера планет 2.0; фикс гонки материалов
+
+- **VRS (7.6, pipeline-tier)**: `VK_KHR_fragment_shading_rate` — probe
+  с перечислением доступных рейтов в лог
+  (vkGetPhysicalDeviceFragmentShadingRatesKHR), статический shading rate
+  в ключе PSO-кэша (динамик-стейт отброшен: one-shot пассы кубмап-бейков
+  не проходят через BindDynamicState — ловили вероятностный UB), хук в
+  DrawStarsphereLayers шейдит фон 2×2, корабли/HUD/текст остаются 1×1 по
+  построению. Механика доказана RenderDoc-капчурой: единственный
+  rate-(2,2) дро кадра — фуллскрин-композит старсферы; ship-кропы A/B
+  бит-в-бит. Настройка `vrs` (INI+UI VARIABLE RATE SHADING), дефолт off;
+  `SIRIUS_NO_VRS=1`. Attachment-tier — зафиксирован отказ: на RTX 5090
+  фоновый пасс ~0.1 мс, выигрыш ниже шума замера. Защитное правило:
+  VRS-структура прикрепляется только к rate≠1 пайплайнам (остальные
+  байт-идентичны до-VRS-чейну). Фаза 4 роадмапа закрыта
+  (mesh — experimental, см. часть 3).
+- **Починена давняя вероятностная «магента-сцена»** (весь фон/объекты
+  сплошным пурпуром раз в N запусков, чаще на холодном старте):
+  `GameResourceManager.AddMaterials` пропускал ключи с null-плейсхолдерами
+  (copy-конструктор сессионных ресурс-менеджеров регистрирует ключи как
+  null) и материал навсегда оставался незагруженным → RigidModel рисовал
+  DefaultMaterial (Dc=Magenta). Теперь null-плейсхолдеры перезаполняются
+  (паттерн AddTextures/AddImages); при фоллбеке на DefaultMaterial пишется
+  warning с CRC материала (один раз на CRC).
+- **Атмосфера планет 2.0** (заказ): полный реврайт Atmosphere.frag.hlsl —
+  Beer-Lambert single-scattering (8 сэмплов вдоль луча), экспоненциальная
+  плотность (шкала высоты 12% толщины шелла — свечение прилегает к
+  поверхности вместо легаси-гало в полрадиуса), Rayleigh-фаза + Mie
+  (Henyey-Greenstein g=0.76, тёплый ореол на солнце), мягкий терминатор
+  по NdotL, надир почти прозрачен (τ≈0.12), лимб-хорда насыщается в
+  тонкое яркое кольцо. Легаси-рампа DtTexture сохранена как тинт
+  (ресэмпл по средней высоте луча) — палитры планет Discovery работают.
+  Камера внутри шелла получает честный влёт: периферийная дымка,
+  вуаль над поверхностью, рост плотности с погружением. Шелл больше не
+  пишет глубину и виден изнутри (RenderMaterial.DisableDepthWrite +
+  восстановление в CommandBuffer по образцу DisableCull; DisableCull у
+  атмосферы). Радиусы планеты/шелла восстанавливаются в шейдере из
+  позиции фрагмента, центра и FL-параметра Scale — загрузчик не трогали.
+  Golden-базлайны (gl + rt) переcняты: в кадрах теперь PBR-Манхэттен и
+  новая атмосфера.
+- Профиль пользователя: experimental-флаги `vrs`/`mesh_asteroids`
+  сброшены в false после полевого vkQueueSubmit2 DEVICE_LOST (-4) на
+  комбинации обоих флагов; репро на текущем билде не воспроизводится
+  (защитный фикс выше), причина под наблюдением.
+
+## 2026-06-12 — Графика, фаза 4 (часть 3): mesh-shader тулчейн (7.5 / C1)
+
+- **VK_EXT_mesh_shader** подключён: probe при старте (фичи+пропертис,
+  SIRIUS_NO_MS-эскейп), расширение и фичи в device-чейн,
+  vkCmdDrawMeshTasksEXT, GraphicsFeature.MeshShaders. На RTX 5090:
+  supported, max output 256 верт / 256 прим.
+- **Компилятор**: директива `meshshader X.mesh.hlsl` в .txt-описаниях;
+  DXC-профиль ms_6_5 + vulkan1.3 (SPIR-V 1.6, MeshShadingEXT). Без смены
+  формата бандла: mesh-модуль едет в vertex-слоте контейнера с маркером
+  EntryPoint="MSMain", остальные пейлоады NULL — старые бандлы читаются
+  без изменений, mesh-бандлы загружаются только за фича-гейтом.
+- **Рантайм**: VKShader распознаёт mesh-бандлы (стейдж-флаги сетов,
+  пайплайн без vertex input / input assembly), RenderContext.DrawMeshTasks
+  (GL — no-op). Смоук-тест SIRIUS_MS_DEBUG=1 рисует mesh-эмитированный
+  градиентный треугольник поверх сцены — путь от HLSL до пикселей доказан,
+  валидация чистая, все гейты (golden gl+vulkan, rt_golden) PASS при
+  спящей фиче.
+
+## 2026-06-12 — Графика, фаза 4 (часть 2): RTAO, RT-отражения v1, закалка RT-трека
+
+- **RTAO** (`rtao` в INI + тогл RT AMBIENT OCCLUSION): один cosine-луч на
+  пиксель с детерминированным хэшем (golden-гейты стабильны), TMax 40 м,
+  модулирует только ambient/IBL-термы — прямой свет нетронут. Работает на
+  PBR- и Basic-материалах (общий ComputeRtao + HLSL-static
+  AmbientOcclusionTerm, сигнатуры лайтинга не тронуты). SIRIUS_RT_DEBUG=3 —
+  AO-вью с камеры. Эффект на станционной позе ~10.4К пикселей,
+  детерминирован; rt-golden-гейт дополнен AO-вариантом (стабильность
+  SSIM≥0.995 + пиксельный ассерт эффекта ≥3000).
+- **RT-отражения v1** (`rt_reflections` + тогл RT REFLECTIONS): зеркальный
+  луч для стекла (ENVMAP-ветка Basic; промах — прежний кубмап) и гладких
+  PBR-поверхностей (roughness<0.25); шейдинг хита — дистанц-затухающий
+  силуэт (ray query без hit-шейдеров; точный цвет хита — v2 с
+  per-instance буфером). Виз-приёмка ждёт сцену со стеклом в кадре.
+- **Закалка**: при включённых RT-тенях GPU-проходы солнечных каскадов
+  скипаются (матрицы для ранних выходов RT-шейдера остаются) —
+  shadow-пасс 1.1–3.0 мс → 0; TLAS собирается из всего мира с капом 25 км
+  (раньше — только видимый список: закадровые кастеры не давали теней);
+  SIRIUS_RT_BUILD удалён (сцена строится от настроек или SIRIUS_RT_DEBUG);
+  Dev HUD показывает BLAS/инстансы. Кадр станционной позы с RT-тенями:
+  3.2 мс → 2.1 мс GPU (rt_build 0.2 мс).
+- Полный регресс: rt_golden_gate ×2, golden gl+vulkan, autotest menu+full —
+  всё PASS; валидация 0 сообщений во всех вариантах.
+
+## 2026-06-12 — Графика, фаза 4 (часть 1): RT-тени солнца + починка CSM в космосе
+
+- **Ray tracing, ядро (B1–B5)**: ray query во фрагментных шейдерах на Vulkan 1.3
+  (VK_KHR_acceleration_structure + ray_query, без RT-пайплайна/SBT). BLAS-кэш по
+  мешам (LOD0, ≤8 билдов/кадр, eviction), TLAS пересобирается каждый кадр
+  (grow-only буферы, dedicated DEVICE_ADDRESS-аллокации, deferred destroy).
+  Дескрипторы AS через PNext, пустой TLAS-фоллбек. RTDebug-вью
+  (SIRIUS_RT_DEBUG=1|2): рейкаст из камеры, дистанция/instance-id.
+  Vulkan-only пермутации шейдеров: директива `vulkanfeature` в LLShaderCompiler
+  (SPIR-V SM6.5; GL/DXIL/MSL алиасятся на базовую пермутацию).
+- **RT-тени солнца (B6)**: `rt_shadows` в INI + тогл RT SHADOWS в опциях (серый
+  без поддержки). Один ACCEPT_FIRST_HIT-луч к солнцу в SampleShadow
+  (normal-offset bias, без face culling, opaque-only v1). Включаются при living
+  CSM-пассе кадра; выключение — байт-в-байт CSM-путь (гейты SSIM-нейтральны).
+- **Починен многослойный баг: каскадные тени в космосе не работали никогда**:
+  (1) CSM-гейт читал список объектов до его населения; (2) детект «космической
+  сцены» искал объект солнца, который вне interest-радиуса клиента не
+  существует — заменён на признак загруженной системы; (3) SampleShadow
+  вызывался только для directional-светов, а солнца FL — point-источники:
+  теневой свет теперь помечается флагом CastsShadow (Directional приоритетно,
+  иначе point с максимальным Range). CSM-атлас в космосе реально рисуется
+  (1.1–3.0 мс @1440p у станции; GL временно без сцен-теней — фича-гейт
+  SceneShadows из-за недиагностированного зависания кастер-пасса).
+- **Debug-вью каналов (E4 §9.4)**: SIRIUS_DEBUG_VIEW=albedo|normals|roughness|
+  metallic|shadow|ibl — материальные каналы вместо шейдинга; канал shadow
+  цветодиагностический (red=выкл, green=за каскадом, yellow=вне uv, blue=RT).
+- **Тест-инфраструктура**: scripts/rt_golden_gate.sh — стабильность SSIM≥0.995
+  + ассерт наличия эффекта (ssim(on, off-база)<0.98; живой путь 0.9586,
+  мёртвый 0.9996) + автоассерт валидации; PASS ×2 подряд. Голден-капчуры
+  детерминированы: глушится стартовый газ (клиентский предикшен давал дрейф
+  ~10 м с джиттером), позы бит-в-бит. ShaderBundle дедупит пейлоады по
+  содержимому (раньше 1024-пермутационный бандл компилил ~1000 одинаковых
+  GL-программ и вешал загрузку). rt_build 0.1–0.2 мс; валидация чистая.
+
+## 2026-06-11 — Графика, фаза 1.5 завершена: SMAA 1x
+
+- **SMAA 1x реализован** (роадмап 4.7, последний пункт exit-чеклиста фазы 1):
+  референсный SMAA.hlsl (iryoku) как includes/SMAA.hlsl + порт-глю
+  includes/SmaaPort.hlsl (SMAA_CUSTOM_SL, один linear-clamp сэмплер как в
+  GLSL-пути референса, SMAA_RT_METRICS из b3), три фуллскрин-пасса
+  SmaaEdges/SmaaWeights/SmaaBlend (luma edge detection -> blending weights
+  -> neighborhood blending; offset-функции *VS считаются в пикселе — общий
+  вершинник Tonemap.vert без юниформов). LUT-текстуры AreaTex 160×560 и
+  SearchTex 64×16 вшиты EmbeddedResource (генератор scripts/smaa_textures.py,
+  лицензия Shaders/SMAA/LICENSE-SMAA.txt), загрузка Render/SmaaTextures.cs
+  (AreaTex расширяется в BGRA8 — беззнакового RG8 нет ни на GL, ни на VK).
+- **Пайплайн**: ветка PostAa==Smaa в HdrFramePipeline.End() — tonemap в
+  LdrTarget, затем edges->weights->blend в restoreTarget; intermediates в
+  SizedTargets (full-res Bgra8 ×2); пасс-таймеры post.smaa.edges/weights/blend;
+  debug-вью SIRIUS_DEBUG_SMAA=1 (контактный лист edges+weights).
+- **UI**: «SMAA» в селекторе ANTI-ALIASING (options.lua post_aa_levels),
+  write-back в do_goback обобщён через idx_to_post_aa (раньше жёстко "fxaa").
+- **Приёмка** (станция THN-меню, 2560×1440, A/B/C off/fxaa/smaa): SMAA
+  реконструирует длинные кромки чисто там, где FXAA оставляет зубцы, и
+  заметно меньше мылит текстуры; звёздное поле не съедается (8321→8423
+  яркrix пикселей); HUD/текст не тронуты (UI после пост-AA). GL-путь
+  (SPIRV-Cross трансляция с одним сэмплером) работает.
+- **Бюджет**: post.smaa.* суммарно 0.065–0.078 мс @2560×1440 (бюджет 0.3 мс,
+  запас ×4). FXAA 0.01 мс остаётся дефолтом; SMAA — выбор в настройках.
+- **Гейты**: пост-AA в golden-капчуре по-прежнему off → SSIM-нейтральность
+  подтверждена: GL 0.99975/0.99983/0.99983, VK 0.98858/0.99970/0.99968,
+  autotest menu ALL PASS. Exit-чеклист фазы 1 теперь полный ✓.
+
+
 ## 2026-06-11 — Дожим хотфикса: вайтлист filmic, INDEV, диагностика спайков кадра
 
 - **Filmic реально включён**: GameSettings.Validate() (эра фазы 1) знал

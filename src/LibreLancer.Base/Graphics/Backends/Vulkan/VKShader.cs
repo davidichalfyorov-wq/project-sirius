@@ -23,6 +23,18 @@ internal unsafe class VKShader : IShader
 
     public ulong VertexModule;
     public ulong FragmentModule;
+
+    /// <summary>True when the bundle's first stage is a mesh shader
+    /// (EntryPoint marker "MSMain" written by the compiler) - the vertex
+    /// module slot then holds a mesh module and pipelines are built
+    /// without vertex input state.</summary>
+    public readonly bool IsMeshPipeline;
+
+    /// <summary>True when the bundle is a single compute stage (EntryPoint
+    /// marker "CSMain"). The vertex module slot holds the compute module,
+    /// there is no fragment module, and the shader binds at the compute
+    /// pipeline bind point via DispatchCompute.</summary>
+    public readonly bool IsComputePipeline;
     public readonly ulong[] SetLayouts = new ulong[SetCount];
     public ulong PipelineLayout;
     public readonly List<SpirvResource> Resources = new();
@@ -61,10 +73,18 @@ internal unsafe class VKShader : IShader
     public VKShader(IntPtr device, ReadOnlySpan<byte> program)
     {
         Id = nextId++;
-        var inputLocations = ReadInputTable(program);
+        var entryPoint = PeekEntryPoint(program);
+        IsMeshPipeline = entryPoint == "MSMain";
+        IsComputePipeline = entryPoint == "CSMain";
+        var inputLocations = IsMeshPipeline || IsComputePipeline ? null : ReadInputTable(program);
         var blob = ShaderBytecodes.GetSPIRV(program);
         ReadStage(device, ref blob, isVertex: true, inputLocations);
-        ReadStage(device, ref blob, isVertex: false, null);
+        if (!IsComputePipeline)
+        {
+            // Compute bundles carry a zero-length fragment stub - a
+            // VkShaderModule with codeSize 0 is invalid, skip it.
+            ReadStage(device, ref blob, isVertex: false, null);
+        }
 
         foreach (var resource in Resources)
         {
@@ -93,6 +113,23 @@ internal unsafe class VKShader : IShader
         }
 
         CreateLayouts(device);
+        if (IsMeshPipeline || IsComputePipeline)
+        {
+            var resourceList = string.Join("; ", Resources.ConvertAll(r =>
+                $"{r.Kind} s{r.Set}b{r.Binding} {r.Name}"));
+            FLLog.Info("Vulkan", $"{(IsComputePipeline ? "Compute" : "Mesh")} shader {Id}: {resourceList}");
+        }
+    }
+
+    private static string PeekEntryPoint(ReadOnlySpan<byte> program)
+    {
+        var blob = ShaderBytecodes.GetSPIRV(program);
+        var reader = new SpanReader(blob);
+        for (var i = 0; i < 4; i++)
+        {
+            reader.ReadVarUInt32();
+        }
+        return reader.ReadUTF8();
     }
 
     /// <summary>
@@ -160,16 +197,41 @@ internal unsafe class VKShader : IShader
     {
         SpirvResourceKind.Sampler => 0,       // VK_DESCRIPTOR_TYPE_SAMPLER
         SpirvResourceKind.SampledImage => 2,  // VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+        SpirvResourceKind.StorageImage => 3,  // VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
         SpirvResourceKind.UniformBuffer => 8, // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+        SpirvResourceKind.AccelerationStructure => 1000150000, // ..._ACCELERATION_STRUCTURE_KHR
         _ => 7                                // VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
     };
 
     private void CreateLayouts(IntPtr device)
     {
+        // The 2N/2N+1 de-alias rule maps tN and uN registers to the SAME
+        // binding (2N): authoring rule says t/u indices must not collide
+        // within one shader. Catch violations at load instead of letting
+        // the validation layer report a confusing duplicate-binding error.
+        var seen = new Dictionary<(uint Set, uint Binding), string>();
+        foreach (var resource in Resources)
+        {
+            if (resource.IsVertexInput)
+            {
+                continue;
+            }
+            var key = (resource.Set, resource.Binding);
+            if (seen.TryGetValue(key, out var other))
+            {
+                throw new InvalidOperationException(
+                    $"Shader {Id}: descriptor collision at set {resource.Set} binding {resource.Binding}: " +
+                    $"'{other}' vs '{resource.Name}' (t- and u-register indices must not overlap)");
+            }
+            seen[key] = resource.Name;
+        }
+
         for (var set = 0; set < SetCount; set++)
         {
             var bindings = new List<VkDescriptorSetLayoutBinding>();
-            var stage = set is SetVertexTextures or SetVertexUniforms ? 1u : 16u; // vertex / fragment
+            // Mesh/compute bundles bind the first-stage sets to their stage.
+            var firstStage = IsComputePipeline ? 0x20u : IsMeshPipeline ? 0x80u : 1u;
+            var stage = set is SetVertexTextures or SetVertexUniforms ? firstStage : 16u;
             foreach (var resource in Resources)
             {
                 if (resource.Set != set || resource.IsVertexInput)

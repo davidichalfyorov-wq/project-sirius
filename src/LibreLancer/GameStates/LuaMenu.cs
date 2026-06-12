@@ -477,6 +477,15 @@ namespace LibreLancer
         private double autoplayTimer = SiriusAutoplay.GoldenDir != null ? 8.0 : 2.0;
         private bool autoplayStarted;
         private bool autoplayMenuShot;
+        private double menuTime;
+        // SIRIUS_MENU_SHOT_DELAY=seconds: take menu.png this long after the
+        // menu opens instead of at the settled default - lets the harness
+        // capture the fly-in animations mid-flight.
+        private static readonly double? menuShotDelay =
+            double.TryParse(Environment.GetEnvironmentVariable("SIRIUS_MENU_SHOT_DELAY"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+        private readonly SiriusUiAutotest? uiTest = SiriusUiAutotest.CreateMenuWalker();
 
         public override void Update(double delta)
         {
@@ -488,23 +497,31 @@ namespace LibreLancer
             // otherwise diff the screenshot.
             scene?.Update(SiriusAutoplay.GoldenDir != null ? 0 : delta);
             api._Update();
+            menuTime += delta;
+            uiTest?.Update(ui, Game, delta);
             if (SiriusAutoplay.Enabled && !autoplayStarted)
             {
                 autoplayTimer -= delta;
                 // Let the button reveal play out on live time, then freeze
                 // the presentation clock: the shine sweep loops forever and
                 // would otherwise never align between runs.
-                if (SiriusAutoplay.GoldenDir != null && autoplayTimer <= 2.5)
+                // No freeze while the click autotest drives the menu: lua
+                // Timer() callbacks (scene exit animations) read this clock.
+                if (SiriusAutoplay.GoldenDir != null && menuShotDelay == null &&
+                    !SiriusUiAutotest.MenuActive && autoplayTimer <= 2.5)
                 {
                     RenderClock.Freeze(100.0);
                 }
-                if (SiriusAutoplay.GoldenDir != null && !autoplayMenuShot && autoplayTimer <= 0.5)
+                if (SiriusAutoplay.GoldenDir != null && !autoplayMenuShot &&
+                    (menuShotDelay.HasValue ? menuTime >= menuShotDelay.Value : autoplayTimer <= 0.5))
                 {
                     autoplayMenuShot = true;
                     Game.Screenshot(System.IO.Path.Combine(SiriusAutoplay.GoldenDir, "menu.png"));
                     FLLog.Info("Autoplay", "golden: menu.png");
                 }
-                if (autoplayTimer <= 0)
+                // The click autotest drives the menu itself (and covers
+                // NEW GAME/EXIT through real button presses).
+                if (autoplayTimer <= 0 && !SiriusUiAutotest.MenuActive)
                 {
                     autoplayStarted = true;
                     FLLog.Info("Autoplay", "SIRIUS_AUTOPLAY: starting new game");

@@ -46,6 +46,13 @@ namespace LibreLancer.Render
             get { return false; }
         }
 
+        // Translucent volumes (atmosphere shells) must not write depth or
+        // they occlude everything behind the shell when seen from inside.
+        public virtual bool DisableDepthWrite
+        {
+            get { return false; }
+        }
+
         public bool DoubleSided = false;
         private Texture?[] textures = new Texture?[8];
         private bool[] loaded = new bool[8];
@@ -58,7 +65,7 @@ namespace LibreLancer.Render
             public Color3f Diffuse;
             public float Range;
             public Color3f Ambient;
-            private float _padding0;
+            public float CastsShadow;
             public Vector3 Attentuation;
             private float _padding1;
             public Vector3 Direction;
@@ -130,6 +137,38 @@ namespace LibreLancer.Render
 
         /// <summary>Cascade source for this frame; set by SystemRenderer.</summary>
         public static ShadowMapRenderer? ActiveShadows;
+
+        // The system light the cascade atlas was built around this frame
+        // (FL suns are point lights; the shader needs to know which slot
+        // samples the atlas). Null when no shadow pass ran.
+        public static DynamicLight? ShadowLight;
+
+        // True while the frame has both an active sun shadow pass and a
+        // built TLAS; materials then pick RT_SHADOWS permutations (phase 4).
+        public static bool RtShadowsActive;
+
+        // Ray-traced ambient occlusion (phase 4): modulates ambient/IBL
+        // terms in the PBR shader while a TLAS is being built this frame.
+        public static bool RtaoActive;
+
+        // Ray-traced mirror reflections (phase 4): glass/smooth surfaces
+        // trace one ray against the TLAS instead of trusting the cubemap.
+        public static bool RtReflectionsActive;
+
+        // SIRIUS_DEBUG_VIEW channel views (roadmap 9.4), baked as a
+        // vulkan-only PBR permutation - GL silently keeps the lit path.
+        // 1 albedo, 2 normals, 3 roughness, 4 metallic, 5 shadow, 6 ibl.
+        public static readonly int DebugViewMode =
+            Environment.GetEnvironmentVariable("SIRIUS_DEBUG_VIEW")?.ToLowerInvariant() switch
+            {
+                "albedo" or "1" => 1,
+                "normals" or "2" => 2,
+                "roughness" or "3" => 3,
+                "metallic" or "4" => 4,
+                "shadow" or "5" => 5,
+                "ibl" or "6" => 6,
+                _ => 0
+            };
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
         private unsafe struct LocalShadowBuffer
@@ -222,6 +261,8 @@ namespace LibreLancer.Render
                 lights[lt].Direction = src.Direction;
                 lights[lt].Diffuse = ColorSpace.SrgbToLinear(src.Color);
                 lights[lt].Ambient = ColorSpace.SrgbToLinear(src.Ambient);
+                lights[lt].CastsShadow =
+                    ReferenceEquals(lighting.Lights.SourceLighting.Lights[i], ShadowLight) ? 1 : 0;
                 lights[lt].Range = src.Range;
 
                 if (src.Kind == LightKind.Spotlight)

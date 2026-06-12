@@ -90,6 +90,19 @@ namespace LibreLancer
         public MeshLevel?[]? Levels;
         public float[]? Switch2;
 
+        // Drawing with DefaultMaterial paints solid magenta; log each CRC
+        // once so broken frames are attributable from the run log alone.
+        static readonly HashSet<uint> warnedMaterials = new();
+
+        internal static void WarnMissingMaterial(uint crc)
+        {
+            lock (warnedMaterials)
+            {
+                if (warnedMaterials.Add(crc))
+                    FLLog.Warning("Render", $"Material 0x{crc:X8} not found, drawing DefaultMaterial (magenta)");
+            }
+        }
+
         public void DrawBuffer(int level, ResourceManager res, CommandBuffer buffer, Matrix4x4 world,
             ref Lighting lights, MaterialAnimCollection? mc, int userData = 0, Material? overrideMat = null,
             float opacity = 1.0f)
@@ -140,6 +153,7 @@ namespace LibreLancer
                     }
                     else
                     {
+                        WarnMissingMaterial(dc.MaterialCrc);
                         mat = res.DefaultMaterial;
                     }
                 }
@@ -224,6 +238,7 @@ namespace LibreLancer
                     }
                     else
                     {
+                        WarnMissingMaterial(dc.MaterialCrc);
                         mat = res.DefaultMaterial;
                     }
                 }

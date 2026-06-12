@@ -14,17 +14,13 @@ local function faction_gauge(negative, reputation)
 	if(reputation > 0 && !negative) g.PercentFilled = reputation;
 	// Background
 	g.Background = NewObject("UiRenderable")
-	local wireBkg = NewObject("DisplayModel")
-	wireBkg.Model = GetModel(negative ? "relation_hostile" : "relation_friendly")
-	wireBkg.VMeshWire = true
-	wireBkg.DrawModel = false
-	
-	wireBkg.WireframeColor = GetColor("text");
-	g.Background.AddElement(wireBkg)
+	local back = NewObject("DisplayImage")
+	back.Image = GetImage("sirius_repback")
+	g.Background.AddElement(back)
 
 	g.Fill = NewObject("UiRenderable")
-	local fill = NewObject("DisplayModel")
-	fill.Model = GetModel(negative ? "relation_hostile" : "relation_friendly")
+	local fill = NewObject("DisplayImage")
+	fill.Image = GetImage(negative ? "sirius_repbar_neg" : "sirius_repbar_pos")
 	g.Fill.AddElement(fill)
 	return g;
 }

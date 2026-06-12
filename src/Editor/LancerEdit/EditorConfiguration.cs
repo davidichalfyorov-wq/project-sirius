@@ -144,6 +144,16 @@ namespace LancerEdit
 
         bool IRendererSettings.SelectedShadows => false;
 
+        bool IRendererSettings.SelectedRtShadows => false;
+
+        bool IRendererSettings.SelectedRtao => false;
+
+        bool IRendererSettings.SelectedRtReflections => false;
+
+        bool IRendererSettings.SelectedMeshAsteroids => false;
+
+        bool IRendererSettings.SelectedVrs => false;
+
         public string LastExportPath
         {
             get => Decode(lastExportPath);

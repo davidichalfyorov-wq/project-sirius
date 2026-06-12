@@ -55,10 +55,16 @@ if (listDeps)
                         }
                     }
 
-                    var vertexDeps = await DXC.Dependencies(shader.VertexSource, ShaderStage.Vertex, defines);
+                    if (shader.IsCompute)
+                    {
+                        return await DXC.Dependencies(shader.ComputeSource!, ShaderStage.Compute, defines);
+                    }
+                    var firstStageDeps = shader.IsMesh
+                        ? await DXC.Dependencies(shader.MeshSource!, ShaderStage.Mesh, defines)
+                        : await DXC.Dependencies(shader.VertexSource, ShaderStage.Vertex, defines);
                     var fragmentDeps = await DXC.Dependencies(shader.FragmentSource, ShaderStage.Fragment, defines);
 
-                    return vertexDeps.Concat(fragmentDeps).ToArray();
+                    return firstStageDeps.Concat(fragmentDeps).ToArray();
                 }));
             }
 

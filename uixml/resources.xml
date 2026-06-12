@@ -83,9 +83,9 @@
   <Color>
     <Name>wireframe</Name>
     <Color>
-      <R>0.36862746</R>
-      <G>0.53333336</G>
-      <B>0.6117647</B>
+      <R>0.498</R>
+      <G>0.714</G>
+      <B>0.808</B>
       <A>1</A>
     </Color>
   </Color>
@@ -443,94 +443,11 @@
       <Y3>1</Y3>
     </DisplayCoords>
   </Image>
-  <Image name="tgtcorner_tl" texname="HUD_targetingelement" texpath="" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0">
-    <TexCoords>
-      <X0>0</X0>
-      <Y0>1</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>0.248</X3>
-      <Y3>0.245</Y3>
-    </TexCoords>
-    <DisplayCoords>
-      <X0>0</X0>
-      <Y0>0</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>1</X3>
-      <Y3>1</Y3>
-    </DisplayCoords>
-  </Image>
-  <Image name="tgtcorner_tr" texname="HUD_targetingelement" texpath="" type="Normal" rot="Rotate90" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0">
-    <TexCoords>
-      <X0>0</X0>
-      <Y0>1</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>0.248</X3>
-      <Y3>0.245</Y3>
-    </TexCoords>
-    <DisplayCoords>
-      <X0>0</X0>
-      <Y0>0</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>1</X3>
-      <Y3>1</Y3>
-    </DisplayCoords>
-  </Image>
-  <Image name="tgtcorner_bl" texname="HUD_targetingelement" texpath="" type="Normal" rot="Rotate270" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0">
-    <TexCoords>
-      <X0>0</X0>
-      <Y0>1</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>0.248</X3>
-      <Y3>0.245</Y3>
-    </TexCoords>
-    <DisplayCoords>
-      <X0>0</X0>
-      <Y0>0</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>1</X3>
-      <Y3>1</Y3>
-    </DisplayCoords>
-  </Image>
-  <Image name="tgtcorner_br" texname="HUD_targetingelement" texpath="" type="Normal" rot="Rotate180" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0">
-    <TexCoords>
-      <X0>0</X0>
-      <Y0>1</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>0.248</X3>
-      <Y3>0.245</Y3>
-    </TexCoords>
-    <DisplayCoords>
-      <X0>0</X0>
-      <Y0>0</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>1</X3>
-      <Y3>1</Y3>
-    </DisplayCoords>
-  </Image>
+  <!-- UI 2.0: glowing target brackets (one sprite, rotated per corner) -->
+  <Image name="tgtcorner_tl" texname="" texpath="INTERFACE/SIRIUS/sirius_bracket.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="tgtcorner_tr" texname="" texpath="INTERFACE/SIRIUS/sirius_bracket.png" type="Normal" rot="Rotate90" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="tgtcorner_bl" texname="" texpath="INTERFACE/SIRIUS/sirius_bracket.png" type="Normal" rot="Rotate270" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="tgtcorner_br" texname="" texpath="INTERFACE/SIRIUS/sirius_bracket.png" type="Normal" rot="Rotate180" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
   <Image name="noselectarrow_outline" texname="hud_targetingelement" texpath="" type="Normal" rot="None" originx="0.14" originy="0.17" angle="0.7959919" flip="false" animu="0" animv="0">
     <TexCoords>
       <X0>0.008</X0>
@@ -685,28 +602,7 @@
       <Y3>1</Y3>
     </DisplayCoords>
   </Image>
-  <Image name="waypoint_onscreen" texname="HUD_targetingelement" texpath="" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0">
-    <TexCoords>
-      <X0>0.25</X0>
-      <Y0>0.5</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>0.25</X3>
-      <Y3>0.25</Y3>
-    </TexCoords>
-    <DisplayCoords>
-      <X0>0</X0>
-      <Y0>0</Y0>
-      <X1>1</X1>
-      <Y1>0</Y1>
-      <X2>0</X2>
-      <Y2>1</Y2>
-      <X3>1</X3>
-      <Y3>1</Y3>
-    </DisplayCoords>
-  </Image>
+  <Image name="waypoint_onscreen" texname="" texpath="INTERFACE/SIRIUS/sirius_waypoint.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
   <Image name="commstatic" texname="static" texpath="" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="true" animu="7.041" animv="0">
     <TexCoords>
       <X0>0</X0>
@@ -751,6 +647,40 @@
       <Y3>1</Y3>
     </DisplayCoords>
   </Image>
+  <!-- UI 2.0: hi-res glass sprites, loose PNGs via texpath (mip-mapped at load) -->
+  <Image name="sirius_menubtn" texname="" texpath="INTERFACE/SIRIUS/sirius_menubtn.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_menubtn_hover" texname="" texpath="INTERFACE/SIRIUS/sirius_menubtn_hover.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_menubtn_sel" texname="" texpath="INTERFACE/SIRIUS/sirius_menubtn_sel.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_wordmark" texname="" texpath="INTERFACE/SIRIUS/sirius_wordmark.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_emblem" texname="" texpath="INTERFACE/SIRIUS/sirius_emblem.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_menushade" texname="" texpath="INTERFACE/SIRIUS/sirius_menushade.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_glasscard" texname="" texpath="INTERFACE/SIRIUS/sirius_glasscard.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_chip_indev" texname="" texpath="INTERFACE/SIRIUS/sirius_chip_indev.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_chip_plain" texname="" texpath="INTERFACE/SIRIUS/sirius_chip_plain.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_bottombar" texname="" texpath="INTERFACE/SIRIUS/sirius_bottombar.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_verplate" texname="" texpath="INTERFACE/SIRIUS/sirius_verplate.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_contactbox" texname="" texpath="INTERFACE/SIRIUS/sirius_contactbox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_shipinfobox" texname="" texpath="INTERFACE/SIRIUS/sirius_shipinfobox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_navbox" texname="" texpath="INTERFACE/SIRIUS/sirius_navbox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_nnbox" texname="" texpath="INTERFACE/SIRIUS/sirius_nnbox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gaugebox" texname="" texpath="INTERFACE/SIRIUS/sirius_gaugebox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_numbox" texname="" texpath="INTERFACE/SIRIUS/sirius_numbox.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gauge_power" texname="" texpath="INTERFACE/SIRIUS/sirius_gauge_power.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gauge_shield" texname="" texpath="INTERFACE/SIRIUS/sirius_gauge_shield.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gauge_hull" texname="" texpath="INTERFACE/SIRIUS/sirius_gauge_hull.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gaugeback_power" texname="" texpath="INTERFACE/SIRIUS/sirius_gaugeback_power.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gaugeback_shield" texname="" texpath="INTERFACE/SIRIUS/sirius_gaugeback_shield.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_gaugeback_hull" texname="" texpath="INTERFACE/SIRIUS/sirius_gaugeback_hull.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_commframe" texname="" texpath="INTERFACE/SIRIUS/sirius_commframe.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_chatplate" texname="" texpath="INTERFACE/SIRIUS/sirius_chatplate.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_mapframe" texname="" texpath="INTERFACE/SIRIUS/sirius_mapframe.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_panelwide" texname="" texpath="INTERFACE/SIRIUS/sirius_panelwide.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_panelinfo" texname="" texpath="INTERFACE/SIRIUS/sirius_panelinfo.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_panelchat" texname="" texpath="INTERFACE/SIRIUS/sirius_panelchat.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_repbar_pos" texname="" texpath="INTERFACE/SIRIUS/sirius_repbar_pos.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_repbar_neg" texname="" texpath="INTERFACE/SIRIUS/sirius_repbar_neg.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_repback" texname="" texpath="INTERFACE/SIRIUS/sirius_repback.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
+  <Image name="sirius_emblem_glow" texname="" texpath="INTERFACE/SIRIUS/sirius_emblem_glow.png" type="Normal" rot="None" originx="0" originy="0" angle="0" flip="false" animu="0" animv="0" />
   <LibraryFile>INTERFACE/interface.generic.vms</LibraryFile>
   <LibraryFile>INTERFACE/UI/uitextures.txm</LibraryFile>
   <LibraryFile>INTERFACE/NEURONET/NEWSVENDOR/newsvendor.txm</LibraryFile>

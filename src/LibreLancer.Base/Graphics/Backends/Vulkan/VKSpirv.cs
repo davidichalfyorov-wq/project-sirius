@@ -8,11 +8,13 @@ internal enum SpirvResourceKind
     SampledImage,
     Sampler,
     UniformBuffer,
-    StorageBuffer
+    StorageBuffer,
+    AccelerationStructure,
+    StorageImage
 }
 
 internal record struct SpirvResource(string Name, SpirvResourceKind Kind, uint Set, uint Binding,
-    bool IsCube = false, bool IsVertexInput = false);
+    bool IsCube = false, bool IsVertexInput = false, bool Is3D = false);
 
 /// <summary>
 /// Minimal SPIR-V introspection + binding patcher.
@@ -29,6 +31,7 @@ internal static class VKSpirv
     private const ushort OpTypeImage = 25;
     private const ushort OpTypeSampler = 26;
     private const ushort OpTypeSampledImage = 27;
+    private const ushort OpTypeAccelerationStructureKHR = 5341;
     private const ushort OpTypePointer = 32;
     private const ushort OpVariable = 59;
     private const ushort OpDecorate = 71;
@@ -56,6 +59,7 @@ internal static class VKSpirv
         var variables = new Dictionary<uint, (uint TypeId, uint StorageClass)>();
         var setDecorations = new Dictionary<uint, uint>();
         var cubeTypes = new HashSet<uint>();
+        var threeDTypes = new HashSet<uint>();
         var bufferBlockTypes = new HashSet<uint>();
         var bindingOffsets = new Dictionary<uint, int>(); // variable id -> word index of binding VALUE
         var locationOffsets = new Dictionary<uint, int>(); // variable id -> word index of location VALUE
@@ -76,10 +80,25 @@ internal static class VKSpirv
                     break;
                 }
                 case OpTypeImage:
-                    typeKinds[words[i + 1]] = SpirvResourceKind.SampledImage;
+                    // Operand 7 (Sampled): 1 = sampled, 2 = storage (UAV).
+                    typeKinds[words[i + 1]] = words[i + 7] == 2
+                        ? SpirvResourceKind.StorageImage
+                        : SpirvResourceKind.SampledImage;
+                    if (words[i + 7] == 2 && words[i + 8] == 0)
+                    {
+                        // Format Unknown on a storage image needs the
+                        // shaderStorageImageWriteWithoutFormat feature -
+                        // authoring rule: annotate with [[vk::image_format]].
+                        FLLog.Warning("Vulkan",
+                            "Storage image declared without [[vk::image_format]] annotation (format=Unknown)");
+                    }
                     if (words[i + 3] == 3) // Dim == Cube
                     {
                         cubeTypes.Add(words[i + 1]);
+                    }
+                    else if (words[i + 3] == 2) // Dim == 3D
+                    {
+                        threeDTypes.Add(words[i + 1]);
                     }
                     break;
                 case OpTypeSampler:
@@ -87,6 +106,9 @@ internal static class VKSpirv
                     break;
                 case OpTypeSampledImage:
                     typeKinds[words[i + 1]] = SpirvResourceKind.SampledImage;
+                    break;
+                case OpTypeAccelerationStructureKHR:
+                    typeKinds[words[i + 1]] = SpirvResourceKind.AccelerationStructure;
                     break;
                 case OpTypePointer:
                     pointerTargets[words[i + 1]] = words[i + 3];
@@ -160,21 +182,28 @@ internal static class VKSpirv
             }
 
             var binding = words[bindingIndex];
-            if (kind is SpirvResourceKind.SampledImage or SpirvResourceKind.Sampler)
+            if (kind is SpirvResourceKind.SampledImage or SpirvResourceKind.Sampler
+                or SpirvResourceKind.AccelerationStructure or SpirvResourceKind.StorageImage)
             {
-                // De-alias the shared SDL_GPU-style slot.
-                binding = kind == SpirvResourceKind.SampledImage ? binding * 2 : binding * 2 + 1;
+                // De-alias the shared SDL_GPU-style slot (AS and storage
+                // images ride the image rule: tN/uN -> binding 2N).
+                // Authoring rule: t- and u-register indices must not collide
+                // within one shader (guarded at VKShader.CreateLayouts).
+                binding = kind == SpirvResourceKind.Sampler ? binding * 2 + 1 : binding * 2;
                 words[bindingIndex] = binding;
             }
 
             var isCube = pointerTargets.TryGetValue(pointerType, out var pointee) &&
                          cubeTypes.Contains(pointee);
+            var is3D = pointerTargets.TryGetValue(pointerType, out var pointee3) &&
+                       threeDTypes.Contains(pointee3);
             resources.Add(new SpirvResource(
                 names.GetValueOrDefault(id, $"id{id}"),
                 kind.Value,
                 setDecorations.GetValueOrDefault(id, 0u),
                 binding,
-                isCube));
+                isCube,
+                Is3D: is3D));
         }
 
         return resources;

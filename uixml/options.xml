@@ -1,14 +1,14 @@
 <Scene ID="options">
  	<ImageFile Path="INTERFACE/INTRO/IMAGES/front_freelancerlogo.tga" ID="fllogo" Width="640" Height="480"/>
  	<Scene Visible="false" id="backdrop"><Scene.Background><DisplayColor color="rgba(0,0,0,0.25)"/></Scene.Background></Scene>
-	<Panel Width="640" Height="480" Anchor="Center">
+	<Panel Width="770" Height="480" Anchor="Center">
 		<Button X="33" Y="89" Style="menubutton" ID="general" Text="GENERAL" Enabled="false" />
 		<Button X="33" Y="141" Style="menubutton" ID="controls" Text="CONTROLS" />
 		<Button X="33" Y="193" Style="menubutton" ID="performance" Text="PERFORMANCE"/>
 		<Button X="33" Y="246" Style="menubutton" ID="audio" Text="AUDIO"/>
 		<Button X="33" Y="298" Style="menubutton" ID="credits" Text="CREDITS" Enabled="false" />
 		<Button X="33" Y="407" Style="menubutton" ID="goback" Text="MAIN MENU"/>
-		<Panel Width="390" Height="380" X="30" Y="32" Anchor="CenterRight">
+		<Panel Width="560" Height="400" X="14" Y="32" Anchor="CenterRight">
 			<Panel.Background><DisplayModel model="framewithdipdown"/></Panel.Background>
 			<Panel Width="390" Height="380" ID="win_audio" Visible="false">
 				<TextBlock Text="AUDIO OPTIONS" Strid="1679" Width="390" Height="22" Y="-22"  Anchor="TopCenter" TextColor="text" TextShadow="black" TextSize="13"/>
@@ -39,52 +39,66 @@
 					</DataTable.Columns>
 				</DataTable>
 			</Panel>
-			<Panel Width="390" Height="480" ID="win_performance" Visible="false">
-				<TextBlock Text="PERFORMANCE OPTIONS" Strid="1677" Width="390" Height="22" Y="-22"  Anchor="TopCenter" TextColor="text" TextShadow="black" TextSize="13"/>
-				<!-- MSAA -->
-				<TextBlock X="18" Y="30" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="ANTI-ALIASING"/>
-				<Button id="msaa_left" style="sel_left" X="200" Y="37"/>
-				<Button id="msaa_right" style="sel_right" X="350" Y="37"/>
-				<TextBlock id="msaa_display" X="204" Y="30" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="MSAA SELECTION"/>
-				<!-- ANISOTROPY -->
-				<TextBlock X="18" Y="60" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="ANISOTROPIC FILTERING"/>
-				<Button id="af_left" style="sel_left" X="200" Y="67"/>
-				<Button id="af_right" style="sel_right" X="350" Y="67"/>
-				<TextBlock id="af_display" X="204" Y="60" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="AF SELECTION"/>
-				<!-- TONE MAPPING -->
-				<TextBlock X="18" Y="90" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="TONE MAPPING"/>
-				<Button id="tonemap_left" style="sel_left" X="200" Y="97"/>
-				<Button id="tonemap_right" style="sel_right" X="350" Y="97"/>
-				<TextBlock id="tonemap_display" X="204" Y="90" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="TONEMAP SELECTION"/>
-				<!-- EXPOSURE -->
-				<TextBlock X="18" Y="120" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="EXPOSURE"/>
-				<HSlider Width="150" Height="12" X="200" Y="124" id="exposure"/>
-				<!-- BLOOM -->
-				<TextBlock X="18" Y="150" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="BLOOM"/>
-				<Button id="bloom_left" style="sel_left" X="200" Y="157"/>
-				<Button id="bloom_right" style="sel_right" X="350" Y="157"/>
-				<TextBlock id="bloom_display" X="204" Y="150" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="BLOOM SELECTION"/>
-				<!-- BLOOM INTENSITY -->
-				<TextBlock X="18" Y="180" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="BLOOM INTENSITY"/>
-				<HSlider Width="150" Height="12" X="200" Y="184" id="bloom_intensity"/>
-				<!-- GOD RAYS -->
-				<TextBlock X="18" Y="210" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="SUN RAYS"/>
-				<Button id="godrays_left" style="sel_left" X="200" Y="217"/>
-				<Button id="godrays_right" style="sel_right" X="350" Y="217"/>
-				<TextBlock id="godrays_display" X="204" Y="210" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="GODRAYS SELECTION"/>
-				<!-- GOD RAYS INTENSITY -->
-				<TextBlock X="18" Y="240" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="SUN RAYS INTENSITY"/>
-				<HSlider Width="150" Height="12" X="200" Y="244" id="godrays_intensity"/>
-				<!-- IBL -->
-				<TextBlock X="18" Y="270" HorizontalAlignment="Left" Height="22" Width="170" TextColor="text" TextShadow="black" TextSize="13" Text="IMAGE LIGHTING"/>
-				<Button id="ibl_left" style="sel_left" X="200" Y="277"/>
-				<Button id="ibl_right" style="sel_right" X="350" Y="277"/>
-				<TextBlock id="ibl_display" X="204" Y="270" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="IBL SELECTION"/>
-				<!-- SHADOWS -->
-				<TextBlock X="18" Y="300" HorizontalAlignment="Left" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="13" Text="SHADOWS"/>
-				<Button id="shadows_left" style="sel_left" X="200" Y="307"/>
-				<Button id="shadows_right" style="sel_right" X="350" Y="307"/>
-				<TextBlock id="shadows_display" X="204" Y="300" Height="22" Width="150" TextColor="text" TextShadow="black" TextSize="12" Text="SHADOWS SELECTION"/>
+			<Panel Width="560" Height="400" ID="win_performance" Visible="false">
+				<TextBlock Text="PERFORMANCE OPTIONS" Strid="1677" Width="560" Height="22" Y="-22" Anchor="TopCenter" TextColor="text" TextShadow="black" TextSize="13"/>
+				<!-- Left column: post-processing -->
+				<TextBlock X="14" Y="14" HorizontalAlignment="Left" Height="20" Width="200" TextColor="text_hover" TextShadow="black" TextSize="11" Text="POST-PROCESSING"/>
+				<TextBlock X="14" Y="44" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="TONE MAPPING"/>
+				<Button id="tonemap_left" style="sel_left" X="142" Y="51"/>
+				<Button id="tonemap_right" style="sel_right" X="252" Y="51"/>
+				<TextBlock id="tonemap_display" X="146" Y="44" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="TONEMAP"/>
+				<TextBlock X="14" Y="78" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="EXPOSURE"/>
+				<HSlider Width="124" Height="12" X="142" Y="82" id="exposure"/>
+				<TextBlock X="14" Y="112" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="BLOOM"/>
+				<Button id="bloom_left" style="sel_left" X="142" Y="119"/>
+				<Button id="bloom_right" style="sel_right" X="252" Y="119"/>
+				<TextBlock id="bloom_display" X="146" Y="112" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="BLOOM"/>
+				<TextBlock X="14" Y="146" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="BLOOM INTENSITY"/>
+				<HSlider Width="124" Height="12" X="142" Y="150" id="bloom_intensity"/>
+				<TextBlock X="14" Y="180" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="SUN RAYS"/>
+				<Button id="godrays_left" style="sel_left" X="142" Y="187"/>
+				<Button id="godrays_right" style="sel_right" X="252" Y="187"/>
+				<TextBlock id="godrays_display" X="146" Y="180" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="RAYS"/>
+				<TextBlock X="14" Y="214" HorizontalAlignment="Left" Height="22" Width="128" TextColor="text" TextShadow="black" TextSize="11" Text="SUN RAYS INTENSITY"/>
+				<HSlider Width="124" Height="12" X="142" Y="218" id="godrays_intensity"/>
+				<!-- Right column: quality and hardware features -->
+				<TextBlock X="288" Y="14" HorizontalAlignment="Left" Height="20" Width="200" TextColor="text_hover" TextShadow="black" TextSize="11" Text="QUALITY"/>
+				<TextBlock X="288" Y="44" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="ANTI-ALIASING"/>
+				<Button id="msaa_left" style="sel_left" X="416" Y="51"/>
+				<Button id="msaa_right" style="sel_right" X="526" Y="51"/>
+				<TextBlock id="msaa_display" X="420" Y="44" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="MSAA"/>
+				<TextBlock X="288" Y="78" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="ANISO FILTERING"/>
+				<Button id="af_left" style="sel_left" X="416" Y="85"/>
+				<Button id="af_right" style="sel_right" X="526" Y="85"/>
+				<TextBlock id="af_display" X="420" Y="78" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="AF"/>
+				<TextBlock X="288" Y="112" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="IMAGE LIGHTING"/>
+				<Button id="ibl_left" style="sel_left" X="416" Y="119"/>
+				<Button id="ibl_right" style="sel_right" X="526" Y="119"/>
+				<TextBlock id="ibl_display" X="420" Y="112" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="IBL"/>
+				<TextBlock X="288" Y="146" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="SHADOWS"/>
+				<Button id="shadows_left" style="sel_left" X="416" Y="153"/>
+				<Button id="shadows_right" style="sel_right" X="526" Y="153"/>
+				<TextBlock id="shadows_display" X="420" Y="146" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="SHADOWS"/>
+				<TextBlock X="288" Y="180" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="RT SHADOWS"/>
+				<Button id="rtshadows_left" style="sel_left" X="416" Y="187"/>
+				<Button id="rtshadows_right" style="sel_right" X="526" Y="187"/>
+				<TextBlock id="rtshadows_display" X="420" Y="180" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="RT SHADOWS"/>
+				<TextBlock X="288" Y="214" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="RT AMBIENT OCCL"/>
+				<Button id="rtao_left" style="sel_left" X="416" Y="221"/>
+				<Button id="rtao_right" style="sel_right" X="526" Y="221"/>
+				<TextBlock id="rtao_display" X="420" Y="214" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="RT AO"/>
+				<TextBlock X="288" Y="248" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="RT REFLECTIONS"/>
+				<Button id="rtrefl_left" style="sel_left" X="416" Y="255"/>
+				<Button id="rtrefl_right" style="sel_right" X="526" Y="255"/>
+				<TextBlock id="rtrefl_display" X="420" Y="248" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="RT REFL"/>
+				<TextBlock X="288" Y="282" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="ASTEROID PIPELINE"/>
+				<Button id="meshast_left" style="sel_left" X="416" Y="289"/>
+				<Button id="meshast_right" style="sel_right" X="526" Y="289"/>
+				<TextBlock id="meshast_display" X="420" Y="282" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="ASTEROIDS"/>
+				<TextBlock X="288" Y="316" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="12" Text="VAR RATE SHADING"/>
+				<Button id="vrs_left" style="sel_left" X="416" Y="323"/>
+				<Button id="vrs_right" style="sel_right" X="526" Y="323"/>
+				<TextBlock id="vrs_display" X="420" Y="316" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="VRS"/>
 			</Panel>
 		</Panel>
 	</Panel>

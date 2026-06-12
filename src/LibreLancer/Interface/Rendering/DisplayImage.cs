@@ -24,6 +24,11 @@ namespace LibreLancer.Interface
 
         public bool OneInvSrcColor { get; set; } = false;
 
+        // Alpha breathing: amount is the fade depth (0..1), speed in rad/s.
+        // Runs off GlobalTime, so golden captures freeze it deterministically.
+        public float PulseAmount { get; set; }
+        public float PulseSpeed { get; set; } = 2f;
+
         private Texture2D? texture;
 
         public DisplayImage()
@@ -42,6 +47,11 @@ namespace LibreLancer.Interface
             if (!CanRender(context)) return;
             var color = (Tint ?? InterfaceColor.White).GetColor(context.GlobalTime);
             color.A *= alpha;
+            if (PulseAmount > 0)
+            {
+                var breathe = 0.5f + (0.5f * MathF.Sin((float)context.GlobalTime * PulseSpeed));
+                color.A *= 1f - (PulseAmount * breathe);
+            }
             var blendMode = OneInvSrcColor ? BlendMode.OneInvSrcColor : BlendMode.Normal;
             clientRectangle.Width *= ScaleX;
             clientRectangle.Height *= ScaleY;
@@ -105,14 +115,24 @@ namespace LibreLancer.Interface
             {
                 if (texture.IsDisposed)
                 {
-                    texture = context.Data.ResourceManager.FindTexture(Image?.TexName) as Texture2D;
+                    texture = ResolveTexture(context);
                 }
 
                 return texture != null;
             }
 
-            texture = context.Data.ResourceManager.FindTexture(Image?.TexName) as Texture2D;
+            texture = ResolveTexture(context);
             return texture != null;
+        }
+
+        // texpath: loose image file relative to the FL data folder (hi-res UI 2.0
+        // sprites, loaded with a generated mip chain). texname: classic lookup in
+        // the texture libraries loaded from <LibraryFile> entries.
+        private Texture2D? ResolveTexture(UiContext context)
+        {
+            if (!string.IsNullOrEmpty(Image?.TexPath))
+                return context.Data.GetTextureFile(Image.TexPath, true);
+            return context.Data.ResourceManager.FindTexture(Image?.TexName) as Texture2D;
         }
     }
 }

@@ -53,6 +53,12 @@ public class VMeshResource
     public TMeshHeader[] Meshes = null!;
     public ushort[]? Indices;
 
+    // CPU vertex copy for BLAS builds (roadmap phase 4): positions are the
+    // first 12 bytes of each vertex; VMeshData retains these arrays anyway.
+    public byte[]? SourceVertices;
+    public int SourceStride;
+    public int SourceVertexCount;
+
     public bool IsDisposed => VertexResource?.IsDisposed ?? true;
 
     private Dictionary<VMeshOptimizeInfo, (IndexResource, MeshDrawcall[])?>? optimized;

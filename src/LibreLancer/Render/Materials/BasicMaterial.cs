@@ -58,6 +58,15 @@ namespace LibreLancer.Render.Materials
             Type = type;
         }
 
+        /// <summary>Binds the diffuse texture for external draw paths
+        /// (asteroid mesh-shader pipeline) without the full material setup.</summary>
+        public void BindDtForMesh(RenderContext rstate)
+            => BindTexture(rstate, 0, DtSampler, 0, DtFlags, ResourceManager.WhiteTextureName);
+
+        /// <summary>The classic submit path's alpha-test decision (explicit
+        /// flag or DXT1 diffuse), reused by the mesh-shader cube path.</summary>
+        public bool UsesAlphaTestForMesh() => AlphaTest || GetDxt1();
+
         [Flags]
         private enum PBRFeatures : uint
         {
@@ -66,12 +75,24 @@ namespace LibreLancer.Render.Materials
             ROUGHMAP = (1 << 2),
             ET_ENABLED = (1 << 3),
             VERTEX_TEXTURE2 = (1 << 4),
-            IBL = (1 << 5)
+            IBL = (1 << 5),
+            RT_SHADOWS = (1 << 6),
+            DEBUG_VIEW = (1 << 7),
+            RTAO = (1 << 8),
+            RT_REFLECTIONS = (1 << 9)
         }
 
         private Shader GetPBRShader(IVertexType vertexType, bool useIbl)
         {
             var caps = (PBRFeatures) 0;
+            if (RtShadowsActive)
+                caps |= PBRFeatures.RT_SHADOWS;
+            if (RtaoActive)
+                caps |= PBRFeatures.RTAO;
+            if (RtReflectionsActive)
+                caps |= PBRFeatures.RT_REFLECTIONS;
+            if (DebugViewMode > 0)
+                caps |= PBRFeatures.DEBUG_VIEW;
             if (useIbl)
                 caps |= PBRFeatures.IBL;
             if (!string.IsNullOrEmpty(RtSampler))
@@ -106,11 +127,24 @@ namespace LibreLancer.Render.Materials
             VERTEX_DIFFUSE = (1 << 5),
             VERTEX_TEXTURE2 = (1 << 6),
             ENVMAP = (1 << 7),
+            RT_SHADOWS = (1 << 8),
+            DEBUG_VIEW = (1 << 9),
+            RTAO = (1 << 10),
+            RT_REFLECTIONS = (1 << 11),
         }
 
         private Shader GetRegularShader(IVertexType vertexType, bool useEnvMapping)
         {
             var caps = (ShaderFeatures) 0;
+            // Bundles without the feature mask the bit off in Get().
+            if (RtShadowsActive)
+                caps |= ShaderFeatures.RT_SHADOWS;
+            if (RtaoActive)
+                caps |= ShaderFeatures.RTAO;
+            if (RtReflectionsActive)
+                caps |= ShaderFeatures.RT_REFLECTIONS;
+            if (DebugViewMode > 0)
+                caps |= ShaderFeatures.DEBUG_VIEW;
             if (VertexLighting)
                 caps |= ShaderFeatures.VERTEX_LIGHTING;
             if (EtEnabled || BtEnabled)
@@ -191,6 +225,8 @@ namespace LibreLancer.Render.Materials
             public Vector2 FadeRange;
             public float Oc;
             public float Tex2Type;
+            public float DebugMode;
+            public Vector3 _debugPad;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -201,6 +237,7 @@ namespace LibreLancer.Render.Materials
             public float Oc;
             public float Roughness;
             public float Metallic;
+            public float DebugMode;
         }
 
 
@@ -293,7 +330,8 @@ namespace LibreLancer.Render.Materials
                     Dc = ColorSpace.SrgbToLinear(dcValue), Ec = ColorSpace.SrgbToLinear(Ec),
                     Metallic = MaterialNormalizer.Metallic(Metallic, !string.IsNullOrEmpty(MtSampler)),
                     Roughness = MaterialNormalizer.Roughness(Roughness, !string.IsNullOrEmpty(RtSampler)),
-                    Oc = Oc * OpacityMultiplier
+                    Oc = Oc * OpacityMultiplier,
+                    DebugMode = DebugViewMode
                 };
                 shader.SetUniformBlock(3, ref param);
 
@@ -326,7 +364,8 @@ namespace LibreLancer.Render.Materials
                 {
                     Dc = ColorSpace.SrgbToLinear(dcValue), Ec = ColorSpace.SrgbToLinear(Ec),
                     FadeRange = new Vector2(FadeNear, FadeFar), Oc = Oc * OpacityMultiplier,
-                    Tex2Type = BtEnabled && !EtEnabled ? 1 : 0
+                    Tex2Type = BtEnabled && !EtEnabled ? 1 : 0,
+                    DebugMode = DebugViewMode
                 };
                 shader.SetUniformBlock(3, ref param);
                 SetTextureCoordinates(shader, DtFlags, EtFlags, NmFlags, BtFlags);

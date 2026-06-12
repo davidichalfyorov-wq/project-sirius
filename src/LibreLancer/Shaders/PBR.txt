@@ -6,3 +6,7 @@ feature ROUGHMAP 3
 feature ET_ENABLED 4
 feature VERTEX_TEXTURE2 5
 feature IBL 6
+vulkanfeature RT_SHADOWS 7
+vulkanfeature DEBUG_VIEW 8
+vulkanfeature RTAO 9
+vulkanfeature RT_REFLECTIONS 10

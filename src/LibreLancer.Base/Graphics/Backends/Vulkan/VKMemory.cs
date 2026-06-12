@@ -20,6 +20,11 @@ internal unsafe class VKMemory
     private VkPhysicalDeviceMemoryProperties memoryProperties;
     private readonly System.Collections.Generic.Dictionary<uint, VKMemoryPool> pools = new();
 
+    /// <summary>Owning context, for debug object naming. Set right after
+    /// construction (VKMemory is created before the context finishes
+    /// initialising).</summary>
+    public VKRenderContext? Context;
+
     public const uint UsageVertex = 0x80;
     public const uint UsageIndex = 0x40;
     public const uint UsageUniform = 0x10;
@@ -36,6 +41,20 @@ internal unsafe class VKMemory
         fixed (VkPhysicalDeviceMemoryProperties* pProperties = &memoryProperties)
         {
             Vk.GetPhysicalDeviceMemoryProperties(physicalDevice, pProperties);
+        }
+    }
+
+    /// <summary>Total device memory across all pools (Dev HUD).</summary>
+    public ulong TotalAllocated
+    {
+        get
+        {
+            ulong total = 0;
+            foreach (var pool in pools.Values)
+            {
+                total += pool.AllocatedBytes;
+            }
+            return total;
         }
     }
 
@@ -59,7 +78,66 @@ internal unsafe class VKMemory
         var (memory, offset, mapped) = GetPool(typeIndex, hostVisible: true)
             .Allocate(requirements.Size, requirements.Alignment);
         Vk.Check(Vk.BindBufferMemory(device, buffer, memory, offset), "vkBindBufferMemory");
+        // VK_OBJECT_TYPE_BUFFER = 9
+        Context?.SetObjectName(9, buffer, $"Buf usage=0x{usage:X} {size}b");
         return new VKBuffer(buffer, memory, mapped, size, offset, requirements.Size);
+    }
+
+    /// <summary>
+    /// Dedicated allocation with VkMemoryAllocateFlagsInfo{DEVICE_ADDRESS}
+    /// for ray tracing buffers (BLAS/TLAS inputs, AS storage, scratch).
+    /// Lives outside the pools: destroy with DestroyDedicated. PoolSize==0
+    /// marks the buffer as dedicated.
+    /// </summary>
+    public VKBuffer CreateDeviceAddressBuffer(ulong size, uint usage, bool hostVisible)
+    {
+        size = Math.Max(size, 256);
+        var bufferInfo = new VkBufferCreateInfo
+        {
+            SType = VkStructureType.BufferCreateInfo,
+            Size = size,
+            Usage = usage | 0x20000 // SHADER_DEVICE_ADDRESS
+        };
+        ulong buffer;
+        Vk.Check(Vk.CreateBuffer(device, &bufferInfo, null, &buffer), "vkCreateBuffer(rt)");
+
+        VkMemoryRequirements requirements;
+        Vk.GetBufferMemoryRequirements(device, buffer, &requirements);
+        var flags = hostVisible ? (HostVisible | HostCoherent) : 0x1u; // DEVICE_LOCAL
+        var typeIndex = FindMemoryType(requirements.MemoryTypeBits, flags);
+
+        var allocFlags = new VkMemoryAllocateFlagsInfo
+        {
+            SType = VkStructureType.MemoryAllocateFlagsInfo,
+            Flags = 0x2 // DEVICE_ADDRESS_BIT
+        };
+        var allocInfo = new VkMemoryAllocateInfo
+        {
+            SType = VkStructureType.MemoryAllocateInfo,
+            PNext = &allocFlags,
+            AllocationSize = requirements.Size,
+            MemoryTypeIndex = typeIndex
+        };
+        ulong memory;
+        Vk.Check(Vk.AllocateMemory(device, &allocInfo, null, &memory), "vkAllocateMemory(rt)");
+        Vk.Check(Vk.BindBufferMemory(device, buffer, memory, 0), "vkBindBufferMemory(rt)");
+
+        var mapped = IntPtr.Zero;
+        if (hostVisible)
+        {
+            void* pData;
+            Vk.Check(Vk.MapMemory(device, memory, 0, requirements.Size, 0, &pData), "vkMapMemory(rt)");
+            mapped = (IntPtr)pData;
+        }
+        Context?.SetObjectName(9, buffer, $"RTBuf usage=0x{usage:X} {size}b");
+        return new VKBuffer(buffer, memory, mapped, size, 0, 0);
+    }
+
+    /// <summary>Destroys a CreateDeviceAddressBuffer allocation.</summary>
+    public void DestroyDedicated(in VKBuffer buffer)
+    {
+        Vk.DestroyBuffer(device, buffer.Buffer, null);
+        Vk.FreeMemory(device, buffer.Memory, null);
     }
 
     public void Destroy(in VKBuffer buffer)

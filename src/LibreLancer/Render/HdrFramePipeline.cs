@@ -46,6 +46,9 @@ internal sealed class HdrFramePipeline : IDisposable
 
     public PostAaMode PostAa = PostAaMode.Off;
     private Shader? fxaaShader;
+    private Shader? smaaEdgesShader;
+    private Shader? smaaWeightsShader;
+    private Shader? smaaBlendShader;
 
     /// <summary>
     /// Every render-size-dependent target of the frame, bundled. THN
@@ -76,6 +79,14 @@ internal sealed class HdrFramePipeline : IDisposable
         public RenderTarget2D? LdrTarget;
         public Texture2D? LdrTexture;
 
+        // SMAA intermediates (roadmap 4.7): edges in RG, blending weights
+        // in RGBA. Targets stay alive next to their textures (disposing a
+        // target retires the texture's image on the Vulkan backend).
+        public RenderTarget2D? SmaaEdgesTarget;
+        public Texture2D? SmaaEdgesTexture;
+        public RenderTarget2D? SmaaWeightsTarget;
+        public Texture2D? SmaaWeightsTexture;
+
         public long LastUsedFrame;
 
         public SizedTargets(RenderContext rstate, int width, int height)
@@ -103,6 +114,8 @@ internal sealed class HdrFramePipeline : IDisposable
             RayMaskTarget?.Dispose();
             RayBlurTarget?.Dispose();
             LdrTarget?.Dispose();
+            SmaaEdgesTarget?.Dispose();
+            SmaaWeightsTarget?.Dispose();
         }
     }
 
@@ -113,6 +126,10 @@ internal sealed class HdrFramePipeline : IDisposable
     private readonly List<SizedTargets> targetCache = new();
     private SizedTargets? current;
     private long frameStamp;
+
+    /// <summary>The HDR scene target of the current Begin/End frame -
+    /// volumetrics copy its depth for the composite (phase 5).</summary>
+    public RenderTarget2D? CurrentSceneTarget => current?.Scene;
 
     public HdrFramePipeline(RenderContext rstate)
     {
@@ -203,7 +220,7 @@ internal sealed class HdrFramePipeline : IDisposable
             // Roadmap 4.7 frame order: HDR -> bloom/rays -> tonemap ->
             // post-AA -> UI. With AA on, the tonemap resolves into an LDR
             // buffer and the AA pass produces the real output.
-            var aaActive = PostAa == PostAaMode.Fxaa;
+            var aaActive = PostAa is PostAaMode.Fxaa or PostAaMode.Smaa;
             if (aaActive && targets.LdrTarget == null)
             {
                 targets.LdrTexture = new Texture2D(rstate, targets.Width, targets.Height, false, SurfaceFormat.Bgra8);
@@ -236,7 +253,7 @@ internal sealed class HdrFramePipeline : IDisposable
             rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
             rstate.EndPassTimer();
 
-            if (aaActive)
+            if (aaActive && PostAa == PostAaMode.Fxaa)
             {
                 rstate.BeginPassTimer("post.fxaa");
                 rstate.PopScissor();
@@ -251,8 +268,15 @@ internal sealed class HdrFramePipeline : IDisposable
                 rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
                 rstate.EndPassTimer();
             }
+            else if (aaActive)
+            {
+                rstate.PopScissor();
+                rstate.PopViewport();
+                RunSmaa(targets);
+            }
 
             DrawBloomDebug(targets, bloomActive);
+            DrawSmaaDebug(targets);
         }
         finally
         {
@@ -374,6 +398,89 @@ internal sealed class HdrFramePipeline : IDisposable
         rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
         rstate.PopScissor();
         rstate.PopViewport();
+    }
+
+    /// <summary>
+    /// SMAA 1x (roadmap 4.7): luma edge detection -> blending weights
+    /// (AreaTex/SearchTex LUTs) -> neighborhood blending. Runs on the
+    /// tonemapped LDR image; every pass is a fullscreen overwrite, so the
+    /// intermediates never need clearing.
+    /// </summary>
+    private void RunSmaa(SizedTargets targets)
+    {
+        if (targets.SmaaEdgesTarget == null)
+        {
+            targets.SmaaEdgesTexture = new Texture2D(rstate, targets.Width, targets.Height, false, SurfaceFormat.Bgra8);
+            targets.SmaaEdgesTarget = new RenderTarget2D(rstate, targets.SmaaEdgesTexture);
+            targets.SmaaWeightsTexture = new Texture2D(rstate, targets.Width, targets.Height, false, SurfaceFormat.Bgra8);
+            targets.SmaaWeightsTarget = new RenderTarget2D(rstate, targets.SmaaWeightsTexture);
+        }
+        smaaEdgesShader ??= AllShaders.SmaaEdges.Get(0);
+        smaaWeightsShader ??= AllShaders.SmaaWeights.Get(0);
+        smaaBlendShader ??= AllShaders.SmaaBlend.Get(0);
+
+        var metrics = new Vector4(1f / targets.Width, 1f / targets.Height, targets.Width, targets.Height);
+        var fullRect = new Rectangle(0, 0, targets.Width, targets.Height);
+        rstate.BlendMode = BlendMode.Opaque;
+
+        rstate.BeginPassTimer("post.smaa.edges");
+        rstate.RenderTarget = targets.SmaaEdgesTarget;
+        rstate.PushViewport(fullRect);
+        rstate.PushScissor(fullRect, false);
+        smaaEdgesShader.SetUniformBlock(3, ref metrics);
+        rstate.Textures[0] = targets.LdrTexture!;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.Shader = smaaEdgesShader;
+        rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+        rstate.PopScissor();
+        rstate.PopViewport();
+        rstate.EndPassTimer();
+
+        rstate.BeginPassTimer("post.smaa.weights");
+        rstate.RenderTarget = targets.SmaaWeightsTarget;
+        rstate.PushViewport(fullRect);
+        rstate.PushScissor(fullRect, false);
+        smaaWeightsShader.SetUniformBlock(3, ref metrics);
+        rstate.Textures[0] = targets.SmaaEdgesTexture!;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.Textures[1] = SmaaTextures.GetAreaTex(rstate);
+        rstate.Samplers[1] = SamplerState.LinearClamp;
+        rstate.Textures[2] = SmaaTextures.GetSearchTex(rstate);
+        rstate.Samplers[2] = SamplerState.LinearClamp;
+        rstate.Shader = smaaWeightsShader;
+        rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+        rstate.PopScissor();
+        rstate.PopViewport();
+        rstate.EndPassTimer();
+
+        rstate.BeginPassTimer("post.smaa.blend");
+        rstate.RenderTarget = restoreTarget;
+        smaaBlendShader.SetUniformBlock(3, ref metrics);
+        rstate.Textures[0] = targets.LdrTexture!;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.Textures[1] = targets.SmaaWeightsTexture!;
+        rstate.Samplers[1] = SamplerState.LinearClamp;
+        rstate.Shader = smaaBlendShader;
+        rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+        rstate.EndPassTimer();
+    }
+
+    private static readonly bool debugSmaa =
+        Environment.GetEnvironmentVariable("SIRIUS_DEBUG_SMAA") == "1";
+
+    /// <summary>Edges + weights contact sheet over the final image.</summary>
+    private void DrawSmaaDebug(SizedTargets targets)
+    {
+        if (!debugSmaa || PostAa != PostAaMode.Smaa || targets.SmaaEdgesTexture == null)
+        {
+            return;
+        }
+        var list = rstate.Renderer2D.CreateDrawList();
+        var w = Math.Max(targets.Width / 4, 32);
+        var h = Math.Max(targets.Height / 4, 18);
+        list.DrawImageStretched(targets.SmaaEdgesTexture, new Rectangle(8, 8, w, h), Color4.White);
+        list.DrawImageStretched(targets.SmaaWeightsTexture!, new Rectangle(8 + w + 4, 8, w, h), Color4.White);
+        list.Render();
     }
 
     private void EnsureBloomChain(SizedTargets targets)

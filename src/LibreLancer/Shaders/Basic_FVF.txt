@@ -8,3 +8,7 @@ feature NORMAL_MAP 5
 feature VERTEX_DIFFUSE 6
 feature VERTEX_TEXTURE2 7
 feature ENVMAP 8
+vulkanfeature RT_SHADOWS 9
+vulkanfeature DEBUG_VIEW 10
+vulkanfeature RTAO 11
+vulkanfeature RT_REFLECTIONS 12

@@ -1,20 +1,44 @@
 <Scene ID="mainmenu">
- 	<ImageFile Path="INTERFACE/INTRO/IMAGES/front_freelancerlogo.tga" Width="640" Height="480"/>
+	<!-- UI 2.0: left glass shade column behind the menu stack -->
+	<Panel X="0" Y="0" Width="320" Height="480" CaptureMouse="false" id="menushade">
+		<Panel.Background>
+			<DisplayImage image="sirius_menushade"/>
+		</Panel.Background>
+	</Panel>
+	<!-- Sirius star emblem + wordmark (replaces front_freelancerlogo.tga; no subtitles) -->
+	<Panel X="-14" Y="-10" Width="132" Height="132" CaptureMouse="false" id="emblem_glow">
+		<Panel.Background>
+			<DisplayImage image="sirius_emblem_glow" PulseAmount="0.45" PulseSpeed="1.4"/>
+		</Panel.Background>
+	</Panel>
+	<Panel X="10" Y="14" Width="84" Height="84" CaptureMouse="false" id="emblem">
+		<Panel.Background>
+			<DisplayImage image="sirius_emblem"/>
+		</Panel.Background>
+	</Panel>
+	<Panel X="96" Y="34" Width="262" Height="44" CaptureMouse="false" id="wordmark">
+		<Panel.Background>
+			<DisplayImage image="sirius_wordmark"/>
+		</Panel.Background>
+	</Panel>
+	<Panel X="99" Y="82" Width="46" Height="13" CaptureMouse="false" id="chip_indev">
+		<Panel.Background>
+			<DisplayImage image="sirius_chip_indev"/>
+		</Panel.Background>
+	</Panel>
 	<Button X="33" Y="123" id="newgame" Style="menubutton" Strid="1268" Text="NEW GAME"/>
 	<Button X="33" Y="173" id="loadgame" Style="menubutton" Strid="1269" Text="LOAD GAME"/>
 	<Button X="33" Y="223" id="multiplayer" Style="menubutton" Strid="1270" Text="MULTIPLAYER"/>
 	<Button X="33" Y="273" id="options" Style="menubutton" Strid="1272" Text="OPTIONS"/>
 	<Button X="33" Y="323" id="exit" Style="menubutton" Strid="1273" Text="EXIT"/>
-    <TextBlock id="version" Anchor="BottomRight" X="12" Y="12" Width="300" Height="24" TextColor="text" TextSize="12" HorizontalAlignment="Right"/>
+	<!-- bottom status bar -->
+	<Panel Anchor="BottomLeft" X="0" Y="0" Width="854" Height="24" CaptureMouse="false" id="bottombar">
+		<Panel.Background>
+			<DisplayImage image="sirius_bottombar"/>
+		</Panel.Background>
+		<TextBlock X="10" Y="5" Width="300" Height="14" TextColor="text" TextShadow="black" TextSize="9" id="bb_left" Text="PROJECT SIRIUS" VerticalAlignment="Top"/>
+		<TextBlock X="310" Y="5" Width="300" Height="14" TextColor="text" TextShadow="black" TextSize="9" id="bb_discord" Text="DISCORD.GG/sywPg6eFEM" VerticalAlignment="Top"/>
+	</Panel>
+	<TextBlock id="version" Anchor="BottomRight" X="12" Y="3" Width="300" Height="18" TextColor="text" TextShadow="black" TextSize="9" HorizontalAlignment="Right"/>
 	<Panel id="blank" Width="400" Height="400"/>
 </Scene>
-
-
-
-
-
-
-
-
-
-

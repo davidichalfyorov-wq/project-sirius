@@ -10,7 +10,11 @@ internal static class VKFormats
     {
         SurfaceFormat.Bgra8 => 44,        // B8G8R8A8_UNORM
         SurfaceFormat.R8 => 9,            // R8_UNORM
-        SurfaceFormat.Dxt1 => 131,        // BC1_RGB_UNORM_BLOCK
+        // BC1_RGBA, not BC1_RGB: DXT1 carries 1-bit punch-through alpha and
+        // GL loads it as COMPRESSED_RGBA_S3TC_DXT1. The RGB variant forced
+        // alpha to 1.0, turning every DXT1-alpha texture opaque on Vulkan
+        // (hard dark smoke quads swallowing the lava-planet menu fires).
+        SurfaceFormat.Dxt1 => 133,        // BC1_RGBA_UNORM_BLOCK
         SurfaceFormat.Dxt3 => 135,        // BC2_UNORM_BLOCK
         SurfaceFormat.Dxt5 => 137,        // BC3_UNORM_BLOCK
         SurfaceFormat.Rgtc1 => 139,       // BC4_UNORM_BLOCK
@@ -98,26 +102,36 @@ internal unsafe class VKTexture2D : ITexture2D
     private int viewLevels;
     private readonly bool isCube;
     private readonly int layerCount;
+    private readonly int texDepth = 1;
+    private readonly bool isStorage;
     public bool Dxt1 => Format == SurfaceFormat.Dxt1;
-    public int EstimatedTextureMemory => Width * Height * 4;
+    public int EstimatedTextureMemory => Width * Height * texDepth * 4;
+
+    /// <summary>Layout descriptors must declare for sampling this image.
+    /// Storage images live in GENERAL permanently (written by compute,
+    /// sampled by anything - no per-pass layout tracking needed).</summary>
+    public VkImageLayout DescriptorLayout => isStorage ? (VkImageLayout)1 : (VkImageLayout)5;
 
     public VKTexture2D(VKRenderContext context, int width, int height, bool hasMipMaps, SurfaceFormat format,
-        bool cube = false, int layers = 1)
+        bool cube = false, int layers = 1, int depth3d = 1, bool storage = false)
     {
         this.context = context;
         Width = width;
         Height = height;
         Format = format;
-        LevelCount = hasMipMaps ? 1 + (int)Math.Floor(Math.Log2(Math.Max(width, height))) : 1;
+        texDepth = depth3d;
+        isStorage = storage;
+        // 3D textures: single level (froxel grids/noise volumes don't mip).
+        LevelCount = hasMipMaps && depth3d == 1 ? 1 + (int)Math.Floor(Math.Log2(Math.Max(width, height))) : 1;
 
         var imageInfo = new VkImageCreateInfo
         {
             SType = VkStructureType.ImageCreateInfo,
             Flags = cube ? 0x10u : 0u, // CUBE_COMPATIBLE
-            ImageType = 1,
+            ImageType = depth3d > 1 ? 2 : 1,
             Format = (VkFormat)VKFormats.ToVk(format),
             Extent2D = new VkExtent2D { Width = (uint)width, Height = (uint)height },
-            ExtentDepth = 1,
+            ExtentDepth = (uint)depth3d,
             MipLevels = (uint)LevelCount,
             ArrayLayers = (uint)layers,
             Samples = 1,
@@ -128,11 +142,17 @@ internal unsafe class VKTexture2D : ITexture2D
             Usage = 0x4 | 0x2, // SAMPLED | TRANSFER_DST
             InitialLayout = VkImageLayout.Undefined
         };
+        if (storage)
+        {
+            imageInfo.Usage |= 0x8; // STORAGE (compute UAV)
+        }
         if (format == SurfaceFormat.Depth)
         {
-            imageInfo.Usage = 0x4 | 0x20; // SAMPLED | DEPTH_STENCIL_ATTACHMENT
+            // SAMPLED | DEPTH_STENCIL_ATTACHMENT | TRANSFER_DST
+            // (phase 5: receives scene-depth copies for volumetrics)
+            imageInfo.Usage = 0x4 | 0x20 | 0x2;
         }
-        else if (format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable)
+        else if (depth3d == 1 && format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable)
         {
             imageInfo.Usage |= 0x10; // COLOR_ATTACHMENT for renderable formats
         }
@@ -140,6 +160,10 @@ internal unsafe class VKTexture2D : ITexture2D
         ulong image;
         Vk.Check(Vk.CreateImage(context.Device, &imageInfo, null, &image), "vkCreateImage");
         Image = image;
+        // VK_OBJECT_TYPE_IMAGE = 10
+        context.SetObjectName(10, image, depth3d > 1
+            ? $"Tex3D {width}x{height}x{depth3d} {format}{(storage ? " storage" : "")}"
+            : $"{(cube ? "TexCube" : "Tex2D")} {width}x{height} {format}");
 
         (DeviceMemory, PoolOffset, PoolSize) = context.Memory.AllocateImage(Image);
 
@@ -150,7 +174,7 @@ internal unsafe class VKTexture2D : ITexture2D
         {
             SType = VkStructureType.ImageViewCreateInfo,
             Image = Image,
-            ViewType = cube ? 3 : 1,
+            ViewType = cube ? 3 : depth3d > 1 ? 2 : 1, // 2 = VIEW_TYPE_3D
             Format = imageInfo.Format,
             SubresourceRange = new VkImageSubresourceRange
             {
@@ -170,7 +194,16 @@ internal unsafe class VKTexture2D : ITexture2D
             // behaviour (and a real device-loss on NVIDIA).
             var cmd = context.BeginOneShotCommands();
             context.ImageBarrierAll(cmd, Image, VkImageLayout.Undefined,
-                (VkImageLayout)5, (uint)LevelCount, (uint)layers);
+                DescriptorLayout, (uint)LevelCount, (uint)layers);
+            context.EndOneShotCommands(cmd);
+        }
+        else
+        {
+            // Sampled-depth textures (scene-depth copies) rest in
+            // SHADER_READ_ONLY between CopyDepthToTexture round-trips.
+            var cmd = context.BeginOneShotCommands();
+            context.ImageBarrier(cmd, Image, VkImageLayout.Undefined,
+                (VkImageLayout)5, 0, 0, aspect: 2);
             context.EndOneShotCommands(cmd);
         }
     }
@@ -224,14 +257,14 @@ internal unsafe class VKTexture2D : ITexture2D
             ImageOffsetX = x,
             ImageOffsetY = y,
             ImageExtent = new VkExtent2D { Width = (uint)width, Height = (uint)height },
-            ImageExtentDepth = 1
+            ImageExtentDepth = (uint)texDepth
         };
 
         var cmd = context.BeginOneShotCommands();
-        context.ImageBarrier(cmd, Image, (VkImageLayout)5, VkImageLayout.TransferDstOptimal,
+        context.ImageBarrier(cmd, Image, DescriptorLayout, VkImageLayout.TransferDstOptimal,
             (uint)level, (uint)layer);
         Vk.CmdCopyBufferToImage(cmd, staging.Buffer, Image, VkImageLayout.TransferDstOptimal, 1, &copy);
-        context.ImageBarrier(cmd, Image, VkImageLayout.TransferDstOptimal, (VkImageLayout)5 /*SHADER_READ_ONLY*/,
+        context.ImageBarrier(cmd, Image, VkImageLayout.TransferDstOptimal, DescriptorLayout,
             (uint)level, (uint)layer);
         context.EndOneShotCommands(cmd, staging); // staging freed when the GPU is done
 
@@ -323,4 +356,20 @@ internal sealed unsafe class VKTextureCube : VKTexture2D, ITextureCube
 
     public void SetData<T>(CubeMapFace face, T[] data) where T : unmanaged =>
         Upload<T>(0, (int)face, null, data);
+}
+
+/// <summary>
+/// Sampled (optionally storage) 3D texture - froxel volumetrics, noise
+/// volumes, LUTs. Single mip level; storage images live in GENERAL layout.
+/// </summary>
+internal sealed unsafe class VKTexture3D : VKTexture2D, ITexture3D
+{
+    public int Depth { get; }
+
+    public VKTexture3D(VKRenderContext context, int width, int height, int depth, SurfaceFormat format,
+        bool storage)
+        : base(context, width, height, false, format, depth3d: depth, storage: storage)
+    {
+        Depth = depth;
+    }
 }

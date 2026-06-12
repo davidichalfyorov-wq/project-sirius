@@ -13,7 +13,7 @@ namespace LibreLancer.Graphics.Backends.Vulkan;
 /// milestone (pipelines, resources, draws) plugs into. Resource factories
 /// throw until their milestone lands.
 /// </summary>
-internal unsafe class VKRenderContext : IRenderContext
+internal unsafe partial class VKRenderContext : IRenderContext
 {
     private IntPtr instance;
     private IntPtr physicalDevice;
@@ -100,8 +100,84 @@ internal unsafe class VKRenderContext : IRenderContext
 
     public System.Collections.Generic.IReadOnlyList<PassTiming> PassTimings => lastTimings;
 
+    private bool debugUtils;
+    private int debugLabelDepth;
+
+    public long DeviceMemoryAllocated => (long)Memory.TotalAllocated;
+
+    /// <summary>Names a Vulkan object in captures/validation messages
+    /// (VK_EXT_debug_utils; no-op when unavailable).</summary>
+    public void SetObjectName(int objectType, ulong handle, string name)
+    {
+        if (!debugUtils || handle == 0)
+        {
+            return;
+        }
+        Span<byte> utf8 = stackalloc byte[256];
+        var len = Math.Min(name.Length, 255);
+        for (var i = 0; i < len; i++)
+        {
+            utf8[i] = (byte)name[i];
+        }
+        utf8[len] = 0;
+        fixed (byte* p = utf8)
+        {
+            var info = new VkDebugUtilsObjectNameInfoEXT
+            {
+                SType = VkStructureType.DebugUtilsObjectNameInfoEXT,
+                ObjectType = objectType,
+                ObjectHandle = handle,
+                PObjectName = p
+            };
+            Vk.SetDebugUtilsObjectNameEXT(device, &info);
+        }
+    }
+
+    private void BeginCmdLabel(string name)
+    {
+        if (!debugUtils)
+        {
+            return;
+        }
+        Span<byte> utf8 = stackalloc byte[128];
+        var len = Math.Min(name.Length, 127);
+        for (var i = 0; i < len; i++)
+        {
+            utf8[i] = (byte)name[i];
+        }
+        utf8[len] = 0;
+        fixed (byte* p = utf8)
+        {
+            var label = new VkDebugUtilsLabelEXT
+            {
+                SType = VkStructureType.DebugUtilsLabelEXT,
+                PLabelName = p
+            };
+            Vk.CmdBeginDebugUtilsLabelEXT(CurrentCommands, &label);
+        }
+        debugLabelDepth++;
+    }
+
+    private void EndCmdLabel()
+    {
+        if (!debugUtils || debugLabelDepth == 0)
+        {
+            return;
+        }
+        debugLabelDepth--;
+        Vk.CmdEndDebugUtilsLabelEXT(CurrentCommands);
+    }
+
     public void BeginPassTimer(string name)
     {
+        // Pass labels ride the timer call sites: every BeginPassTimer is a
+        // logical pass boundary, and debug labels want to exist even when
+        // SIRIUS_PASS_TIMINGS is off (RenderDoc readability).
+        if (debugUtils)
+        {
+            EnsureFrameBegun();
+            BeginCmdLabel(name);
+        }
         if (timestampPool == 0)
         {
             return;
@@ -123,6 +199,7 @@ internal unsafe class VKRenderContext : IRenderContext
 
     public void EndPassTimer()
     {
+        EndCmdLabel();
         if (timestampPool == 0 || timerStack.Count == 0 ||
             timerQueryCount[frameIndex] + 1 > TimerQueriesPerSlot)
         {
@@ -244,6 +321,8 @@ internal unsafe class VKRenderContext : IRenderContext
     private VKShader? currentShader;
     private readonly VKTexture2D?[] textureSlots = new VKTexture2D?[16];
     private readonly SamplerState[] samplerSlots = new SamplerState[16];
+    // Compute UAV slots (RWTexture2D/3D uN -> slot N, image rule 2N).
+    private readonly VKTexture2D?[] storageImageSlots = new VKTexture2D?[8];
     private bool frameBegun;
     private bool renderingActive;
     private bool clearPending = true;
@@ -263,7 +342,8 @@ internal unsafe class VKRenderContext : IRenderContext
     private readonly record struct PipelineKey(
         int ShaderId, int VertexHash, ushort Blend, bool DepthTest, bool DepthWrite,
         int DepthFunc, bool Cull, CullFaces CullFace, int Topology, VkFormat Color,
-        bool Swapchain, bool ColorWrite);
+        bool Swapchain, bool ColorWrite,
+        int ShadingRate);
 
     public static VKRenderContext? Create(IntPtr sdlWindow)
     {
@@ -300,6 +380,9 @@ internal unsafe class VKRenderContext : IRenderContext
         }
 
         PickPhysicalDevice();
+        ProbeRayQuery();
+        ProbeMeshShaders();
+        ProbeVrs();
         CreateDevice();
         Vk.LoadDevice(device);
 
@@ -310,6 +393,7 @@ internal unsafe class VKRenderContext : IRenderContext
         CreateSwapchain(sdlWindow);
         CreateFrameResources();
         Memory = new VKMemory(physicalDevice, device);
+        Memory.Context = this;
         CreateFrameStreamingResources();
         CreateDepthBuffer();
         CreateFallbackResources();
@@ -319,12 +403,13 @@ internal unsafe class VKRenderContext : IRenderContext
 
     private void CreateFrameStreamingResources()
     {
-        var poolSizes = stackalloc VkDescriptorPoolSize[4]
+        var poolSizes = stackalloc VkDescriptorPoolSize[5]
         {
             new() { Type = 0, DescriptorCount = 4096 }, // samplers
             new() { Type = 2, DescriptorCount = 4096 }, // sampled images
             new() { Type = 6, DescriptorCount = 4096 }, // uniform buffers
-            new() { Type = 7, DescriptorCount = 512 }   // storage buffers
+            new() { Type = 7, DescriptorCount = 512 },  // storage buffers
+            new() { Type = 3, DescriptorCount = 256 }   // storage images (compute)
         };
         for (var i = 0; i < FramesInFlight; i++)
         {
@@ -353,6 +438,8 @@ internal unsafe class VKRenderContext : IRenderContext
 
     private VKTexture2D fallbackTexture = null!;
     private VKTextureCube fallbackCube = null!;
+    private VKTexture3D fallbackTexture3D = null!;
+    private VKTexture3D fallbackStorage3D = null!;
     private VKBuffer zeroVertexBuffer;
     private VKBuffer fallbackStorage;
 
@@ -368,6 +455,14 @@ internal unsafe class VKRenderContext : IRenderContext
         {
             fallbackCube.SetData((CubeMapFace)face, new uint[] { 0xFFFFFFFF });
         }
+        if (computeSupported)
+        {
+            // 3D sampled fallback is white (volumetric transmittance 1);
+            // the storage fallback satisfies unbound RWTexture3D bindings.
+            fallbackTexture3D = new VKTexture3D(this, 1, 1, 2, SurfaceFormat.HdrBlendable, storage: false);
+            fallbackTexture3D.SetData(new ushort[] { 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00 });
+            fallbackStorage3D = new VKTexture3D(this, 1, 1, 2, SurfaceFormat.HdrBlendable, storage: true);
+        }
         // Shader inputs the bound vertex declaration doesn't provide read
         // zeroes from here via a stride-0 binding.
         zeroVertexBuffer = Memory.CreateHostBuffer(64, VKMemory.UsageVertex);
@@ -378,18 +473,20 @@ internal unsafe class VKRenderContext : IRenderContext
 
     private ulong CreateDescriptorPool()
     {
-        var poolSizes = stackalloc VkDescriptorPoolSize[4]
+        var poolSizes = stackalloc VkDescriptorPoolSize[6]
         {
             new() { Type = 0, DescriptorCount = 8192 },
             new() { Type = 2, DescriptorCount = 8192 },
             new() { Type = 6, DescriptorCount = 8192 },
-            new() { Type = 7, DescriptorCount = 1024 }
+            new() { Type = 7, DescriptorCount = 1024 },
+            new() { Type = 3, DescriptorCount = 256 },        // storage images (compute)
+            new() { Type = 1000150000, DescriptorCount = 64 } // acceleration structures (keep last: count gated)
         };
         var poolInfo = new VkDescriptorPoolCreateInfo
         {
             SType = VkStructureType.DescriptorPoolCreateInfo,
             MaxSets = 8192,
-            PoolSizeCount = 4,
+            PoolSizeCount = rayQuerySupported ? 6u : 5u,
             PPoolSizes = poolSizes
         };
         ulong pool;
@@ -701,6 +798,11 @@ internal unsafe class VKRenderContext : IRenderContext
     private void CreateInstance()
     {
         var sdlExtensions = SDL3.SDL_Vulkan_GetInstanceExtensions(out var extensionCount);
+        // Request VK_EXT_debug_utils on top of SDL's surface extensions:
+        // object names + pass labels make RenderDoc/Nsight captures and
+        // validation messages readable (roadmap 9.1). Falls back cleanly
+        // when the loader doesn't expose it.
+        var debugUtilsName = "VK_EXT_debug_utils\0"u8;
         var appName = "Project Sirius\0"u8;
         var engineName = "LibreLancer\0"u8;
         fixed (byte* pAppName = appName)
@@ -719,20 +821,35 @@ internal unsafe class VKRenderContext : IRenderContext
             var validation = Environment.GetEnvironmentVariable("SIRIUS_VK_VALIDATION") == "1";
             var layerName = "VK_LAYER_KHRONOS_validation\0"u8;
             fixed (byte* pLayerName = layerName)
+            fixed (byte* pDebugUtils = debugUtilsName)
             {
                 var layers = stackalloc byte*[1] { pLayerName };
+                var extensions = stackalloc byte*[(int)extensionCount + 1];
+                for (var i = 0; i < extensionCount; i++)
+                {
+                    extensions[i] = sdlExtensions[i];
+                }
+                extensions[extensionCount] = pDebugUtils;
+
                 var createInfo = new VkInstanceCreateInfo
                 {
                     SType = VkStructureType.InstanceCreateInfo,
                     PApplicationInfo = &appInfo,
-                    EnabledExtensionCount = extensionCount,
-                    PpEnabledExtensionNames = sdlExtensions,
+                    EnabledExtensionCount = extensionCount + 1,
+                    PpEnabledExtensionNames = extensions,
                     EnabledLayerCount = validation ? 1u : 0u,
                     PpEnabledLayerNames = validation ? layers : null
                 };
 
                 IntPtr created;
                 var result = Vk.CreateInstance(&createInfo, null, &created);
+                if (result == VkResult.ErrorExtensionNotPresent)
+                {
+                    FLLog.Warning("Vulkan", "VK_EXT_debug_utils unavailable, continuing without debug names");
+                    createInfo.EnabledExtensionCount = extensionCount;
+                    createInfo.PpEnabledExtensionNames = sdlExtensions;
+                    result = Vk.CreateInstance(&createInfo, null, &created);
+                }
                 if (validation && result != VkResult.Success)
                 {
                     // VK_ERROR_LAYER_NOT_PRESENT and friends: run without
@@ -744,6 +861,11 @@ internal unsafe class VKRenderContext : IRenderContext
                 }
                 Vk.Check(result, "vkCreateInstance");
                 instance = created;
+                debugUtils = createInfo.EnabledExtensionCount == extensionCount + 1 && Vk.LoadDebugUtils(created);
+                if (debugUtils)
+                {
+                    FLLog.Info("Vulkan", "Debug utils enabled (object names + pass labels)");
+                }
                 if (validation && createInfo.EnabledLayerCount == 1)
                 {
                     FLLog.Info("Vulkan", "Validation layer enabled (SIRIUS_VK_VALIDATION=1)");
@@ -791,7 +913,24 @@ internal unsafe class VKRenderContext : IRenderContext
             ? best
             : throw new InvalidOperationException("No Vulkan device with graphics+present support");
         graphicsFamily = (uint)FindGraphicsFamily(physicalDevice);
+        // Compute rides on the graphics queue (no async compute yet). The
+        // spec all but guarantees graphics+compute on desktop; probe anyway.
+        computeSupported = (selectedFamilyFlags & 0x2) != 0;
+        if (Environment.GetEnvironmentVariable("SIRIUS_NO_COMPUTE") == "1")
+        {
+            computeSupported = false;
+            FLLog.Info("Vulkan", "Compute: disabled (SIRIUS_NO_COMPUTE=1)");
+        }
+        else
+        {
+            FLLog.Info("Vulkan", computeSupported
+                ? "Compute: supported"
+                : "Compute: queue family lacks compute bit, feature disabled");
+        }
     }
+
+    private uint selectedFamilyFlags;
+    private bool computeSupported;
 
     private int FindGraphicsFamily(IntPtr gpu)
     {
@@ -811,10 +950,257 @@ internal unsafe class VKRenderContext : IRenderContext
             Vk.GetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &presentSupport);
             if (presentSupport != 0)
             {
+                selectedFamilyFlags = flags;
                 return (int)i;
             }
         }
         return -1;
+    }
+
+    private bool rayQuerySupported;
+    private uint asScratchAlignment = 256;
+
+    public bool RayQuerySupported => rayQuerySupported;
+    public uint AccelerationScratchAlignment => asScratchAlignment;
+
+    /// <summary>
+    /// Probes the ray-query path (roadmap phase 4): device extensions
+    /// VK_KHR_acceleration_structure/ray_query/deferred_host_operations and
+    /// the accelerationStructure+rayQuery+bufferDeviceAddress features.
+    /// SIRIUS_NO_RT=1 simulates an unsupported device.
+    /// </summary>
+    private void ProbeRayQuery()
+    {
+        rayQuerySupported = false;
+        if (Environment.GetEnvironmentVariable("SIRIUS_NO_RT") == "1")
+        {
+            FLLog.Info("Vulkan", "Ray query: disabled (SIRIUS_NO_RT=1)");
+            return;
+        }
+
+        uint count = 0;
+        if (Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, null) != VkResult.Success || count == 0)
+        {
+            FLLog.Info("Vulkan", "Ray query: unavailable (no device extensions)");
+            return;
+        }
+        var props = new VkExtensionProperties[count];
+        fixed (VkExtensionProperties* pProps = props)
+        {
+            Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, pProps);
+        }
+        bool hasAccel = false, hasRayQuery = false, hasDeferred = false;
+        fixed (VkExtensionProperties* pAll = props)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var name = Marshal.PtrToStringUTF8((IntPtr)pAll[i].ExtensionName) ?? "";
+                hasAccel |= name == "VK_KHR_acceleration_structure";
+                hasRayQuery |= name == "VK_KHR_ray_query";
+                hasDeferred |= name == "VK_KHR_deferred_host_operations";
+            }
+        }
+        if (!hasAccel || !hasRayQuery || !hasDeferred)
+        {
+            FLLog.Info("Vulkan", "Ray query: unavailable (extensions missing)");
+            return;
+        }
+
+        var asFeatures = new VkPhysicalDeviceAccelerationStructureFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR
+        };
+        var rqFeatures = new VkPhysicalDeviceRayQueryFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceRayQueryFeaturesKHR,
+            PNext = &asFeatures
+        };
+        var features12 = new VkPhysicalDeviceVulkan12Features
+        {
+            SType = VkStructureType.PhysicalDeviceVulkan12Features,
+            PNext = &rqFeatures
+        };
+        var features2 = new VkPhysicalDeviceFeatures2
+        {
+            SType = VkStructureType.PhysicalDeviceFeatures2,
+            PNext = &features12
+        };
+        Vk.GetPhysicalDeviceFeatures2(physicalDevice, &features2);
+        if (asFeatures.AccelerationStructure == 0 || rqFeatures.RayQuery == 0 ||
+            features12.Features[VkPhysicalDeviceVulkan12Features.BufferDeviceAddress] == 0)
+        {
+            FLLog.Info("Vulkan", "Ray query: unavailable (features missing)");
+            return;
+        }
+
+        var asProps = new VkPhysicalDeviceAccelerationStructurePropertiesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceAccelerationStructurePropertiesKHR
+        };
+        var props2 = new VkPhysicalDeviceProperties2
+        {
+            SType = VkStructureType.PhysicalDeviceProperties2,
+            PNext = &asProps
+        };
+        Vk.GetPhysicalDeviceProperties2(physicalDevice, &props2);
+        asScratchAlignment = Math.Max(asProps.MinAccelerationStructureScratchOffsetAlignment, 1u);
+
+        rayQuerySupported = true;
+        FLLog.Info("Vulkan",
+            $"Ray query: supported (scratch alignment {asScratchAlignment}, max instances {asProps.MaxInstanceCount})");
+    }
+
+    private bool meshShadersSupported;
+    private uint maxMeshOutputVertices, maxMeshOutputPrimitives;
+    private bool vrsSupported;
+
+    private void ProbeVrs()
+    {
+        vrsSupported = false;
+        if (Environment.GetEnvironmentVariable("SIRIUS_NO_VRS") == "1")
+        {
+            FLLog.Info("Vulkan", "VRS: disabled (SIRIUS_NO_VRS=1)");
+            return;
+        }
+        uint count = 0;
+        if (Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, null) != VkResult.Success || count == 0)
+        {
+            return;
+        }
+        var props = new VkExtensionProperties[count];
+        fixed (VkExtensionProperties* pProps = props)
+        {
+            Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, pProps);
+        }
+        var hasVrs = false;
+        fixed (VkExtensionProperties* pAll = props)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if ((Marshal.PtrToStringUTF8((IntPtr)pAll[i].ExtensionName) ?? "") == "VK_KHR_fragment_shading_rate")
+                {
+                    hasVrs = true;
+                    break;
+                }
+            }
+        }
+        if (!hasVrs)
+        {
+            FLLog.Info("Vulkan", "VRS: unavailable (extension missing)");
+            return;
+        }
+        var vrsFeatures = new VkPhysicalDeviceFragmentShadingRateFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR
+        };
+        var features2 = new VkPhysicalDeviceFeatures2
+        {
+            SType = VkStructureType.PhysicalDeviceFeatures2,
+            PNext = &vrsFeatures
+        };
+        Vk.GetPhysicalDeviceFeatures2(physicalDevice, &features2);
+        if (vrsFeatures.PipelineFragmentShadingRate == 0)
+        {
+            FLLog.Info("Vulkan", "VRS: unavailable (pipeline rate not supported)");
+            return;
+        }
+        vrsSupported = true;
+        FLLog.Info("Vulkan",
+            $"VRS: supported (pipeline rate; attachment tier {(vrsFeatures.AttachmentFragmentShadingRate != 0 ? "yes" : "no")})");
+        // The feature bit alone doesn't tell which coarse sizes the driver
+        // accepts - enumerate them so a missing 2x2 is visible in the log.
+        if (Vk.GetPhysicalDeviceFragmentShadingRatesKHR != null)
+        {
+            uint rateCount = 0;
+            Vk.GetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, &rateCount, null);
+            if (rateCount > 0)
+            {
+                var rates = new VkPhysicalDeviceFragmentShadingRateKHR[rateCount];
+                for (var i = 0; i < rateCount; i++)
+                    rates[i].SType = (VkStructureType)1000226004; // PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR
+                fixed (VkPhysicalDeviceFragmentShadingRateKHR* pRates = rates)
+                {
+                    Vk.GetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, &rateCount, pRates);
+                }
+                var sb = new System.Text.StringBuilder();
+                for (var i = 0; i < rateCount; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append($"{rates[i].FragmentSizeWidth}x{rates[i].FragmentSizeHeight}(s{rates[i].SampleCounts:X})");
+                }
+                FLLog.Info("Vulkan", $"VRS: available rates: {sb}");
+            }
+        }
+    }
+
+    private void ProbeMeshShaders()
+    {
+        meshShadersSupported = false;
+        if (Environment.GetEnvironmentVariable("SIRIUS_NO_MS") == "1")
+        {
+            FLLog.Info("Vulkan", "Mesh shaders: disabled (SIRIUS_NO_MS=1)");
+            return;
+        }
+        uint count = 0;
+        if (Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, null) != VkResult.Success || count == 0)
+        {
+            FLLog.Info("Vulkan", "Mesh shaders: unavailable (no device extensions)");
+            return;
+        }
+        var props = new VkExtensionProperties[count];
+        fixed (VkExtensionProperties* pProps = props)
+        {
+            Vk.EnumerateDeviceExtensionProperties(physicalDevice, null, &count, pProps);
+        }
+        var hasMesh = false;
+        fixed (VkExtensionProperties* pAll = props)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if ((Marshal.PtrToStringUTF8((IntPtr)pAll[i].ExtensionName) ?? "") == "VK_EXT_mesh_shader")
+                {
+                    hasMesh = true;
+                    break;
+                }
+            }
+        }
+        if (!hasMesh)
+        {
+            FLLog.Info("Vulkan", "Mesh shaders: unavailable (VK_EXT_mesh_shader missing)");
+            return;
+        }
+
+        var meshFeatures = new VkPhysicalDeviceMeshShaderFeaturesEXT
+        {
+            SType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT
+        };
+        var features2 = new VkPhysicalDeviceFeatures2
+        {
+            SType = VkStructureType.PhysicalDeviceFeatures2,
+            PNext = &meshFeatures
+        };
+        Vk.GetPhysicalDeviceFeatures2(physicalDevice, &features2);
+        if (meshFeatures.MeshShader == 0 || meshFeatures.TaskShader == 0)
+        {
+            FLLog.Info("Vulkan", "Mesh shaders: unavailable (features not supported)");
+            return;
+        }
+
+        var meshProps = new VkPhysicalDeviceMeshShaderPropertiesEXT
+        {
+            SType = VkStructureType.PhysicalDeviceMeshShaderPropertiesEXT
+        };
+        var props2 = new VkPhysicalDeviceProperties2
+        {
+            SType = VkStructureType.PhysicalDeviceProperties2,
+            PNext = &meshProps
+        };
+        Vk.GetPhysicalDeviceProperties2(physicalDevice, &props2);
+        maxMeshOutputVertices = meshProps.Values[VkPhysicalDeviceMeshShaderPropertiesEXT.MaxMeshOutputVertices];
+        maxMeshOutputPrimitives = meshProps.Values[VkPhysicalDeviceMeshShaderPropertiesEXT.MaxMeshOutputPrimitives];
+        meshShadersSupported = true;
+        FLLog.Info("Vulkan",
+            $"Mesh shaders: supported (max output {maxMeshOutputVertices} verts / {maxMeshOutputPrimitives} prims)");
     }
 
     private void CreateDevice()
@@ -834,29 +1220,111 @@ internal unsafe class VKRenderContext : IRenderContext
             Synchronization2 = 1,
             DynamicRendering = 1
         };
+        // VRS chain (roadmap 7.6), only when probed as supported.
+        var vrsFeatures = new VkPhysicalDeviceFragmentShadingRateFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR,
+            PNext = &features13,
+            PipelineFragmentShadingRate = 1
+        };
+        void* afterVrs = vrsSupported ? &vrsFeatures : (void*)&features13;
+        // Mesh shader chain (roadmap 7.5), only when probed as supported.
+        var meshFeatures = new VkPhysicalDeviceMeshShaderFeaturesEXT
+        {
+            SType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT,
+            PNext = afterVrs,
+            TaskShader = 1,
+            MeshShader = 1
+        };
+        void* afterMesh = meshShadersSupported ? &meshFeatures : afterVrs;
+        // Ray-query chain (roadmap phase 4), only when probed as supported:
+        // Vulkan12(BDA + descriptor indexing) -> AS -> ray query -> 1.3.
+        var asFeatures = new VkPhysicalDeviceAccelerationStructureFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR,
+            PNext = afterMesh,
+            AccelerationStructure = 1
+        };
+        var rqFeatures = new VkPhysicalDeviceRayQueryFeaturesKHR
+        {
+            SType = VkStructureType.PhysicalDeviceRayQueryFeaturesKHR,
+            PNext = &asFeatures,
+            RayQuery = 1
+        };
+        var features12 = new VkPhysicalDeviceVulkan12Features
+        {
+            SType = VkStructureType.PhysicalDeviceVulkan12Features,
+            PNext = &rqFeatures
+        };
+        features12.Features[VkPhysicalDeviceVulkan12Features.BufferDeviceAddress] = 1;
+        features12.Features[VkPhysicalDeviceVulkan12Features.DescriptorIndexing] = 1;
+
         var features2 = new VkPhysicalDeviceFeatures2
         {
             SType = VkStructureType.PhysicalDeviceFeatures2,
-            PNext = &features13
+            PNext = rayQuerySupported ? &features12 : afterMesh
         };
 
         var swapchainExtension = "VK_KHR_swapchain\0"u8;
+        var accelExtension = "VK_KHR_acceleration_structure\0"u8;
+        var rayQueryExtension = "VK_KHR_ray_query\0"u8;
+        var deferredExtension = "VK_KHR_deferred_host_operations\0"u8;
+        var meshExtension = "VK_EXT_mesh_shader\0"u8;
+        var vrsExtension = "VK_KHR_fragment_shading_rate\0"u8;
         fixed (byte* pSwapchainExtension = swapchainExtension)
+        fixed (byte* pAccel = accelExtension)
+        fixed (byte* pRayQuery = rayQueryExtension)
+        fixed (byte* pDeferred = deferredExtension)
+        fixed (byte* pMesh = meshExtension)
+        fixed (byte* pVrs = vrsExtension)
         {
-            var extensions = stackalloc byte*[1] { pSwapchainExtension };
+            // Compacted extension list: optional entries appended in order.
+            var extensions = stackalloc byte*[6];
+            extensions[0] = pSwapchainExtension;
+            var extCount = 1u;
+            if (rayQuerySupported)
+            {
+                extensions[extCount++] = pAccel;
+                extensions[extCount++] = pRayQuery;
+                extensions[extCount++] = pDeferred;
+            }
+            if (meshShadersSupported)
+            {
+                extensions[extCount++] = pMesh;
+            }
+            if (vrsSupported)
+            {
+                extensions[extCount++] = pVrs;
+            }
             var createInfo = new VkDeviceCreateInfo
             {
                 SType = VkStructureType.DeviceCreateInfo,
                 PNext = &features2,
                 QueueCreateInfoCount = 1,
                 PQueueCreateInfos = &queueInfo,
-                EnabledExtensionCount = 1,
+                EnabledExtensionCount = extCount,
                 PpEnabledExtensionNames = extensions
             };
 
             IntPtr created;
             Vk.Check(Vk.CreateDevice(physicalDevice, &createInfo, null, &created), "vkCreateDevice");
             device = created;
+        }
+
+        if (rayQuerySupported && !Vk.LoadDeviceRT(device))
+        {
+            FLLog.Warning("Vulkan", "Ray query entry points missing after device creation; disabling");
+            rayQuerySupported = false;
+        }
+        if (meshShadersSupported && !Vk.LoadDeviceMesh(device))
+        {
+            FLLog.Warning("Vulkan", "Mesh shader entry points missing after device creation; disabling");
+            meshShadersSupported = false;
+        }
+        if (vrsSupported && !Vk.LoadDeviceVrs(device))
+        {
+            FLLog.Warning("Vulkan", "VRS entry point missing after device creation; disabling");
+            vrsSupported = false;
         }
     }
 
@@ -1075,6 +1543,7 @@ internal unsafe class VKRenderContext : IRenderContext
         lock (queueLock)
         {
             ReapOneShots();
+            DrainDeferredBlas(completedFrame);
             while (deferredBuffers.Count > 0 && deferredBuffers.Peek().Frame <= completedFrame)
             {
                 Memory.Destroy(deferredBuffers.Dequeue().Buffer);
@@ -1438,6 +1907,11 @@ internal unsafe class VKRenderContext : IRenderContext
     private static readonly string? dumpFrames =
         Environment.GetEnvironmentVariable("SIRIUS_VK_DUMPFRAMES");
 
+    // SIRIUS_VK_DUMPINTERVAL=N dumps every Nth frame (default 120) -
+    // tight intervals catch flicker/temporal artifacts between frames.
+    private static readonly int dumpInterval =
+        int.TryParse(Environment.GetEnvironmentVariable("SIRIUS_VK_DUMPINTERVAL"), out var di) && di > 0 ? di : 120;
+
     // Repro tool: force a same-size swapchain rebuild every N frames to
     // reproduce mid-session recreations (fullscreen OUT_OF_DATE storms)
     // in a windowed test run.
@@ -1446,7 +1920,7 @@ internal unsafe class VKRenderContext : IRenderContext
 
     public void SwapWindow(IntPtr sdlWindow, bool vsync, bool fullscreen)
     {
-        if (dumpFrames != null && frameCounter % 120 == 60)
+        if (dumpFrames != null && frameCounter % dumpInterval == dumpInterval / 2)
         {
             var pixels = new Bgra8[swapchainExtent.Width * swapchainExtent.Height];
             ReadBackBuffer((int)swapchainExtent.Width, (int)swapchainExtent.Height, pixels);
@@ -1507,11 +1981,12 @@ internal unsafe class VKRenderContext : IRenderContext
             // Info: the whole report is opt-in (SIRIUS_VK_STATS=1) and
             // Release builds drop Debug severity.
             FLLog.Info("Vulkan", FormattableString.Invariant(
-                $"Descriptors over 300 frames: {statDraws} draws, {statTextureSetBuilds} texture set builds, {statUniformSetBuilds} uniform set builds"));
+                $"Descriptors over 300 frames: {statDraws} draws, {statTextureSetBuilds} texture set builds, {statUniformSetBuilds} uniform set builds, {statDispatches} compute dispatches"));
             FLLog.Info("Vulkan", FormattableString.Invariant(
                 $"Transients over 300 frames: {statTransientHits} pooled, {statTransientCreates} created, {pooledTransientBytes / 1024} KiB parked"));
             statFrames = statDraws = statTextureSetBuilds = statUniformSetBuilds = 0;
             statTransientHits = statTransientCreates = 0;
+            statDispatches = 0;
         }
 
         // Window resize: the surface size no longer matches the swapchain
@@ -1732,9 +2207,9 @@ internal unsafe class VKRenderContext : IRenderContext
         Vk.CmdClearAttachments(CurrentCommands, count, attachments, 1, &rect);
     }
 
-    public void MemoryBarrier()
-    {
-    }
+    public void MemoryBarrier() =>
+        GlobalBarrier(VkConst.StageAllCommands, VkConst.AccessMemoryWrite | VkConst.AccessShaderWrite,
+            VkConst.StageAllCommands, VkConst.AccessMemoryRead | VkConst.AccessShaderRead);
 
     private static Exception Milestone(string what) =>
         new NotImplementedException($"Vulkan backend: {what} arrives in a later phase-3 milestone");
@@ -1760,6 +2235,9 @@ internal unsafe class VKRenderContext : IRenderContext
     public ITextureCube CreateTextureCube(int size, bool mipMap, SurfaceFormat format) =>
         new VKTextureCube(this, size, mipMap, format);
 
+    public ITexture3D CreateTexture3D(int width, int height, int depth, SurfaceFormat format, bool storage = false) =>
+        new VKTexture3D(this, width, height, depth, format, storage);
+
     public IDepthBuffer CreateDepthBuffer(int width, int height) => new VKDepthBuffer(this, width, height);
 
     public IRenderTarget2D CreateRenderTarget2D(ITexture2D texture, IDepthBuffer buffer) =>
@@ -1769,6 +2247,7 @@ internal unsafe class VKRenderContext : IRenderContext
 
     public IStorageBuffer CreateStorageBuffer(int size, int stride) => new VKStorageBuffer(this, size, stride);
 
+    private int storageFallbackLog = 40;
     private readonly (ulong Buffer, ulong Offset, ulong Range)[] storageSlots =
         new (ulong, ulong, ulong)[16]; // engine binds bones/particles at slot 9
 
@@ -1911,13 +2390,162 @@ internal unsafe class VKRenderContext : IRenderContext
             (int)primitive,
             CurrentColorFormat(),
             CurrentTarget == null,
-            applied.ColorWrite);
+            applied.ColorWrite,
+            currentShadingRate);
         if (!pipelines.TryGetValue(key, out var pipeline))
         {
             pipeline = CreatePipeline(declaration, primitive);
             pipelines[key] = pipeline;
         }
         Vk.CmdBindPipeline(cmd, 0, pipeline);
+    }
+
+    // --- Compute (roadmap phase 5 foundation) ---
+    // Compute pipelines have no graphics state: keyed by shader id alone,
+    // NOT by PipelineKey (whose blend/depth/vertex fields would only add
+    // false cache misses).
+    private readonly Dictionary<int, ulong> computePipelines = new();
+    private long statDispatches;
+
+    private ulong GetComputePipeline(VKShader shader)
+    {
+        if (computePipelines.TryGetValue(shader.Id, out var pipeline))
+        {
+            return pipeline;
+        }
+        var entryName = "main\0"u8;
+        fixed (byte* pEntryName = entryName)
+        {
+            var createInfo = new VkComputePipelineCreateInfo
+            {
+                SType = VkStructureType.ComputePipelineCreateInfo,
+                Stage = new VkPipelineShaderStageCreateInfo
+                {
+                    SType = VkStructureType.PipelineShaderStageCreateInfo,
+                    Stage = 0x20, // COMPUTE
+                    Module = shader.VertexModule, // compute module rides the vertex slot
+                    PName = pEntryName
+                },
+                Layout = shader.PipelineLayout
+            };
+            ulong created;
+            Vk.Check(Vk.CreateComputePipelines(device, 0, 1, &createInfo, null, &created),
+                "vkCreateComputePipelines");
+            // VK_OBJECT_TYPE_PIPELINE = 19
+            SetObjectName(19, created, $"compute shader {shader.Id}");
+            computePipelines[shader.Id] = created;
+            return created;
+        }
+    }
+
+    /// <summary>
+    /// Dispatches the currently applied compute shader. Must be called
+    /// outside vkCmdBeginRendering: any active dynamic-rendering pass is
+    /// ended first (the FSM already supports mid-frame breaks - blits and
+    /// buffer uploads do the same) and the next draw reopens it.
+    /// </summary>
+    public void DispatchCompute(uint groupsX, uint groupsY, uint groupsZ)
+    {
+        if (currentShader is not { IsComputePipeline: true } shader)
+        {
+            FLLog.Warning("Vulkan", "DispatchCompute called without a compute shader applied");
+            return;
+        }
+        EnsureFrameBegun();
+        EndRenderingIfActive();
+        var cmd = CurrentCommands;
+        var pipeline = GetComputePipeline(shader);
+        Vk.CmdBindPipeline(cmd, 1 /*COMPUTE*/, pipeline);
+        BindDescriptors(cmd, bindPoint: 1);
+        Vk.CmdDispatch(cmd, groupsX, groupsY, groupsZ);
+        if (statDispatches == 0)
+        {
+            FLLog.Info("Vulkan", $"First compute dispatch: shader {shader.Id}, groups {groupsX}x{groupsY}x{groupsZ}, pipeline 0x{pipeline:X}");
+        }
+        statDispatches++;
+    }
+
+    /// <summary>Global memory barrier (sync2). Storage images stay in
+    /// GENERAL so a memory barrier alone covers image and buffer hazards -
+    /// no per-image layout transitions needed between passes.</summary>
+    private void GlobalBarrier(ulong srcStage, ulong srcAccess, ulong dstStage, ulong dstAccess)
+    {
+        EnsureFrameBegun();
+        EndRenderingIfActive();
+        var barrier = new VkMemoryBarrier2
+        {
+            SType = VkStructureType.MemoryBarrier2,
+            SrcStageMask = srcStage,
+            SrcAccessMask = srcAccess,
+            DstStageMask = dstStage,
+            DstAccessMask = dstAccess
+        };
+        var dependency = new VkDependencyInfo
+        {
+            SType = VkStructureType.DependencyInfo,
+            MemoryBarrierCount = 1,
+            PMemoryBarriers = &barrier
+        };
+        Vk.CmdPipelineBarrier2(CurrentCommands, &dependency);
+    }
+
+    /// <summary>Compute writes -> fragment/vertex reads (composite passes
+    /// sampling froxel volumes).</summary>
+    public void BarrierComputeToGraphics() =>
+        GlobalBarrier(VkConst.StageComputeShader, VkConst.AccessShaderWrite,
+            VkConst.StageAllCommands, VkConst.AccessShaderRead | VkConst.AccessMemoryRead);
+
+    /// <summary>Graphics writes -> compute reads (depth copy, scene inputs).</summary>
+    public void BarrierGraphicsToCompute() =>
+        GlobalBarrier(VkConst.StageAllCommands, VkConst.AccessMemoryWrite,
+            VkConst.StageComputeShader, VkConst.AccessShaderRead);
+
+    /// <summary>Between dependent dispatches (inject -> light -> integrate).</summary>
+    public void BarrierComputeToCompute() =>
+        GlobalBarrier(VkConst.StageComputeShader, VkConst.AccessShaderWrite,
+            VkConst.StageComputeShader, VkConst.AccessShaderRead | VkConst.AccessShaderWrite);
+
+    /// <summary>
+    /// Copies a render target's depth attachment into a sampled depth
+    /// texture (phase 5: volumetric composite needs scene depth, and the
+    /// engine's live depth attachments are not sampleable by design).
+    /// D32->D32 vkCmdCopyImage, ~0.05ms at 1440p; no render-FSM changes.
+    /// </summary>
+    public void CopyDepthToTexture(IRenderTarget2D source, ITexture2D destination)
+    {
+        if (source is not VKRenderTarget2D rt || destination is not VKTexture2D tex ||
+            tex.Format != SurfaceFormat.Depth)
+        {
+            return;
+        }
+        EnsureFrameBegun();
+        EndRenderingIfActive();
+        var cmd = CurrentCommands;
+        // Depth attachments live in DEPTH_STENCIL_ATTACHMENT_OPTIMAL (3);
+        // the destination rests in SHADER_READ_ONLY (5).
+        ImageBarrier(cmd, rt.Depth.Image, (VkImageLayout)3, (VkImageLayout)6 /*TRANSFER_SRC*/, 0, 0, aspect: 2);
+        ImageBarrier(cmd, tex.Image, (VkImageLayout)5, VkImageLayout.TransferDstOptimal, 0, 0, aspect: 2);
+        var region = new VkImageCopy
+        {
+            SrcSubresource = new VkImageSubresourceLayers { AspectMask = 2, LayerCount = 1 },
+            DstSubresource = new VkImageSubresourceLayers { AspectMask = 2, LayerCount = 1 },
+            ExtentWidth = (uint)Math.Min(rt.Width, tex.Width),
+            ExtentHeight = (uint)Math.Min(rt.Height, tex.Height),
+            ExtentDepth = 1
+        };
+        Vk.CmdCopyImage(cmd, rt.Depth.Image, (VkImageLayout)6,
+            tex.Image, VkImageLayout.TransferDstOptimal, 1, &region);
+        ImageBarrier(cmd, rt.Depth.Image, (VkImageLayout)6, (VkImageLayout)3, 0, 0, aspect: 2);
+        ImageBarrier(cmd, tex.Image, VkImageLayout.TransferDstOptimal, (VkImageLayout)5, 0, 0, aspect: 2);
+    }
+
+    private int currentShadingRate = 1;
+
+    /// <summary>Per-draw shading rate (1 = 1x1 full rate, 2 = 2x2): part
+    /// of the pipeline cache key. No-op without VRS support.</summary>
+    public void SetShadingRate(int size)
+    {
+        currentShadingRate = size;
     }
 
     private void BindDynamicState(IntPtr cmd)
@@ -1958,13 +2586,23 @@ internal unsafe class VKRenderContext : IRenderContext
         // Scissor rectangles arrive in the engine's top-left window space,
         // which is ALSO Vulkan's native framebuffer convention - unlike GL,
         // no Y conversion is ever needed (GL flipped to bottom-left).
+        //
+        // The no-scissor fallback clips to the VIEWPORT rect instead, and
+        // that one is in the engine's GL bottom-left space: on the flipped
+        // swapchain pass its Y must be converted, or a non-fullscreen
+        // PushViewport gets an empty viewport/scissor intersection and
+        // silently draws nothing (fullscreen rects match in both
+        // conventions, which is why this never showed before phase 5).
         var scissorSource = applied.ScissorEnabled ? applied.ScissorRect : viewportRect;
+        var scissorY = applied.ScissorEnabled || !flip
+            ? scissorSource.Y
+            : (int)targetExtent.Height - scissorSource.Y - scissorSource.Height;
         var scissor = new VkRect2D
         {
             Offset = new VkOffset2D
             {
                 X = Math.Max(0, scissorSource.X),
-                Y = Math.Max(0, scissorSource.Y)
+                Y = Math.Max(0, scissorY)
             },
             Extent = new VkExtent2D
             {
@@ -1985,7 +2623,8 @@ internal unsafe class VKRenderContext : IRenderContext
                 new()
                 {
                     SType = VkStructureType.PipelineShaderStageCreateInfo,
-                    Stage = 1,
+                    // Mesh bundles carry the mesh module in the vertex slot.
+                    Stage = currentShader!.IsMeshPipeline ? 0x80u : 1u,
                     Module = currentShader!.VertexModule,
                     PName = pEntryName
                 },
@@ -2133,15 +2772,34 @@ internal unsafe class VKRenderContext : IRenderContext
                 PColorAttachmentFormats = &colorFormat,
                 DepthAttachmentFormat = depthFormat
             };
+            // VRS pipeline-tier (roadmap 7.6): the rate is STATIC pipeline
+            // state keyed into the cache - a dynamic-state approach left
+            // one-shot passes (cubemap bakes) with unset state -> UB frames.
+            // Rate-1 pipelines skip the struct entirely so the default path
+            // stays byte-identical to the pre-VRS create chain.
+            bool wantVrs = vrsSupported && currentShadingRate != 1;
+            var shadingRate = new VkPipelineFragmentShadingRateStateCreateInfoKHR
+            {
+                SType = (VkStructureType)1000226001, // PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR
+                FragmentSizeWidth = (uint)currentShadingRate,
+                FragmentSizeHeight = (uint)currentShadingRate,
+                CombinerOp0 = 0, // KEEP: pipeline rate wins
+                CombinerOp1 = 0
+            };
+            if (wantVrs)
+            {
+                shadingRate.PNext = &rendering;
+            }
 
             var pipelineInfo = new VkGraphicsPipelineCreateInfo
             {
                 SType = VkStructureType.GraphicsPipelineCreateInfo,
-                PNext = &rendering,
+                PNext = wantVrs ? &shadingRate : (void*)&rendering,
                 StageCount = 2,
                 PStages = stages,
-                PVertexInputState = &vertexInput,
-                PInputAssemblyState = &inputAssembly,
+                // Mesh pipelines have no vertex input or input assembly.
+                PVertexInputState = currentShader.IsMeshPipeline ? null : &vertexInput,
+                PInputAssemblyState = currentShader.IsMeshPipeline ? null : &inputAssembly,
                 PViewportState = &viewportState,
                 PRasterizationState = &rasterization,
                 PMultisampleState = &multisample,
@@ -2154,6 +2812,8 @@ internal unsafe class VKRenderContext : IRenderContext
             ulong pipeline;
             Vk.Check(Vk.CreateGraphicsPipelines(device, 0, 1, &pipelineInfo, null, &pipeline),
                 "vkCreateGraphicsPipelines");
+            if (currentShadingRate != 1)
+                FLLog.Info("Vulkan", $"Pipeline created with shading rate {currentShadingRate}x{currentShadingRate}");
             return pipeline;
         }
     }
@@ -2227,7 +2887,7 @@ internal unsafe class VKRenderContext : IRenderContext
         _ => primitiveCount
     };
 
-    private void BindDescriptors(IntPtr cmd)
+    private void BindDescriptors(IntPtr cmd, int bindPoint = 0)
     {
         var shader = currentShader!;
         statDraws++;
@@ -2281,7 +2941,7 @@ internal unsafe class VKRenderContext : IRenderContext
         sets[VKShader.SetVertexUniforms] = uniformSets.VertexSet;
         sets[VKShader.SetFragmentTextures] = textureSets.FragmentSet;
         sets[VKShader.SetFragmentUniforms] = uniformSets.FragmentSet;
-        Vk.CmdBindDescriptorSets(cmd, 0, shader.PipelineLayout, 0, VKShader.SetCount, sets,
+        Vk.CmdBindDescriptorSets(cmd, bindPoint, shader.PipelineLayout, 0, VKShader.SetCount, sets,
             (uint)blocks.Count, dynamicOffsets);
     }
 
@@ -2374,15 +3034,28 @@ internal unsafe class VKRenderContext : IRenderContext
                 {
                     var texture = textureSlots[(int)(resource.Binding / 2)];
                     if (texture == null || texture.IsDisposed ||
-                        (resource.IsCube && texture is not VKTextureCube))
+                        (resource.IsCube && texture is not VKTextureCube) ||
+                        (resource.Is3D && texture is not VKTexture3D))
                     {
                         // Stale slots happen on scene unload: the deferred
                         // destroy retires the view while the engine still
                         // points the slot at the dead texture (GL survives
                         // because handles get recycled).
-                        texture = resource.IsCube ? fallbackCube : fallbackTexture;
+                        texture = resource.IsCube ? fallbackCube
+                            : resource.Is3D ? fallbackTexture3D
+                            : fallbackTexture;
                     }
                     key[keyLength++] = texture.View;
+                    break;
+                }
+                case SpirvResourceKind.StorageImage:
+                {
+                    var image = storageImageSlots[(int)(resource.Binding / 2)];
+                    if (image == null || image.IsDisposed)
+                    {
+                        image = fallbackStorage3D;
+                    }
+                    key[keyLength++] = image.View;
                     break;
                 }
                 case SpirvResourceKind.Sampler:
@@ -2403,6 +3076,9 @@ internal unsafe class VKRenderContext : IRenderContext
                     key[keyLength++] = slot.Range;
                     break;
                 }
+                case SpirvResourceKind.AccelerationStructure:
+                    key[keyLength++] = boundTlas;
+                    break;
             }
         }
 
@@ -2450,9 +3126,12 @@ internal unsafe class VKRenderContext : IRenderContext
         var writes = stackalloc VkWriteDescriptorSet[60];
         var bufferInfos = stackalloc VkDescriptorBufferInfo[20];
         var imageInfos = stackalloc VkDescriptorImageInfo[48];
+        var asInfos = stackalloc VkWriteDescriptorSetAccelerationStructureKHR[4];
+        var asHandles = stackalloc ulong[4];
         var writeCount = 0;
         var bufferCount = 0;
         var imageCount = 0;
+        var asCount = 0;
         foreach (var resource in shader.Resources)
         {
             if (resource.IsVertexInput || resource.Kind == SpirvResourceKind.UniformBuffer)
@@ -2473,14 +3152,33 @@ internal unsafe class VKRenderContext : IRenderContext
                 {
                     var texture = textureSlots[(int)(resource.Binding / 2)];
                     if (texture == null || texture.IsDisposed ||
-                        (resource.IsCube && texture is not VKTextureCube))
+                        (resource.IsCube && texture is not VKTextureCube) ||
+                        (resource.Is3D && texture is not VKTexture3D))
                     {
-                        texture = resource.IsCube ? fallbackCube : fallbackTexture;
+                        texture = resource.IsCube ? fallbackCube
+                            : resource.Is3D ? fallbackTexture3D
+                            : fallbackTexture;
                     }
                     imageInfos[imageCount] = new VkDescriptorImageInfo
                     {
                         ImageView = texture.View,
-                        ImageLayout = (VkImageLayout)5 // SHADER_READ_ONLY_OPTIMAL
+                        // Storage-capable textures live in GENERAL.
+                        ImageLayout = texture.DescriptorLayout
+                    };
+                    write.PImageInfo = &imageInfos[imageCount++];
+                    break;
+                }
+                case SpirvResourceKind.StorageImage:
+                {
+                    var image = storageImageSlots[(int)(resource.Binding / 2)];
+                    if (image == null || image.IsDisposed)
+                    {
+                        image = fallbackStorage3D;
+                    }
+                    imageInfos[imageCount] = new VkDescriptorImageInfo
+                    {
+                        ImageView = image.View,
+                        ImageLayout = (VkImageLayout)1 // GENERAL
                     };
                     write.PImageInfo = &imageInfos[imageCount++];
                     break;
@@ -2502,6 +3200,11 @@ internal unsafe class VKRenderContext : IRenderContext
                     if (slot.Buffer == 0)
                     {
                         slot = (fallbackStorage.Buffer, 0, 256);
+                        if (storageFallbackLog-- > 0)
+                        {
+                            FLLog.Info("Vulkan",
+                                $"storage fallback: shader {currentShader?.Id} binding {resource.Binding} ({resource.Name})");
+                        }
                     }
                     bufferInfos[bufferCount] = new VkDescriptorBufferInfo
                     {
@@ -2510,6 +3213,20 @@ internal unsafe class VKRenderContext : IRenderContext
                         Range = slot.Range
                     };
                     write.PBufferInfo = &bufferInfos[bufferCount++];
+                    break;
+                }
+                case SpirvResourceKind.AccelerationStructure:
+                {
+                    // The TLAS rides VkWriteDescriptorSet.PNext; the empty
+                    // TLAS substitutes until the first scene build.
+                    asHandles[asCount] = boundTlas;
+                    asInfos[asCount] = new VkWriteDescriptorSetAccelerationStructureKHR
+                    {
+                        SType = VkStructureType.WriteDescriptorSetAccelerationStructureKHR,
+                        AccelerationStructureCount = 1,
+                        PAccelerationStructures = &asHandles[asCount]
+                    };
+                    write.PNext = &asInfos[asCount++];
                     break;
                 }
                 default:
@@ -2616,7 +3333,15 @@ internal unsafe class VKRenderContext : IRenderContext
         }
     }
 
-    public bool HasFeature(GraphicsFeature feature) => false;
+    public bool HasFeature(GraphicsFeature feature) => feature switch
+    {
+        GraphicsFeature.RayQuery => rayQuerySupported,
+        GraphicsFeature.MeshShaders => meshShadersSupported,
+        GraphicsFeature.VariableRateShading => vrsSupported,
+        GraphicsFeature.SceneShadows => true,
+        GraphicsFeature.Compute => computeSupported,
+        _ => false
+    };
 
     public string GetRenderer() => $"Vulkan 1.3 ({deviceName})";
 
@@ -2639,6 +3364,14 @@ internal unsafe class VKRenderContext : IRenderContext
         if (slot < textureSlots.Length)
         {
             textureSlots[slot] = texture?.Backing as VKTexture2D;
+        }
+    }
+
+    public void SetStorageImage(int slot, Texture? texture)
+    {
+        if (slot < storageImageSlots.Length)
+        {
+            storageImageSlots[slot] = texture?.Backing as VKTexture2D;
         }
     }
 
@@ -2668,4 +3401,18 @@ internal unsafe class VKRenderContext : IRenderContext
 
     private void BindPipelineNoVertices(IntPtr cmd, PrimitiveTypes primitive) =>
         BindPipeline(cmd, emptyDeclaration, primitive);
+
+    public void DrawMeshTasks(uint groupsX, uint groupsY, uint groupsZ)
+    {
+        if (currentShader is not { IsMeshPipeline: true } || Vk.CmdDrawMeshTasksEXT == null)
+        {
+            return;
+        }
+        EnsureRendering();
+        var cmd = CurrentCommands;
+        BindPipelineNoVertices(cmd, PrimitiveTypes.TriangleList);
+        BindDynamicState(cmd);
+        BindDescriptors(cmd);
+        Vk.CmdDrawMeshTasksEXT(cmd, groupsX, groupsY, groupsZ);
+    }
 }

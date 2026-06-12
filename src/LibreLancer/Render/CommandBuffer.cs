@@ -317,12 +317,14 @@ namespace LibreLancer.Render
                     Material.OpacityMultiplier = Unsafe.BitCast<int, float>(Hash);
                 }
                 if (Material.DisableCull || Material.DoubleSided) context.Cull = false;
+                if (Material.DisableDepthWrite) context.DepthWrite = false;
 				Material.Use(context, Buffer.VertexType, ref Lights, UserData);
 				if ((CmdType != RenderCmdType.MaterialFade) && BaseVertex != -1)
 					Buffer.Draw(Primitive, BaseVertex, Start, Count);
 				else
 					Buffer.Draw(Primitive, Start, Count);
                 if (Material.DisableCull || Material.DoubleSided) context.Cull = true;
+                if (Material.DisableDepthWrite) context.DepthWrite = true;
 			}
 		}
 	}

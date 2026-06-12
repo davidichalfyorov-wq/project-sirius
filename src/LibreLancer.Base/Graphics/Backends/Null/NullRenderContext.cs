@@ -171,6 +171,14 @@ internal class NullRenderContext : IRenderContext
     {
     }
 
+    public void DrawMeshTasks(uint groupsX, uint groupsY, uint groupsZ)
+    {
+    }
+
+    public void SetShadingRate(int size)
+    {
+    }
+
     public void DrawNoVertexBuffer(PrimitiveTypes type, int primitiveCount)
     {
     }

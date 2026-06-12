@@ -1,0 +1,4 @@
+meshshader CubeField.mesh.hlsl
+fragment Basic.frag.hlsl
+feature ALPHATEST_ENABLED 1
+feature DEBUG_VIEW 2

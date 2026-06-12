@@ -1,5 +1,6 @@
 #define PIXEL_SHADOWS 1
 #include "includes/Lighting.hlsl"
+#include "includes/Camera.hlsl"
 #include "includes/Modulate.hlsl"
 #include "includes/ColorSpace.hlsl"
 
@@ -32,6 +33,9 @@ struct Input
 #endif
     float4 color: TEXCOORD4;
     float4 viewPosition: TEXCOORD5;
+#ifdef RTAO
+    float4 screenPos: SV_Position;
+#endif
 #ifdef VERTEX_LIGHTING
     float3 diffuseTermFront: TEXCOORD6;
     float3 diffuseTermBack: TEXCOORD7;
@@ -51,6 +55,8 @@ cbuffer MaterialParameters : register(b3, UNIFORM_SPACE)
     float2 FadeRange;
     float Oc;
     float Tex2Type; //>0 for BtSampler
+    float DebugMode;
+    float3 _debugPad;
 };
 
 cbuffer TexCoordSelectors : register(b5, UNIFORM_SPACE)
@@ -96,6 +102,11 @@ float4 main(Input input) : SV_Target0
 #endif
     float4 ac = float4(1.0, 1.0, 1.0, 1.0);
 
+#if defined(RTAO) && !defined(VERTEX_LIGHTING)
+    AmbientOcclusionTerm = ComputeRtao(input.worldPosition,
+        input.frontFacing ? getNormal(input) : -getNormal(input),
+        input.screenPos.xy);
+#endif
 #ifdef VERTEX_LIGHTING
     float4 color = ApplyVertexLighting(ac, ec, Dc * input.color,
         dtSampled,
@@ -120,9 +131,53 @@ float4 main(Input input) : SV_Target0
 #ifdef ENVMAP
     float4 env = EnvTexture.Sample(EnvSampler, input.viewSpaceReflection);
     float3 envrgb = 2 * SrgbToLinear(env.rgb) * color.rgb;
+#ifdef RT_REFLECTIONS
+    // Glass hulls mirror real scene geometry; miss keeps the cubemap.
+    {
+        float3 viewDir = normalize(input.worldPosition - CameraPosition);
+        float3 reflNormal = input.frontFacing ? getNormal(input) : -getNormal(input);
+        float3 reflDir = reflect(viewDir, reflNormal);
+        float reflShade;
+        if (ComputeRtReflection(input.worldPosition, reflDir, reflNormal, reflShade) > 0.5)
+        {
+            envrgb = lerp(envrgb, float3(reflShade, reflShade, reflShade) * color.rgb * 2.0, 0.65);
+        }
+    }
+#endif
     color = float4(envrgb, color.a);
 #endif
     float4 acolor = color * float4(1.0, 1.0, 1.0, Oc);
+
+#ifdef DEBUG_VIEW
+    // Channel views (roadmap 9.4, SIRIUS_DEBUG_VIEW). Channels with no
+    // data in the fixed-function material model show magenta.
+    if (DebugMode > 0.5)
+    {
+        int debugChannel = (int)(DebugMode + 0.5);
+        if (debugChannel == 1) return float4((Dc * input.color * dtSampled).rgb, 1.0);
+        if (debugChannel == 2) return float4(getNormal(input) * 0.5 + 0.5, 1.0);
+        if (debugChannel == 5)
+        {
+            float4 shadowDebug = float4(0.5, 0.0, 0.5, 1.0);
+            float3 debugNormal = input.frontFacing ? getNormal(input) : -getNormal(input);
+            for (int debugLight = 0; debugLight < MAX_LIGHTS; debugLight++)
+            {
+                if (debugLight >= int(LightCount)) break;
+                if (Lights[debugLight].Type == 0 || Lights[debugLight].CastsShadow > 0)
+                {
+                    float3 toLight = Lights[debugLight].Type == 0
+                        ? normalize(-Lights[debugLight].Direction)
+                        : normalize(Lights[debugLight].Position - input.worldPosition);
+                    shadowDebug = SampleShadowDebug(input.worldPosition, debugNormal,
+                        toLight, length(input.viewPosition.xyz));
+                    break;
+                }
+            }
+            return shadowDebug;
+        }
+        return float4(1.0, 0.0, 1.0, 1.0);
+    }
+#endif
 
 
 #ifdef FADE_ENABLED

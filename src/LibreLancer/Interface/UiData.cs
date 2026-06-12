@@ -115,19 +115,27 @@ namespace LibreLancer.Interface
 
         private Dictionary<string, Texture2D?> loadedFiles = new();
 
-        public Texture2D? GetTextureFile(string filename)
+        public Texture2D? GetTextureFile(string filename) => GetTextureFile(filename, false);
+
+        public Texture2D? GetTextureFile(string filename, bool withMips)
         {
             try
             {
-                var file = DataPath + filename;
+                var file = (withMips ? "mips:" : "") + DataPath + filename;
 
                 if (loadedFiles.TryGetValue(file, out var textureFile))
                 {
                     return textureFile;
                 }
 
-                var f = ImageLib.Generic.TextureFromStream(ResourceManager.GLWindow.RenderContext,
-                    FileSystem.Open(file));
+                // Mipped sprites are drawn via DisplayImage (flip="false" entries),
+                // which samples V=0 at the screen top - upload top row first, unlike
+                // the stbi-flipped ImageFile path.
+                var f = withMips
+                    ? ImageLib.Generic.TextureFromStreamMipmapped(ResourceManager.GLWindow.RenderContext,
+                        FileSystem.Open(DataPath + filename), false)
+                    : ImageLib.Generic.TextureFromStream(ResourceManager.GLWindow.RenderContext,
+                        FileSystem.Open(DataPath + filename));
 
                 if (f is Texture2D t2d)
                 {

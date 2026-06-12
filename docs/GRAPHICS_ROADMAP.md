@@ -1,8 +1,22 @@
 # Project Sirius — Graphics Roadmap
 
 **Файл:** `docs/GRAPHICS_ROADMAP.md`  
-**Дата:** 2026-06-09  
+**Дата:** 2026-06-09 (статусы сверены с кодом 2026-06-11)  
 **Статус:** дизайн-документ для реализации  
+
+> **Прогресс (сверка с кодом, ветка ui-2.0, 2026-06-11):**
+>
+> | Фаза | Статус | Подтверждение в коде |
+> |---|---|---|
+> | Phase 0 — Render Backend abstraction | ✅ закрыта (де-факто) | `Graphics/Backends/{Null,OpenGL,Vulkan}` + интерфейсный слой `IRenderContext/I*`-ресурсов + `RenderBackendSelector`; golden-гейт GL↔VK. Формальный `IRenderBackend` из этого дока не вводился — seam реализован слоем IRenderContext, цель (безопасный шов + parity) достигнута |
+> | Phase 1 — HDR и пост на OpenGL | ✅ закрыта целиком 2026-06-11 (вкл. SMAA 1x) | `Render/HdrFramePipeline.cs`: RGBA16F, ACES+exposure, bloom (Karis 13-tap), god rays, FXAA 3.11 — ON по умолчанию; SMAA 1x (`Shaders/Smaa*`, LUT EmbeddedResource, селектор в options); пер-пасс GPU-тайминги `SIRIUS_PASS_TIMINGS` |
+> | Phase 2 — свет и PBR | ✅ закрыта 2026-06-11 | 2.1 linear workflow (`includes/ColorSpace.hlsl`, CPU-декод INI-цветов) → 2.2 PBR-фикс затухания + `Render/Materials/MaterialNormalizer.cs` → 2.3 BRDF LUT → 2.4 IBL-пробы (`Render/EnvironmentProbe.cs`, t5/t6/t7) → 2.5 CSM 3 каскада (`Render/ShadowMapRenderer.cs`, атлас 3072×1024) → 2.6 локальные спот-тени (атлас 2×2 512²) → 2.7 UI-настройки PERFORMANCE. Гейты GL 1.0×3 / VK 0.999+ |
+> | Phase 3 — Vulkan backend | ✅ закрыта 2026-06-10 | `Backends/Vulkan/*`: device/swapchain/sync, дескриптор-кэш (persistent uniform-сеты + контентно-адресуемые текстурные), пул транзиент-буферов, PSO-кэш; SSIM-parity гейт пройден, **Vulkan — бэкенд по умолчанию**. Не делалось: async compute (6.10) |
+> | Phase 4 — RT/mesh/VRS tier | ✅ закрыта 2026-06-12 (mesh — experimental) | 7.1–7.4 RT-стек целиком: ray query (BLAS/TLAS `VKAccelerationStructures`, сборщик `RayTracedScene`), RT-тени солнца + RTAO + RT-отражения v1 (UI-тоглы, `rt_golden_gate.sh`, CSM-каскады скипаются при RT); 7.5 mesh shaders: тулчейн+рантайм+мешлетизатор сданы (смоук рисует), эмиссия кубов заблокирована внешним багом DXC 1.9×NVIDIA — фича experimental/off (сага в memory); 7.6 VRS pipeline-tier: 2×2 на старсфере (RenderDoc-доказано), attachment-tier — отказ (на 5090 выигрыш ниже шума), фича off-by-default |
+> | Phase 5 — volumetrics/GI/DLSS | ⬜ не начата | VolumetricFog/DDGI/Upscaler в коде отсутствуют |
+> | 9. Инструменты | ✅ закрыта 2026-06-12 | `SIRIUS_PASS_TIMINGS`, `SIRIUS_VK_STATS`, debug labels+object names (`VK_EXT_debug_utils`), Dev HUD F11 (`SIRIUS_DEV_HUD`), RenderDoc in-app capture (`SIRIUS_CAPTURE_SPACE/PATH` + headless qrenderdoc-аналитика), автоассерт валидации `vk_validate_run.sh`, debug-вью каналов (`SIRIUS_DEBUG_VIEW`), снапшоты F10 `SIRIUS_SNAPSHOT` |
+> | 10. Тестирование | 🔶 частично | golden-гейт SSIM GL/VK (`scripts/golden_gate.sh`) + маски + герметичный UI-автотест (`SIRIUS_UI_AUTOTEST`) + мульти-разрешения (`SIRIUS_WINDOW_SIZE`); юнит-тесты точечные (MaterialNormalizer); полного CI-конвейера нет |
+
 **Целевая аудитория:** графические инженеры, engine/runtime инженеры, tools/QA, technical art  
 **Контекст:** LibreLancer / Project Sirius, C#/.NET 10.0, текущий OpenGL backend, будущий Vulkan backend
 
@@ -307,7 +321,7 @@ gantt
 
 ---
 
-# Phase 0 — Абстрактный Render Backend
+# Phase 0 — Абстрактный Render Backend ✅ _(закрыта де-факто: слой IRenderContext + Backends/{Null,OpenGL,Vulkan} + golden parity; формальный IRenderBackend не вводился)_
 
 **Срок:** немедленно, 4–6 недель  
 **Главная цель:** refactor без изменения картинки и поведения.  
@@ -724,7 +738,7 @@ CI policy:
 
 ---
 
-# Phase 1 — Пост-обработка на OpenGL
+# Phase 1 — Пост-обработка на OpenGL ✅ _(закрыта целиком 2026-06-11, включая SMAA 1x)_
 
 **Срок:** месяц 1–2  
 **Главная цель:** заметно улучшить картинку до Vulkan: HDR, bloom, god rays, anti-aliasing.  
@@ -811,7 +825,7 @@ private void DrawSceneToCurrentTarget(ICamera camera, double totalTime, bool for
 }
 ```
 
-## 4.4 HDR pass
+## 4.4 HDR pass ✅
 
 ### Actions
 
@@ -853,7 +867,7 @@ tonemapper = aces
 - Emissive > 1.0 blooms but does not hard clip before tonemap.
 - UI remains crisp and not tonemapped twice.
 
-## 4.5 Bloom / glow
+## 4.5 Bloom / glow ✅
 
 ### Source
 
@@ -913,7 +927,7 @@ Acceptance:
 - No persistent flicker in particle-heavy scenes.
 - Bloom disabled yields bitwise-identical HDR scene before tonemap.
 
-## 4.6 God rays
+## 4.6 God rays ✅
 
 Start with screen-space radial blur.
 
@@ -964,7 +978,7 @@ Acceptance:
 - Rays are occluded by large ships/stations/asteroids using depth.
 - Cost ≤ 0.8 ms @ 4K half-res.
 
-## 4.7 FXAA / SMAA
+## 4.7 FXAA / SMAA ✅ _(FXAA ✅ по умолчанию; SMAA 1x ✅ 2026-06-11 — Shaders/Smaa*, includes/SmaaPort.hlsl, Render/SmaaTextures.cs; 0.07 мс @1440p)_
 
 ### Phase 1 order
 
@@ -991,7 +1005,7 @@ Policy:
 - Default high preset: `SMAA`.
 - Default compatibility preset: `FXAA`.
 
-## 4.8 Phase 1 exit checklist
+## 4.8 Phase 1 exit checklist ✅ _(полный, включая SMAA — фаза 1 закрыта целиком 2026-06-11)_
 
 - [ ] HDR target and tonemap pass implemented.
 - [ ] PBR material pass outputs linear HDR.
@@ -1008,12 +1022,12 @@ Policy:
 
 ---
 
-# Phase 2 — Улучшенное освещение
+# Phase 2 — Улучшенное освещение ✅ _(закрыта 2026-06-11, подфазы 2.1–2.7)_
 
 **Срок:** месяц 3–4  
 **Главная цель:** physically plausible lighting on OpenGL and future Vulkan.
 
-## 5.1 Linear lighting cleanup
+## 5.1 Linear lighting cleanup ✅
 
 ### Required changes
 
@@ -1037,7 +1051,7 @@ Policy:
 | `Atmosphere` | ensure blend in linear HDR |
 | `Sun` | explicit physical-ish intensity, bloom source |
 
-## 5.2 PBR BRDF
+## 5.2 PBR BRDF ✅ _(баг затухания из аудита подтверждён и исправлен; MaterialNormalizer)_
 
 Use Cook-Torrance:
 
@@ -1102,7 +1116,7 @@ float3 L = lightVector / max(distanceToLight, 1e-5);
 
 Add shader unit test for attenuation.
 
-## 5.3 Image-Based Lighting
+## 5.3 Image-Based Lighting ✅ _(EnvironmentProbe: irradiance 16² + prefiltered 64²×5 mips + BRDF LUT)_
 
 ### Goal
 
@@ -1169,7 +1183,7 @@ public sealed class EnvironmentProbe : IDisposable
 - Roughness changes reflection blur.
 - Environment changes between systems.
 
-## 5.4 Cascaded Shadow Maps
+## 5.4 Cascaded Shadow Maps ✅ _(3 каскада, цветовой атлас 3072×1024, PCF 2×2 point)_
 
 ### Goals
 
@@ -1236,7 +1250,7 @@ public enum MaterialRenderFlags
 - Alpha-tested panels cast approximate cutout shadows.
 - Shadow pass CPU/GPU time visible in overlay.
 
-## 5.5 Local light shadows
+## 5.5 Local light shadows ✅ _(до 4 спотов, атлас 2×2 512²)_
 
 Local lights are currently forward-packed with a small cap. Target:
 
@@ -1265,7 +1279,7 @@ priority = screenRadius * intensity * importance / distancePenalty
 - Visible debug overlay: selected shadowed lights and atlas occupancy.
 - No frame spikes when many lights appear; allocation is amortized.
 
-## 5.6 Phase 2 exit checklist
+## 5.6 Phase 2 exit checklist ✅
 
 - [ ] Linear/HDR workflow audited.
 - [ ] PBR output no longer gamma-corrects in material pass.
@@ -1281,7 +1295,7 @@ priority = screenRadius * intensity * importance / distancePenalty
 
 ---
 
-# Phase 3 — Vulkan Backend
+# Phase 3 — Vulkan Backend ✅ _(закрыта 2026-06-10: SSIM-parity, Vulkan по умолчанию; кроме 6.10 async compute)_
 
 **Срок:** месяц 5–8  
 **Главная цель:** `VulkanRenderBackend : IRenderBackend` выполняет тот же frame graph, что OpenGL backend.  
@@ -1642,7 +1656,7 @@ No missing geometry
 No wrong alpha sorting bucket
 ```
 
-## 6.10 Async compute
+## 6.10 Async compute ⬜ _(не реализовано — отложено)_
 
 Only after Vulkan graphics path is stable.
 
@@ -1663,7 +1677,7 @@ Implementation rule:
 - enable with GPU timestamp proof;
 - never add async queue if it increases total frame time due to synchronization stalls.
 
-## 6.11 Phase 3 exit checklist
+## 6.11 Phase 3 exit checklist ✅ _(кроме async compute)_
 
 - [ ] Vulkan window/surface/swapchain works via SDL.
 - [ ] Vulkan backend implements `IRenderBackend`.
@@ -1683,7 +1697,7 @@ Implementation rule:
 
 ---
 
-# Phase 4 — Vulkan-специфичные эффекты
+# Phase 4 — Vulkan-специфичные эффекты ⬜ _(не начата — СЛЕДУЮЩАЯ по пайплайну)_
 
 **Срок:** месяц 9–12  
 **Главная цель:** использовать Vulkan/RTX features без разрушения raster fallback.
@@ -1847,6 +1861,15 @@ Acceptance:
 
 ## 7.5 Mesh shaders for asteroids
 
+> **Status 2026-06-12: experimental, off by default.** Тулчейн (DXC ms_6_5,
+> бандлы, VKShader mesh-пайплайны, DrawMeshTasks), мешлетизатор кубов и
+> рендер-путь (`mesh_asteroids`, UI ASTEROID PIPELINE) сданы и проходят
+> валидацию; смоук-шейдер рисует на любом ракурсе. Боевая эмиссия кубов
+> заблокирована воспроизводимым багом кодгена DXC 1.9 × NVIDIA
+> (буферные вершинные данные × полная эмиссия → 0 фрагментов при
+> валидном mesh-выводе в RenderDoc-реплее). Диагностическая сага и план
+> следующего захода — в memory (graphics_phase4_status).
+
 ### Goal
 
 Asteroid fields are ideal for mesh shader modernization:
@@ -1886,6 +1909,18 @@ Acceptance:
 - Fallback path works without mesh shader support.
 
 ## 7.6 Variable Rate Shading
+
+> **Status 2026-06-12: pipeline-tier реализован, off by default.**
+> `VK_KHR_fragment_shading_rate`: probe + перечень доступных рейтов в лог,
+> статический rate в PSO-ключе (динамик-стейт отброшен — one-shot пассы
+> кубмап-бейков не ходят через BindDynamicState), хук в
+> `DrawStarsphereLayers` шейдит старсферу 2×2 (доказано RenderDoc:
+> единственный rate-(2,2) дро кадра — композит), корабли/HUD/текст 1×1
+> by construction (рисуются после сброса рейта). UI-тогл VARIABLE RATE
+> SHADING, `SIRIUS_NO_VRS=1` эскейп. Attachment-tier (rate image по
+> importance) — отказ: на RTX 5090 фон-пасс ~0.1 мс, выигрыш ниже шума
+> замера; вернуться при profiling-боттлнеке фона на слабом железе.
+> Защита: VRS-структура прикрепляется только к rate≠1 пайплайнам.
 
 ### Goal
 
@@ -1940,7 +1975,7 @@ Acceptance:
 
 ---
 
-# Phase 5 — Продвинутая графика
+# Phase 5 — Продвинутая графика ⬜ _(не начата)_
 
 **Срок:** месяц 13–18  
 **Главная цель:** high-end visual identity: volumetric space, GI, upscaling/Frame Generation, refraction, experimental audio RT.
@@ -2190,7 +2225,7 @@ Acceptance:
 
 ---
 
-# 9. Инструментарий и отладка
+# 9. Инструментарий и отладка 🔶 _(частично: тайминги/статы/дебаг-вью есть; Dev HUD и RenderDoc-интеграция — нет)_
 
 ## 9.1 RenderDoc
 
@@ -2330,7 +2365,7 @@ artifacts/render-tests/
 
 ---
 
-# 10. План тестирования
+# 10. План тестирования 🔶 _(golden-гейт GL/VK + герметичный UI-автотест + мульти-res есть; полный CI — нет)_
 
 ## 10.1 Test pyramid
 

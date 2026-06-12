@@ -21,6 +21,23 @@ public static class AllShaders
     public static ShaderBundle DetailMap2Dm1Msk2PassMaterial = null!;
     public static ShaderBundle DetailMapMaterial = null!;
     public static ShaderBundle Fxaa = null!;
+    public static ShaderBundle SmaaEdges = null!;
+    public static ShaderBundle SmaaWeights = null!;
+    public static ShaderBundle SmaaBlend = null!;
+    public static ShaderBundle RTDebug = null!;
+    // Mesh-pipeline bundles are SPIR-V-only: loaded behind the feature gate.
+    public static ShaderBundle? MSDebug;
+    public static ShaderBundle? CubeField;
+    // Compute bundles are SPIR-V-only: loaded behind GraphicsFeature.Compute.
+    public static ShaderBundle? ComputeSmoke;
+    public static ShaderBundle? Texture3DVis;
+    // Volumetric nebulae (phase 5 track V): froxel chain + composite.
+    public static ShaderBundle? FroxelInject;
+    public static ShaderBundle? FroxelLight;
+    public static ShaderBundle? FroxelIntegrate;
+    public static ShaderBundle? VolFogComposite;
+    public static ShaderBundle? NoiseGen;
+    public static ShaderBundle? DistantNebula;
     public static ShaderBundle GodRaysMask = null!;
     public static ShaderBundle GodRaysBlur = null!;
     public static ShaderBundle IllumDetailMapMaterial = null!;
@@ -77,6 +94,26 @@ public static class AllShaders
         DetailMap2Dm1Msk2PassMaterial ??= Compile(context, "DetailMap2Dm1Msk2PassMaterial");
         DetailMapMaterial ??= Compile(context, "DetailMapMaterial");
         Fxaa ??= Compile(context, "Fxaa");
+        SmaaEdges ??= Compile(context, "SmaaEdges");
+        SmaaWeights ??= Compile(context, "SmaaWeights");
+        SmaaBlend ??= Compile(context, "SmaaBlend");
+        RTDebug ??= Compile(context, "RTDebug");
+        if (context.HasFeature(GraphicsFeature.MeshShaders))
+        {
+            MSDebug ??= Compile(context, "MSDebug");
+            CubeField ??= Compile(context, "CubeField");
+        }
+        if (context.HasFeature(GraphicsFeature.Compute))
+        {
+            ComputeSmoke ??= Compile(context, "ComputeSmoke");
+            Texture3DVis ??= Compile(context, "Texture3DVis");
+            FroxelInject ??= Compile(context, "FroxelInject");
+            FroxelLight ??= Compile(context, "FroxelLight");
+            FroxelIntegrate ??= Compile(context, "FroxelIntegrate");
+            VolFogComposite ??= Compile(context, "VolFogComposite");
+            NoiseGen ??= Compile(context, "NoiseGen");
+            DistantNebula ??= Compile(context, "DistantNebula");
+        }
         GodRaysMask ??= Compile(context, "GodRaysMask");
         GodRaysBlur ??= Compile(context, "GodRaysBlur");
         IllumDetailMapMaterial ??= Compile(context, "IllumDetailMapMaterial");

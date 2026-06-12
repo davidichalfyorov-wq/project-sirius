@@ -24,18 +24,18 @@
     <Panel Width="90" Height="100" id="comms" Visible="false">
     	<CharacterView Anchor="TopCenter" Y="43" Width="58" Height="58" id = "commhead">
     		<CharacterView.Background>
-    			<DisplayImage image="commbackdrop" tint="text"/>
+    			<DisplayImage image="commbackdrop" tint="targeting_background"/>
     		</CharacterView.Background>
     		<CharacterView.Border>
     			<DisplayImage image="commstatic" oneinvsrccolor="true"/>
-    			<DisplayRectangle color="text"/>
+    			<DisplayImage image="sirius_commframe"/>
     		</CharacterView.Border>
     	</CharacterView>
     	<TextBlock id="commname" text="COMM Character Name" Anchor="TopCenter" Y="102" TextColor="text" TextShadow="black" Height="90" Width="90" TextSize="10" Clip="false" Wrap="true" HorizontalAlignment="Center" Color="text" VerticalAlignment="Top" />
     </Panel>
 	<Panel Anchor="BottomLeft" Height="145.2" Width="169.88">
 		<Panel.Background>
-			<DisplayModel model="contactlistbox"  Rotate="0,0,0" />
+			<DisplayImage image="sirius_contactbox" />
 		</Panel.Background>
 		<Button id="nextenemy" X="22" Y="3" Width="21" height="20">
 			<Button.Background><DisplayModel model="hud_nextenemy" tint="text" /></Button.Background>
@@ -64,34 +64,43 @@
 	</Panel>
 	<Panel Anchor="BottomRight" Height="145.2" Width="169.88">
 		<Panel.Background>
-			<DisplayModel model="shipinfobox" />
+			<DisplayImage image="sirius_shipinfobox" />
 		</Panel.Background>
 		<Button id="usenanobots" X="27" Y="4" style="hud_nanobots"/>
-		<TextBlock ID="repairKitCount" Height="22" Width="17" X="45" Y="2" Font="Agency FB" Text="0" TextColor="text" />
-		<TextBlock ID="shieldBatteryCount" Height="22" Width="17" X="82" Y="2" Font="Agency FB" Text="0" TextColor="text" />
+		<TextBlock ID="repairKitCount" Height="22" Width="17" X="45" Y="2" Font="$ButtonText" Text="0" TextColor="text" />
+		<TextBlock ID="shieldBatteryCount" Height="22" Width="17" X="82" Y="2" Font="$ButtonText" Text="0" TextColor="text" />
 		<Button id="useshieldbats" X="62" Y="3" style="hud_shieldbatteries"/>
 		<ListBox id="weapons_list" X="14" Y="32" Width="142" Height="111" ItemHeight="11">
 
 	    </ListBox>
 	</Panel>
-	<TextBlock Anchor="BottomCenter" Height="27" Width="275" Y="60" Text="CRUISE ENGINE CHARGING - WEAPONS OFF-LINE - 25%" TextShadow="black" TextColor="text" TextSize="12" id="cruisecharge" Visible="false" />
+	<TextBlock Anchor="BottomCenter" Height="27" Width="275" Y="60" Text="CRUISE ENGINE CHARGING - WEAPONS OFF-LINE - 25%" TextShadow="black" TextColor="text_hover" TextSize="12" id="cruisecharge" Visible="false" />
 	<Panel Anchor="BottomCenter" Height="27" Width="131" X="4" Y="-5">
 		<Panel.Background>
-			<DisplayModel model="gaugecontainer" />
+			<DisplayImage image="sirius_gaugebox" />
 		</Panel.Background>
 		<Gauge ID="powergauge" Anchor="TopCenter" Width="100" Height="4.5" Y="3.5" PercentFilled="1">
+			<Gauge.Background>
+				<DisplayImage image="sirius_gaugeback_power" />
+			</Gauge.Background>
 			<Gauge.Fill>
-				<DisplayModel model="powergauge" />
+				<DisplayImage image="sirius_gauge_power" />
 			</Gauge.Fill>
 		</Gauge>
 		<Gauge ID="shieldgauge" Anchor="TopCenter" Width="100" Height="4.5" Y="10" PercentFilled="1">
+			<Gauge.Background>
+				<DisplayImage image="sirius_gaugeback_shield" />
+			</Gauge.Background>
 			<Gauge.Fill>
-				<DisplayModel model="shieldgauge" />
+				<DisplayImage image="sirius_gauge_shield" />
 			</Gauge.Fill>
 		</Gauge>
 		<Gauge ID="hullgauge" Anchor="TopCenter" Width="100" Height="4.5" Y="15" PercentFilled="1">
+			<Gauge.Background>
+				<DisplayImage image="sirius_gaugeback_hull" />
+			</Gauge.Background>
 			<Gauge.Fill>
-				<DisplayModel model="hullgauge" />
+				<DisplayImage image="sirius_gauge_hull" />
 			</Gauge.Fill>
 		</Gauge>
 		<Button ID="tractorall" style="hud_contactloot" Anchor="BottomRight" Y="5" X="-68" Width="20" Height="20"/>
@@ -119,10 +128,10 @@
 	</Panel>
 	<Panel Anchor="BottomCenter" Height="25" Width="212" Y="-6" X="4">
 		<Panel.Background>
-			<DisplayModel model="numberboxes" />
+			<DisplayImage image="sirius_numbox" />
 		</Panel.Background>
-		<TextBlock ID="thrustText" Height="18" Width="26" X="8" Y="1" Font="Agency FB" Text="100%" TextColor="text" />
-		<TextBlock ID="speedText" Anchor="TopRight" Height="18" Width="26" X="10" Y="1" Font="Agency FB" Text="80" TextColor="text" />
+		<TextBlock ID="thrustText" Height="18" Width="26" X="8" Y="1" Font="$ButtonText" Text="100%" TextColor="text" />
+		<TextBlock ID="speedText" Anchor="TopRight" Height="18" Width="26" X="10" Y="1" Font="$ButtonText" Text="80" TextColor="text" />
 	</Panel>
 	<!-- Managed by navbox.lua -->
 	<Panel ID="actionbox1" Y="42" Anchor="TopCenter" Width="33" Height="31" X="-80.4" Visible="false">
@@ -138,17 +147,17 @@
 	<Panel ID="navbox5" />
 	<Panel ID="navbox4" Anchor="TopCenter" Y="-10" Width="225" Height="52.12" Visible="true">
 		<Panel.Background>
-			<DisplayModel model="navbox4" />
+			<DisplayImage image="sirius_navbox" />
 		</Panel.Background>
 	</Panel>
 	<Panel Anchor="TopRight" ID="nnbox5" Height="34" Width="131" Y="-7" Visible="false">
 		<Panel.Background>
-			<DisplayModel model="hud_nnbox5" />
+			<DisplayImage image="sirius_nnbox" />
 		</Panel.Background>
 	</Panel>
 	<Panel Anchor="TopRight" ID="nnbox7" Height="34" Width="174" Y="-7">
 		<Panel.Background>
-			<DisplayModel model="hud_nnbox7"/>
+			<DisplayImage image="sirius_nnbox"/>
 		</Panel.Background>
 	</Panel>
 	<Button Anchor="TopRight" Style="nn_info" ID="nn_info" X="8" Y="2"/>
@@ -162,10 +171,10 @@
     <!-- neuralnet here-->
     <ChatBox Anchor="BottomCenter" Y="50" Width="250" Height="60" ID="chatbox">
         <ChatBox.Background>
-            <DisplayColor color="rgba(0,0,255,0.25)"/>
+            <DisplayImage image="sirius_chatplate"/>
         </ChatBox.Background>
         <ChatBox.Border>
-        	<DisplayRectangle color="green"/>
+        	<DisplayRectangle color="#5FD3F7"/>
         </ChatBox.Border>
     </ChatBox>
     <ChatDisplay Anchor="BottomLeft" Y="150" Height="250" Width="510" X="10" id="chat"></ChatDisplay>
