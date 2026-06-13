@@ -40,12 +40,13 @@ public sealed class RenderDebugTooling
         if (startup || envCapture || settings.SelectedRenderCaptureNextFrame)
         {
             LastCaptureRequest = features.CapturePath;
-            CaptureHookAvailable = renderContext.RequestFrameCapture(features.CapturePath);
+            RenderDocCapture.RequestCapture();
+            CaptureHookAvailable = RenderDocCapture.Available;
             if (!CaptureHookAvailable && !captureUnavailableLogged)
             {
                 captureUnavailableLogged = true;
                 FLLog.Info("RenderDebug",
-                    "Frame capture requested, but no in-app capture backend is linked yet; use external RenderDoc/GFXReconstruct capture. Stub hook kept for PR-5.2.");
+                    "Frame capture requested; RenderDoc is not attached yet. The existing RenderDoc hook will retry attachment for the first frames, and external RenderDoc/GFXReconstruct capture remains available.");
             }
         }
     }
