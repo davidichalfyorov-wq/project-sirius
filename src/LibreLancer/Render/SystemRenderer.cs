@@ -68,6 +68,9 @@ namespace LibreLancer.Render
 
         public int ZoneVersion = 0;
         public IRendererSettings Settings;
+        // Volumetrics removed: the sun burns through at full strength (no fog
+        // transmittance to dim it). Kept so SunRenderer/god rays still compile.
+        internal float VolumetricSunTransmittance => 1f;
         private Billboards billboards;
         private ResourceManager resman;
 

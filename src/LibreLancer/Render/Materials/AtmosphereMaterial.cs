@@ -63,7 +63,7 @@ namespace LibreLancer.Render.Materials
             var normalmat = w;
             Matrix4x4.Invert(normalmat, out normalmat);
             normalmat = Matrix4x4.Transpose(normalmat);
-            SetLights(sh, ref lights, rstate.FrameNumber);
+            SetLights(sh, rstate, ref lights, rstate.FrameNumber);
             SetWorld(sh, w, normalmat);
 
             rstate.DepthEnabled = true;
