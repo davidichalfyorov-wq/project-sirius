@@ -47,7 +47,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake make build-essential ninja-build pkg-config \
-            libfontconfig1-dev libfreetype-dev libharfbuzz-dev libopenal-dev
+            libfontconfig1-dev libfreetype-dev libharfbuzz-dev libopenal-dev libgtk-3-dev
 
       - name: Build via canonical build.sh (natives + shaders + game)
         run: |
