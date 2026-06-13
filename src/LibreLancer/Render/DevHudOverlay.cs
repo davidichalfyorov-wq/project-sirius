@@ -91,6 +91,25 @@ public class DevHudOverlay
         {
             Line(FormattableString.Invariant($"gpu memory {memory / (1024.0 * 1024.0),8:0.0} MB"));
         }
+
+        if (game.GetService<IRendererSettings>() is { } settings)
+        {
+            var features = RenderFeatureSet.FromSettings(settings);
+            Line(FormattableString.Invariant($"debug view {features.DebugView}"), Color4.LightSkyBlue);
+            Line($"vol nebula {(features.VolumetricNebula ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"vol near   {(features.VolumetricNearCascade ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"vol ship   {(features.VolumetricShipDisplacement ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            if (features.DebugView is RenderDebugView.VolumetricDensity or
+                RenderDebugView.VolumetricTransmittance or
+                RenderDebugView.VolumetricFroxels or
+                RenderDebugView.VolumetricDisplacement or
+                RenderDebugView.AtmosphereLuts or
+                RenderDebugView.AtmosphereAerial)
+            {
+                Line("view data  not allocated (PR-5.2)", Color4.Orange);
+            }
+        }
         drawList.Render();
     }
 }
