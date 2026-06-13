@@ -1,0 +1,73 @@
+name: Build (compile + shaders)
+
+# Cloud compile-gate. Gives an agent (ChatGPT / Codex / Claude) that cannot run
+# a GPU build locally an automatic answer to "does my patch compile?" - including
+# the HLSL shaders, which are compiled at build time via Shader.targets + dxc.
+# No GPU and no 6.9 GB of Discovery LFS data are needed: this only BUILDS.
+
+on:
+  push:
+    paths-ignore:
+      - 'Discovery Freelancer 4.86.0/**'
+      - 'Output/**'
+      - 'docs/**'
+      - 'tests/goldens/**'
+      - '**/*.md'
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the older build.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Discovery DATA lives in Git LFS (~7 GB). The build does NOT need it -
+      # keep the checkout as pointer files so we never burn LFS bandwidth.
+      GIT_LFS_SKIP_SMUDGE: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+    steps:
+      - name: Checkout (code only, LFS skipped)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install native build deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake make build-essential
+
+      - name: Fetch the project's pinned dxc (shader compiler)
+        run: |
+          set -euo pipefail
+          # URL is pinned in build.config (same dxc the project builds with).
+          DXC_URL=$(grep -E '^DXC_LINUXX64=' build.config | cut -d= -f2-)
+          echo "Downloading dxc: $DXC_URL"
+          mkdir -p bin/builddeps
+          curl -fsSL "$DXC_URL" -o /tmp/dxc.tar.gz
+          tar -xzf /tmp/dxc.tar.gz -C bin/builddeps
+          # Shader.targets looks for bin/builddeps/bin/dxc
+          if [ ! -x bin/builddeps/bin/dxc ]; then
+            echo "dxc not at expected path, locating..."
+            DXCBIN=$(find bin/builddeps -name dxc -type f | head -1)
+            mkdir -p bin/builddeps/bin
+            ln -sf "$(realpath "$DXCBIN")" bin/builddeps/bin/dxc
+          fi
+          chmod +x bin/builddeps/bin/dxc
+          bin/builddeps/bin/dxc --version || true
+
+      - name: Build game + shaders (Release)
+        run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
+
+      - name: Summary
+        if: always()
+        run: echo "Build finished. A green check = C# AND HLSL shaders compiled."

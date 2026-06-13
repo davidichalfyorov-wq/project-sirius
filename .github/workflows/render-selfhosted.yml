@@ -1,0 +1,58 @@
+name: Render (self-hosted GPU)
+
+# Visual verification on a machine that actually has a GPU. A GitHub-hosted
+# runner cannot do this (no GPU, and the 7 GB Discovery data is in LFS), so this
+# job targets a SELF-HOSTED runner registered by the project owner on their own
+# Linux + GPU machine (where the game already builds and renders).
+#
+# One-time owner setup (see Output/CI_FOR_CHATGPT.md):
+#   1. Repo -> Settings -> Actions -> Runners -> New self-hosted runner (Linux x64),
+#      add the label `gpu`, follow the shown ./config.sh / ./run.sh steps.
+#   2. Run it as the same user whose ~/.config/librelancer.ini has freelancer_path set.
+# Then every manual dispatch (or push to the `ci-render` branch) renders the
+# standard poses and uploads the screenshots as a downloadable artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      poses:
+        description: 'Poses "name:x,y,z,yaw" space-separated (blank = default near+far)'
+        required: false
+        default: ''
+      live:
+        description: 'Temporal on (gameplay look) = 1, golden = 0'
+        required: false
+        default: '1'
+  push:
+    branches: [ci-render]
+
+jobs:
+  render:
+    runs-on: [self-hosted, gpu]
+    timeout-minutes: 40
+    steps:
+      - name: Checkout (code only; data comes from the owner's freelancer_path)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Build + render poses
+        env:
+          CI_LIVE: ${{ github.event.inputs.live || '1' }}
+          CI_POSES: ${{ github.event.inputs.poses || '' }}
+        run: |
+          chmod +x scripts/ci_render.sh
+          # CI_POSES empty -> ci_render uses its built-in default near+far Badlands.
+          if [ -z "${CI_POSES}" ]; then unset CI_POSES; fi
+          scripts/ci_render.sh "${GITHUB_WORKSPACE}/Output/ci_render"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-${{ github.sha }}
+          path: |
+            Output/ci_render/**/space_noui.png
+            Output/ci_render/montage.png
+            Output/ci_render/**/run.log
+          if-no-files-found: warn
