@@ -64,11 +64,10 @@ if ! dotnet build "$ROOT/src/lancer/lancer.csproj" -c Release -v minimal 2>&1 | 
 fi
 SRCOUT="$ROOT/src/lancer/bin/Release/net10.0"
 mkdir -p "$ROOT/build/v3"
-for f in lancer.dll lancer.pdb LibreLancer.dll LibreLancer.pdb LibreLancer.Base.dll LibreLancer.Base.pdb \
-         LibreLancer.Data.dll LibreLancer.Media.dll LibreLancer.Physics.dll LibreLancer.Thorn.dll \
-         LibreLancer.Entities.dll LibreLancer.Database.dll LibreLancer.ImUI.dll; do
-    [ -f "$SRCOUT/$f" ] && cp "$SRCOUT/$f" "$ROOT/build/v3/$f"
-done
+# Copy the WHOLE build output (incl. lancer.runtimeconfig.json + *.deps.json +
+# native libs) - a hand-picked DLL list left a fresh build/v3 unrunnable
+# ("libhostpolicy.so / lancer.runtimeconfig.json not found").
+cp -r "$SRCOUT/." "$ROOT/build/v3/"
 echo "build/v3 refreshed"
 
 # 2) Capture each pose into its own dir (golden autoplay rig: menu->launch->settle->shot).
