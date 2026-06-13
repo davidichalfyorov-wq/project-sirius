@@ -43,6 +43,41 @@ public interface IRendererSettings
     bool SelectedRtReflections { get; }
     bool SelectedMeshAsteroids { get; }
     bool SelectedVrs { get; }
+
+    /// <summary>
+    /// Canonical PR-5.0 feature flag for the new froxel nebula path.
+    /// The legacy plural setting remains as a compatibility alias.
+    /// </summary>
+    bool SelectedVolumetricNebula => SelectedVolumetricNebulae;
+
+    /// <summary>
+    /// Compatibility alias for configs written during earlier experiments.
+    /// </summary>
     bool SelectedVolumetricNebulae { get; }
+
     int SelectedVolumetricQuality { get; }
+
+    /// <summary>Near-camera high-frequency froxel cascade. Stubbed until PR-5.2+.</summary>
+    bool SelectedVolumetricNearCascade => false;
+
+    /// <summary>Interactive ship density displacement/wake. Stubbed until PR-5.2+.</summary>
+    bool SelectedVolumetricShipDisplacement => false;
+
+    /// <summary>Atmosphere LUT pipeline for planets with atmospheres. Stubbed until B1.</summary>
+    bool SelectedAtmosphereLuts => false;
+
+    /// <summary>Renderer debug view selector, e.g. off, voldensity, voltransmittance, froxels.</summary>
+    string SelectedDebugView => "off";
+
+    /// <summary>Enable backend debug labels/markers where supported.</summary>
+    bool SelectedRenderDebugMarkers => true;
+
+    /// <summary>Request a capture on the first rendered frame. No-op until a capture backend is linked.</summary>
+    bool SelectedRenderCaptureStartup => false;
+
+    /// <summary>Request a capture on the next rendered frame. No-op until a capture backend is linked.</summary>
+    bool SelectedRenderCaptureNextFrame => false;
+
+    /// <summary>Optional capture output path for RenderDoc/vulkan-tools integration.</summary>
+    string? SelectedRenderCapturePath => null;
 }
