@@ -3,7 +3,6 @@
 // LICENSE, which is part of this source code package
 
 using LibreLancer.Data.Ini;
-using LibreLancer.Render;
 
 namespace LibreLancer;
 
@@ -42,28 +41,18 @@ public partial class GameSettings
     [Entry("renderdoc_capture_path")]
     public string RenderDocCapturePath = "";
 
-    bool IRendererSettings.SelectedVolumetricNebula => VolumetricNebula;
+    public bool Phase5NearCascadeEnabled => VolumetricNebula && VolumetricNearCascade;
 
-    bool IRendererSettings.SelectedVolumetricNearCascade => VolumetricNebula && VolumetricNearCascade;
+    public bool Phase5ShipDisplacementEnabled => VolumetricNebula && VolumetricShipDisplacement;
 
-    bool IRendererSettings.SelectedVolumetricShipDisplacement => VolumetricNebula && VolumetricShipDisplacement;
+    public int Phase5RenderDocCaptureFrame => System.Math.Max(-1, RenderDocCaptureFrame);
 
-    bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
-
-    string IRendererSettings.SelectedDebugView => NormalizePhase5DebugView(DebugView);
-
-    bool IRendererSettings.SelectedRenderDocCapture => RenderDocCapture;
-
-    int IRendererSettings.SelectedRenderDocCaptureFrame => System.Math.Max(-1, RenderDocCaptureFrame);
-
-    string? IRendererSettings.SelectedRenderDocCapturePath =>
+    public string? Phase5RenderDocCapturePath =>
         string.IsNullOrWhiteSpace(RenderDocCapturePath) ? null : RenderDocCapturePath;
 
-    bool IRendererSettings.SelectedPassTimings => PassTimings;
+    public string Phase5DebugView => NormalizePhase5DebugView(DebugView);
 
-    bool IRendererSettings.SelectedDevHud => DevHud;
-
-    private static string NormalizePhase5DebugView(string? value)
+    public static string NormalizePhase5DebugView(string? value)
     {
         return value?.Trim().ToLowerInvariant() switch
         {
