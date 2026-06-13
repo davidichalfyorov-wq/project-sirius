@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using LibreLancer.Graphics;
+using LibreLancer.Render.Volumetrics;
 
 namespace LibreLancer.Render;
 
@@ -90,13 +91,25 @@ public class DevHudOverlay
 
         var settings = game.Config.Settings;
         var vol = VolumetricNebulaFrameDebug.Evaluate(settings, game.RenderContext);
+        var froxels = VolumetricNebulaFrameResources.LastDebug;
         var volStatus = vol.Active ? "active" : vol.LegacyFallback ? "legacy" : "off";
         Line(FormattableString.Invariant($"vol nebula {volStatus,8}"), vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
-        if (vol.Requested || settings.Phase5DebugView != "off")
+        if (vol.Requested || settings.Phase5DebugView != "off" || froxels.Allocated)
         {
             Line(FormattableString.Invariant($"vol q/n/d/a {vol.Quality}/{vol.NearCascade}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
             Line($"debug view {settings.Phase5DebugView}", Color4.LightBlue);
             Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
+            Line(FormattableString.Invariant($"froxels    {froxels.Dimensions}"), froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            Line(FormattableString.Invariant($"froxel q   {froxels.Quality}"), froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            if (!string.IsNullOrWhiteSpace(froxels.ActiveProfile))
+            {
+                Line($"vol profile {froxels.ActiveProfile}", Color4.LightGreen);
+            }
+            if (froxels.EstimatedBytes > 0)
+            {
+                Line(FormattableString.Invariant($"vol memory {froxels.EstimatedBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightGreen);
+            }
+            Line($"vol op     {froxels.LastOperation}", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
         }
 
         var memory = game.RenderContext.DeviceMemoryAllocated;
@@ -120,7 +133,7 @@ public class DevHudOverlay
                 RenderDebugView.AtmosphereLuts or
                 RenderDebugView.AtmosphereAerial)
             {
-                Line("view data  not allocated (PR-5.2)", Color4.Orange);
+                Line(froxels.Allocated ? "view data  allocated/stub" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
             }
         }
         drawList.Render();
