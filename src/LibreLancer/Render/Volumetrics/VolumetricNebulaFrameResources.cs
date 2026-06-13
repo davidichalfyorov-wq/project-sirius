@@ -14,7 +14,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     private const ushort HalfZero = 0x0000;
     private const ushort HalfOne = 0x3C00;
 
+    private VolumetricNebulaQualityProfile qualityProfile;
     private FroxelGridDesc mainDesc;
+    private FroxelGridDesc nearDesc;
     private int allocatedQuality = -1;
     private string activeProfile = string.Empty;
     private bool disposed;
@@ -24,7 +26,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public Texture3D? Integrated { get; private set; }
     public Texture3D? History { get; private set; }
 
+    public VolumetricNebulaQualityProfile QualityProfile => qualityProfile;
     public FroxelGridDesc MainDesc => mainDesc;
+    public FroxelGridDesc NearDesc => nearDesc;
     public bool Allocated => Density != null && Lighting != null && Integrated != null && History != null;
     public long EstimatedBytes => Allocated ? mainDesc.BytesPerVolume() * 4 : 0;
     public string ActiveProfile => activeProfile;
@@ -36,7 +40,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderContext rstate,
         int renderWidth,
         int renderHeight,
-        RenderFeatureSet features,
+        global::LibreLancer.Render.RenderFeatureSet features,
         NebulaVolumeProfile? profile)
     {
         ThrowIfDisposed();
@@ -61,7 +65,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return;
         }
 
-        var desired = FroxelGridDesc.MainForViewport(renderWidth, renderHeight, features.VolumetricQuality);
+        var desiredProfile = VolumetricNebulaQualityProfile.Create(renderWidth, renderHeight, features, active);
+        var desired = desiredProfile.MainGrid;
+        var desiredNear = desiredProfile.NearGrid;
         var needsAllocate = !Allocated || desired != mainDesc || allocatedQuality != desired.Quality;
 
         if (needsAllocate)
@@ -70,7 +76,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             try
             {
                 DisposeTextures();
+                qualityProfile = desiredProfile;
                 mainDesc = desired;
+                nearDesc = desiredNear;
                 allocatedQuality = desired.Quality;
                 activeProfile = active.Nickname;
 
@@ -91,6 +99,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
         else
         {
+            qualityProfile = desiredProfile;
+            nearDesc = desiredNear;
             activeProfile = active.Nickname;
         }
 
@@ -100,11 +110,14 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         LastDebug = new VolumetricNebulaResourceDebug(
             true,
             mainDesc.Dimensions,
+            nearDesc.Dimensions,
+            qualityProfile.Name,
             mainDesc.Quality,
             activeProfile,
             EstimatedBytes,
             needsAllocate ? "allocated + identity uploaded" : "identity clear marker",
-            mainDesc.DebugName);
+            mainDesc.DebugName,
+            VolumetricNebulaPassDeclaration.CanonicalOrder.Count);
     }
 
     private static Texture3D CreateVolume(RenderContext rstate, string role, FroxelGridDesc desc) =>
@@ -144,9 +157,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         Lighting = null;
         Integrated = null;
         History = null;
+        qualityProfile = default;
         activeProfile = string.Empty;
         allocatedQuality = -1;
         mainDesc = default;
+        nearDesc = default;
     }
 
     private void ThrowIfDisposed()
@@ -172,15 +187,18 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 public readonly record struct VolumetricNebulaResourceDebug(
     bool Allocated,
     string Dimensions,
+    string NearDimensions,
+    string QualityName,
     int Quality,
     string ActiveProfile,
     long EstimatedBytes,
     string LastOperation,
-    string DebugName)
+    string DebugName,
+    int PassSlotCount)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
-        new(false, "not allocated", -1, "", 0, reason, "vol_nebula.none");
+        new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0);
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
-        new(false, "waiting", -1, "", 0, reason, "vol_nebula.waiting");
+        new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting", VolumetricNebulaPassDeclaration.CanonicalOrder.Count);
 }
