@@ -41,6 +41,7 @@ jobs:
         with:
           lfs: false
           submodules: recursive
+          show-progress: false
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -81,7 +82,17 @@ jobs:
         run: dotnet build src/LLShaderCompiler/LLShaderCompiler.csproj -v minimal
 
       - name: Build game + shaders (Release)
-        run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
+        run: |
+          set +e
+          dotnet build src/lancer/lancer.csproj -c Release -v minimal > /tmp/project-sirius-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Build error summary"
+            grep -n -E "error |error CS|error MSB|Exception|failed|Failed" /tmp/project-sirius-build.log || tail -120 /tmp/project-sirius-build.log
+            echo "::endgroup::"
+            exit "$status"
+          fi
+          cat /tmp/project-sirius-build.log
 
       - name: Upload game assemblies (managed IL for local build/v3 refresh)
         if: success()
