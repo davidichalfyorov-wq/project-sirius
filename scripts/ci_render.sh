@@ -40,6 +40,17 @@ if [ ! -f "$ROOT/src/CommonVersion.props" ]; then
     printf '%s\n' '<Project><PropertyGroup><InformationalVersion>0.0.0-ci</InformationalVersion></PropertyGroup></Project>' \
         > "$ROOT/src/CommonVersion.props"
 fi
+# SPIRV-Cross shared lib: reflection the shader compiler P/Invokes. The full
+# BuildLL native step also pulls in broken editor-only natives (crunch), so
+# build just this one (same flags as BuildLL). No-op on an owner clone.
+if [ ! -f "$ROOT/bin/builddeps/libspirv-cross-c-shared.so" ] && command -v cmake >/dev/null 2>&1; then
+    echo "== build SPIRV-Cross native (missing) =="
+    cmake -S "$ROOT/extern/SPIRV-Cross" -B "$ROOT/obj/spirvcross" -G "Unix Makefiles" \
+        -DCMAKE_BUILD_TYPE=MinSizeRel -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_STATIC=OFF \
+        -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF >/dev/null 2>&1 \
+        && make -C "$ROOT/obj/spirvcross" -j"$(nproc)" >/dev/null 2>&1 \
+        && mkdir -p "$ROOT/bin/builddeps" && cp "$ROOT/obj/spirvcross"/*.so "$ROOT/bin/builddeps/"
+fi
 
 # 1) Build (Release) + sync into build/v3, exactly like ui2_build but root-relative.
 echo "== build =="
