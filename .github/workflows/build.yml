@@ -83,6 +83,25 @@ jobs:
       - name: Build game + shaders (Release)
         run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
 
+      - name: Upload game assemblies (managed IL for local build/v3 refresh)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-assemblies
+          # Managed .NET assemblies are platform-agnostic IL: these drop straight
+          # into an existing build/v3 whose native libs are already in place.
+          # LibreLancer.dll carries the compiled shader bundle as an embedded
+          # resource, so this is also the authoritative clean-shader artifact.
+          path: |
+            src/lancer/bin/Release/net10.0/lancer.dll
+            src/lancer/bin/Release/net10.0/lancer.pdb
+            src/lancer/bin/Release/net10.0/LibreLancer*.dll
+            src/lancer/bin/Release/net10.0/LibreLancer*.pdb
+            src/lancer/bin/Release/net10.0/lancer.deps.json
+            src/lancer/bin/Release/net10.0/lancer.runtimeconfig.json
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Summary
         if: always()
         run: echo "Green = C# and the HLSL shaders both compiled."
