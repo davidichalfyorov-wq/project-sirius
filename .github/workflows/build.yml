@@ -72,6 +72,9 @@ jobs:
           <Project><PropertyGroup><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion><InformationalVersion>0.0.0-ci</InformationalVersion></PropertyGroup></Project>
           XML
 
+      - name: Build the shader compiler tool first (Shader.targets invokes its Debug build)
+        run: dotnet build src/LLShaderCompiler/LLShaderCompiler.csproj -v minimal
+
       - name: Build game + shaders (Release)
         run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
 

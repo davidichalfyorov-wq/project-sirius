@@ -43,6 +43,11 @@ fi
 
 # 1) Build (Release) + sync into build/v3, exactly like ui2_build but root-relative.
 echo "== build =="
+# Shader.targets invokes the Debug build of LLShaderCompiler; build it first
+# (no-op on an owner clone where it already exists).
+if [ ! -x "$ROOT/src/LLShaderCompiler/bin/Debug/net10.0/LLShaderCompiler" ]; then
+    dotnet build "$ROOT/src/LLShaderCompiler/LLShaderCompiler.csproj" -v minimal 2>&1 | tail -3
+fi
 if ! dotnet build "$ROOT/src/lancer/lancer.csproj" -c Release -v minimal 2>&1 | tail -6; then
     echo "BUILD FAILED"; exit 1
 fi
