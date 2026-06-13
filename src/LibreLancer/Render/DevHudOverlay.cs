@@ -96,7 +96,13 @@ public class DevHudOverlay
         {
             Line(FormattableString.Invariant($"vol q/n/d/a {vol.Quality}/{vol.NearCascade}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
             Line($"debug view {settings.Phase5DebugView}", Color4.LightBlue);
+            Line(FormattableString.Invariant($"vol alloc  {(vol.ResourcesAllocated ? "yes" : "no"),8}"), vol.ResourcesAllocated ? Color4.LightGreen : Color4.Orange);
+            Line($"vol grid   {vol.FroxelDimensions}", Color4.LightBlue);
+            Line($"vol near   {vol.NearFroxelDimensions}", Color4.LightBlue);
+            Line(FormattableString.Invariant($"vol mem    {vol.EstimatedResourceBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightBlue);
+            Line(FormattableString.Invariant($"vol slots  {vol.PassSlotCount,8}"), Color4.LightBlue);
             Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
+            Line($"vol op     {vol.ResourceOperation}", Color4.LightSkyBlue);
         }
 
         var memory = game.RenderContext.DeviceMemoryAllocated;
@@ -120,7 +126,8 @@ public class DevHudOverlay
                 RenderDebugView.AtmosphereLuts or
                 RenderDebugView.AtmosphereAerial)
             {
-                Line("view data  not allocated (PR-5.2)", Color4.Orange);
+                Line(vol.ResourcesAllocated ? "view data  allocated" : "view data  not allocated (PR-5.2)",
+                    vol.ResourcesAllocated ? Color4.LightGreen : Color4.Orange);
             }
         }
         drawList.Render();
