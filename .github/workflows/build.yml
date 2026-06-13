@@ -1,11 +1,16 @@
 name: Build (compile + shaders)
 
-# Cloud compile-gate. Gives an agent (ChatGPT / Codex / Claude) that cannot run
-# a GPU build locally an automatic answer to "does my patch compile?" - including
-# the native deps (SPIRV-Cross, thorncompiler, ...) and the HLSL shaders.
-# No GPU and no 7 GB of Discovery LFS data are needed: this only BUILDS, via the
-# project's own canonical build (build.sh -> BuildLL) so every generated artefact
-# (dxc fetch, CommonVersion.props, native libs, shader compiler) is handled.
+# Cloud compile-gate for agents (ChatGPT / Codex / Claude) that cannot build
+# locally. Answers "does my patch compile?" - C# AND the HLSL shaders.
+#
+# It builds ONLY what the GAME needs, NOT the full BuildLL native step:
+#   * dxc (pinned in build.config) - HLSL -> SPIR-V
+#   * the SPIRV-Cross shared lib    - reflection used by LLShaderCompiler
+#   * LLShaderCompiler              - the shader bundler Shader.targets invokes
+#   * lancer.csproj (+ LibreLancer) - the game + its shaders
+# The editor-only natives (crunch, gtk/lancerdialogs, blurgtext) are skipped:
+# the game doesn't link them at build time and extern/crunch is itself an
+# incomplete checkout. No GPU and no 7 GB Discovery LFS data are needed.
 
 on:
   push:
@@ -25,7 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
     env:
       GIT_LFS_SKIP_SMUDGE: 1
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -42,18 +47,42 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install native build deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            cmake make build-essential ninja-build pkg-config \
-            libfontconfig1-dev libfreetype-dev libharfbuzz-dev libopenal-dev libgtk-3-dev
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake make build-essential
 
-      - name: Build via canonical build.sh (natives + shaders + game)
+      - name: Fetch pinned dxc
         run: |
-          chmod +x build.sh scripts/depcheck_unix 2>/dev/null || true
-          ./build.sh
+          set -euo pipefail
+          DXC_URL=$(grep -E '^DXC_LINUXX64=' build.config | cut -d= -f2-)
+          mkdir -p bin/builddeps
+          curl -fsSL "$DXC_URL" -o /tmp/dxc.tar.gz
+          tar -xzf /tmp/dxc.tar.gz -C bin/builddeps
+          test -x bin/builddeps/bin/dxc || { d=$(find bin/builddeps -name dxc -type f | head -1); mkdir -p bin/builddeps/bin; ln -sf "$(realpath "$d")" bin/builddeps/bin/dxc; }
+          chmod +x bin/builddeps/bin/dxc
+
+      - name: Build SPIRV-Cross shared lib (reflection for the shader compiler)
+        run: |
+          set -euo pipefail
+          cmake -S extern/SPIRV-Cross -B obj/spirvcross -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=MinSizeRel -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_STATIC=OFF \
+            -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF
+          make -C obj/spirvcross -j"$(nproc)"
+          cp obj/spirvcross/*.so bin/builddeps/
+          ls bin/builddeps/*.so
+
+      - name: Generate CommonVersion.props (normally written by BuildLL, gitignored)
+        run: |
+          cat > src/CommonVersion.props <<'XML'
+          <!-- generated in CI -->
+          <Project><PropertyGroup><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion><InformationalVersion>0.0.0-ci</InformationalVersion></PropertyGroup></Project>
+          XML
+
+      - name: Build the shader compiler (copies the .so from bin/builddeps to its output)
+        run: dotnet build src/LLShaderCompiler/LLShaderCompiler.csproj -v minimal
+
+      - name: Build game + shaders (Release)
+        run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
 
       - name: Summary
         if: always()
-        run: echo "Green = native deps, HLSL shaders and the C# game all compiled."
+        run: echo "Green = C# and the HLSL shaders both compiled."
