@@ -88,14 +88,14 @@ public class DevHudOverlay
                 $"rt inst    {rayTracing.LastInstanceCount,8}"));
         }
 
-        IRendererSettings settings = game.Config.Settings;
+        var settings = game.Config.Settings;
         var vol = VolumetricNebulaFrameDebug.Evaluate(settings, game.RenderContext);
         var volStatus = vol.Active ? "active" : vol.LegacyFallback ? "legacy" : "off";
         Line(FormattableString.Invariant($"vol nebula {volStatus,>8}"), vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
-        if (vol.Requested || settings.SelectedDebugView != "off")
+        if (vol.Requested || settings.Phase5DebugView != "off")
         {
             Line(FormattableString.Invariant($"vol q/n/d/a {vol.Quality}/{vol.NearCascade}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
-            Line($"debug view {settings.SelectedDebugView}", Color4.LightBlue);
+            Line($"debug view {settings.Phase5DebugView}", Color4.LightBlue);
             Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
         }
 
