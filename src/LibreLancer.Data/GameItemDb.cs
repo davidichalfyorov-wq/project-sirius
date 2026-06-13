@@ -208,6 +208,7 @@ public class GameItemDb
             {
                 AlePath = alePath,
                 VisFxCrc = (uint)fx.EffectCrc,
+                VisFxNickname = fx.Nickname,
                 LibraryFiles = libFiles!,
                 CRC = FLHash.CreateID(fx.Nickname),
                 Nickname = fx.Nickname
@@ -250,6 +251,7 @@ public class GameItemDb
             {
                 AlePath = alePath,
                 VisFxCrc = (uint)(visFx?.EffectCrc ?? 0),
+                VisFxNickname = visFx?.Nickname,
                 LibraryFiles = (libraryFiles ?? [])!,
                 Spear = spear,
                 Bolt = bolt,

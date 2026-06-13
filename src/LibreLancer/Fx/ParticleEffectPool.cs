@@ -3,6 +3,7 @@
 // LICENSE, which is part of this source code package
 
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -28,7 +29,8 @@ namespace LibreLancer.Fx
             public float Rotate;
             public Vector4 TextureCoordinates;
             public Vector2 HalfSize;
-            // Padding After
+            public float SortDepth;
+            public float SortOrder;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1, Size = PARTICLE_SIZE)]
@@ -79,6 +81,34 @@ namespace LibreLancer.Fx
         private int lastDrawCommand = 0;
         private int nextParticle = 0;
 
+        private readonly struct ParticleDepthComparer : IComparer<ParticleData>
+        {
+            private const float DepthTieRelativeEpsilon = 0.00025f;
+
+            public int Compare(ParticleData x, ParticleData y)
+            {
+                var epsilon = MathF.Max(1f, MathF.Max(x.SortDepth, y.SortDepth)) * DepthTieRelativeEpsilon;
+                if (MathF.Abs(x.SortDepth - y.SortDepth) <= epsilon)
+                {
+                    return x.SortOrder.CompareTo(y.SortOrder);
+                }
+
+                return y.SortDepth.CompareTo(x.SortDepth);
+            }
+        }
+
+        private void SortRangeBackToFront(int start, int count)
+        {
+            if (count <= 1)
+            {
+                return;
+            }
+
+            ref var first = ref sbo.Data<ParticleData>(start);
+            var particles = MemoryMarshal.CreateSpan(ref first, count);
+            particles.Sort(new ParticleDepthComparer());
+        }
+
         public void AddParticle(
             ParticleTexture texture,
             Vector3 pos,
@@ -96,18 +126,21 @@ namespace LibreLancer.Fx
                 return;
             var frameNo = (int) Math.Floor((texture.FrameCount - 1) * frame);
             var texCoords = texture.GetCoordinates(frameNo);
+            var particleIndex = nextParticle++;
             float top = flipV ? texCoords.Y + texCoords.W : texCoords.Y;
             float bottom = flipV ? texCoords.Y : texCoords.Y + texCoords.W;
             float left = flipU ? texCoords.X + texCoords.Z : texCoords.X;
             float right = flipU ? texCoords.X : texCoords.X + texCoords.Z;
-            sbo.Data<ParticleData>(nextParticle++) = new()
+            sbo.Data<ParticleData>(particleIndex) = new()
             {
                 Position = pos,
                 Color = (VertexDiffuse)color,
                 Normal = normal,
                 Rotate = angle,
                 TextureCoordinates = new(left,top,right,bottom),
-                HalfSize = size * 0.5f
+                HalfSize = size * 0.5f,
+                SortDepth = Vector3.DistanceSquared(pos, camera.Position),
+                SortOrder = particleIndex
             };
         }
 
@@ -185,6 +218,11 @@ namespace LibreLancer.Fx
 
             int start = lastDrawCommand;
             int count = nextParticle - lastDrawCommand;
+            if (app.BlendInfo != BlendMode.Opaque && !RenderMaterial.IsAdditiveBlend(app.BlendInfo))
+            {
+                SortRangeBackToFront(start, count);
+            }
+
             while (!ctx.HasFeature(GraphicsFeature.LargeStorageBuffers) &&
                    count > 256)
             {

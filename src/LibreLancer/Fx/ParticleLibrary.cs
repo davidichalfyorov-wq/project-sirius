@@ -18,6 +18,7 @@ namespace LibreLancer.Fx
         public ResourceManager Resources;
         public string AlePath;
         private readonly HashSet<uint> errored = [];
+        private readonly HashSet<uint> nameFallbacks = [];
 
         public ParticleLibrary(ResourceManager res, AleFile ale)
         {
@@ -140,7 +141,7 @@ namespace LibreLancer.Fx
             _ => throw new ArgumentException(ale.ClassName)
         };
 
-        public ParticleEffect? FindEffect(uint crc)
+        public ParticleEffect? FindEffect(uint crc, string? nickname = null)
         {
             if (Effects.Count == 1)
                 return Effects.First(); // Work around buggy mods
@@ -148,11 +149,25 @@ namespace LibreLancer.Fx
             if (fx != null)
                 return fx;
 
-            if (!errored.Contains(crc))
+            if (!string.IsNullOrWhiteSpace(nickname))
+            {
+                fx = Effects.Get(nickname);
+                if (fx != null)
+                {
+                    if (nameFallbacks.Add(crc))
+                    {
+                        var crcInt = unchecked((int) crc);
+                        FLLog.Warning("Fx",
+                            $"CRC mismatch for '{nickname}' in {AlePath ?? "(null)"} ({crcInt}); using effect name fallback");
+                    }
+                    return fx;
+                }
+            }
+
+            if (errored.Add(crc))
             {
                 var crcInt = unchecked((int) crc);
                 FLLog.Error("Fx", $"Unable to find fx crc {crcInt} in {AlePath ?? "(null)"}");
-                errored.Add(crc);
             }
 
             return null;

@@ -11,6 +11,7 @@ public class ResolvedFx : IdentifiableItem
 {
     public required string[] LibraryFiles;
     public uint VisFxCrc;
+    public string? VisFxNickname;
     public string? AlePath;
     public BeamSpear? Spear;
     public BeamBolt? Bolt;

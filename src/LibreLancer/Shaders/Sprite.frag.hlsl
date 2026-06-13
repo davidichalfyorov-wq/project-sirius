@@ -16,7 +16,13 @@ float4 main(PSInput input) : SV_Target0
 {
     // ALE particle tints are display-referred like everything authored.
     float4 tex = SampleColorTexture(Texture, Sampler, input.texCoord);
-    float4 color = tex * float4(SrgbToLinear(input.color.rgb), input.color.a);
+    float alpha = tex.a * input.color.a;
+    // Some legacy particle atlases keep 1/255 alpha in transparent padding.
+    // Blending that padding shows up as rotating dark cards in dense smoke.
+    if (alpha <= (1.5 / 255.0))
+        discard;
+
+    float4 color = float4(tex.rgb * SrgbToLinear(input.color.rgb), alpha);
     float viewDist = length(input.viewPosition.xyz);
     return ApplyVolumetricFogAdditive(input.worldPosition, viewDist, color);
 }

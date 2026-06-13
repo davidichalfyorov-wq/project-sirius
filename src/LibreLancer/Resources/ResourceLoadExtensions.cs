@@ -24,7 +24,7 @@ public static class ResourceLoadExtensions
         }
 
         var lib = resMan.GetParticleLibrary(fx.AlePath);
-        return lib?.FindEffect(fx.VisFxCrc);
+        return lib?.FindEffect(fx.VisFxCrc, fx.VisFxNickname ?? fx.Nickname);
     }
 
     public static ModelResource? LoadFile(this ResolvedModel mdl, ResourceManager res, MeshLoadMode loadMode = MeshLoadMode.GPU)

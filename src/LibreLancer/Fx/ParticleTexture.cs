@@ -22,6 +22,15 @@ namespace LibreLancer.Fx
 
         public Vector4 GetCoordinates(int frame)
         {
+            if (useShape)
+            {
+                return new Vector4(
+                    shape.Dimensions.X,
+                    shape.Dimensions.Y,
+                    shape.Dimensions.Width,
+                    shape.Dimensions.Height);
+            }
+
             if (frameAnim != null)
             {
                 var f = frameAnim.Frames[frame];

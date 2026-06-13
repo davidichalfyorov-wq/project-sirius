@@ -225,10 +225,24 @@ namespace LibreLancer.Thn
 
                     if (fx?.AlePath != null)
                     {
-                        obj.Object = new GameObject
+                        var effect = fx.GetEffect(resman);
+                        if (effect != null)
                         {
-                            RenderComponent = new ParticleEffectRenderer(fx.GetEffect(resman)) { Active = false }
-                        };
+                            obj.Object = new GameObject
+                            {
+                                RenderComponent = new ParticleEffectRenderer(effect) { Active = false }
+                            };
+                        }
+                        else if (spawnObjects)
+                        {
+                            FLLog.Warning("Thn",
+                                $"PSYS '{kv.Value.Name}' resolved '{kv.Value.Template}' but no particle effect was found");
+                        }
+                    }
+                    else if (spawnObjects)
+                    {
+                        FLLog.Warning("Thn",
+                            $"PSYS '{kv.Value.Name}' references missing effect '{kv.Value.Template}'");
                     }
                 }
                 else if (kv.Value.Type == EntityTypes.Scene)
