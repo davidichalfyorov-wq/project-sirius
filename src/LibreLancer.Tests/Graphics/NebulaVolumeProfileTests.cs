@@ -1,6 +1,5 @@
 using System.Numerics;
 using LibreLancer.Data.GameData.World;
-using LibreLancer.Data.Schema.Universe;
 using LibreLancer.Render.Volumetrics;
 using Xunit;
 
