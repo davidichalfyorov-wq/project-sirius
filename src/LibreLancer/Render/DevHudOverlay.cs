@@ -78,26 +78,6 @@ public class DevHudOverlay
             Line(FormattableString.Invariant($"gpu total  {total,8:0.000} ms"), Color4.LightGreen);
         }
 
-        var vol = game.VolumetricFogStatus;
-        if (vol.Enabled || vol.Active)
-        {
-            Line("== VOLUMETRICS ==", Color4.Yellow);
-            Line(FormattableString.Invariant(
-                $"vol state  {(vol.Active ? "active" : "idle"),8} {vol.Quality}"));
-            Line(FormattableString.Invariant(
-                $"vol zones  {vol.ZoneCount,8}"));
-            Line(FormattableString.Invariant(
-                $"vol main   {vol.MainX}x{vol.MainY}x{vol.MainZ}"));
-            Line(vol.NearEnabled
-                ? FormattableString.Invariant($"vol near   {vol.NearX}x{vol.NearY}x{vol.NearZ}")
-                : "vol near        off");
-            if (vol.DistantW > 0 && vol.DistantH > 0)
-            {
-                Line(FormattableString.Invariant(
-                    $"vol far    {vol.DistantW}x{vol.DistantH} s{vol.DistantSteps}"));
-            }
-        }
-
         Line(FormattableString.Invariant($"draw calls {game.DrawCallsPerFrame,8}"));
         if (game.RenderContext.RayTracing is { } rayTracing)
         {

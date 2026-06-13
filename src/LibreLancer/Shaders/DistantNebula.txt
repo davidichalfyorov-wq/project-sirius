@@ -1,1 +1,0 @@
-computeshader DistantNebula.comp.hlsl

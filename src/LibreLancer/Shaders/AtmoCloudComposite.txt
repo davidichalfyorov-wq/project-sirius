@@ -1,2 +1,0 @@
-vertex Tonemap.vert.hlsl
-fragment AtmoCloudComposite.frag.hlsl

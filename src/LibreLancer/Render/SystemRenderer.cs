@@ -68,12 +68,6 @@ namespace LibreLancer.Render
 
         public int ZoneVersion = 0;
         public IRendererSettings Settings;
-        internal float VolumetricSunTransmittance { get; private set; } = 1f;
-        private readonly Volumetrics.NebulaVolumeData.GpuZone[] sunTransmittanceZones =
-            new Volumetrics.NebulaVolumeData.GpuZone[Volumetrics.NebulaVolumeData.MaxZones];
-        private static readonly bool logVolumetricSun =
-            Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LOGSUN") == "1";
-        private int volumetricSunLogCount;
         private Billboards billboards;
         private ResourceManager resman;
 
@@ -138,7 +132,6 @@ namespace LibreLancer.Render
         public void LoadStarspheres(StarSystem system)
         {
             starSystem = system;
-            atmosphereLuts?.Invalidate();
 
             cubemapStarspheres ??= new StarsphereCubemapRenderer(rstate);
             cubemapStarspheres.Clear();
@@ -294,8 +287,6 @@ namespace LibreLancer.Render
 
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
-        private Volumetrics.VolumetricFog? volumetricFog;
-        private AtmosphereLuts? atmosphereLuts;
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
         private bool rtShadowsWasActive;
@@ -399,14 +390,6 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysSamples = Settings.SelectedGodRaysSamples;
             hdrPipeline.PostAa = Settings.SelectedPostAa;
             hdrPipeline.Begin(renderWidth, renderHeight);
-            volumetricFog ??= new Volumetrics.VolumetricFog(rstate);
-            volumetricFog.Enabled = Settings.SelectedVolumetricNebulae;
-            volumetricFog.Quality = Settings.SelectedVolumetricQuality;
-            atmosphereLuts ??= new AtmosphereLuts();
-            atmosphereLuts.Ensure(rstate, World.Objects, resman);
-            RenderMaterial.SetAtmosphereLutSource(
-                atmosphereLuts.Transmittance,
-                atmosphereLuts.MultiScattering);
             rstate.BeginPassTimer("scene");
 
             RenderTarget? restoreTarget = rstate.RenderTarget;
@@ -432,54 +415,13 @@ namespace LibreLancer.Render
 
             rstate.SetCamera(camera);
             Commands.Camera = camera;
-            // Froxel volumetrics build before any scene draw: the compute
-            // dispatches end the (not-yet-started) render pass for free.
-            // RenderClock freezes drift in golden captures. The sun comes
-            // from the same picker the cascade shadows use.
-            var volSun = FindShadowLight(camera.Position, out var volSunDir, out var volSunLight);
-            var volSunColor = volSunLight != null
-                ? new Vector3(volSunLight.Light.Color.R, volSunLight.Light.Color.G, volSunLight.Light.Color.B)
-                : Vector3.One;
-            var driftTime = RenderClock.Get(game.TotalTime);
-            atmosphereLuts.RunAerial(rstate, camera, World.Objects, resman,
-                volSun ? -volSunDir : Vector3.UnitY, volSunColor);
-            RenderMaterial.SetAtmosphereAerialSource(
-                atmosphereLuts.AerialActive ? atmosphereLuts.AerialTexture : null,
-                atmosphereLuts.AerialSettings);
-            atmosphereLuts.RunClouds(rstate, camera, World.Objects, resman,
-                volSun ? -volSunDir : Vector3.UnitY, volSunColor, driftTime,
-                renderWidth, renderHeight);
-            // CSM atlas is valid for the fog when the cascade pass actually
-            // runs (RT shadows skip it; the atlas would be stale).
-            var volCsmLive = Settings.SelectedShadows &&
-                rstate.HasFeature(GraphicsFeature.SceneShadows) &&
-                !(Settings.SelectedRtShadows && rstate.HasFeature(GraphicsFeature.RayQuery));
-            volumetricFog.RunDispatches(camera, Nebulae, driftTime,
-                volSunDir, volSunColor, volSun, shadowMaps, volCsmLive, nr,
-                renderWidth, renderHeight, World.Objects);
-            if (game is FreelancerGame flGame)
-            {
-                flGame.VolumetricFogStatus = volumetricFog.Status;
-            }
-            var volumetricMaterialFrameActive = volumetricFog.Active &&
-                                                Settings.SelectedMSAA <= 0 &&
-                                                hdrPipeline.CurrentSceneTarget != null;
-            RenderMaterial.VolumetricFogActive = volumetricMaterialFrameActive;
+            // Volumetric nebulae and atmosphere 3.0 were removed (quarantined
+            // in Output/Quarantine): the legacy NebulaRenderer and atmosphere
+            // 2.0 are the active path again. The material fog stays off.
+            RenderMaterial.VolumetricFogActive = false;
             RenderMaterial.VolumetricFogMaterialActive = false;
-            RenderMaterial.SetVolumetricFogSource(
-                volumetricMaterialFrameActive ? volumetricFog.IntegratedTexture : null,
-                volumetricMaterialFrameActive ? volumetricFog.MaterialFogSettings : Vector4.Zero);
-            VolumetricSunTransmittance = volumetricFog.Active
-                ? Volumetrics.NebulaVolumeData.SunTransmittance(Nebulae, camera.Position,
-                    volSun ? -volSunDir : Vector3.UnitY, sunTransmittanceZones)
-                : 1f;
-            if (logVolumetricSun && volumetricFog.Active && volumetricSunLogCount < 8)
-            {
-                volumetricSunLogCount++;
-                FLLog.Info("Volumetrics",
-                    $"sun transmittance={VolumetricSunTransmittance:F4} active={volumetricFog.Active} camera=({camera.Position.X:F0},{camera.Position.Y:F0},{camera.Position.Z:F0}) toSun=({(-volSunDir).X:F2},{(-volSunDir).Y:F2},{(-volSunDir).Z:F2})");
-            }
-            hdrPipeline.GodRaysSunTransmittance = VolumetricSunTransmittance;
+            RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);
+            hdrPipeline.GodRaysSunTransmittance = 1f;
             var transitioned = false;
 
             if (nr != null)
@@ -487,7 +429,7 @@ namespace LibreLancer.Render
                 // Volumetrics never "transition": the starsphere stays and
                 // the gas itself swallows it physically (legacy hid the sky
                 // behind a fog-coloured clear once deep enough).
-                transitioned = nr.FogTransitioned() && DrawNebulae && !volumetricFog.Active;
+                transitioned = nr.FogTransitioned() && DrawNebulae;
             }
 
             rstate.DepthEnabled = true;
@@ -652,7 +594,7 @@ namespace LibreLancer.Render
             // (exterior puffs, fill quad, interior puffs): drawing both
             // doubled the fog with hard-edged sprite blobs on top of the
             // real gas (the "ромбы и рваные углы" report).
-            if (DrawNebulae && !volumetricFog.Active)
+            if (DrawNebulae)
             {
                 if (nr == null)
                 {
@@ -699,7 +641,7 @@ namespace LibreLancer.Render
                     rstate.SetCamera(thn2);
                 }
 
-                if (nr != null && DrawNebulae && !volumetricFog.Active)
+                if (nr != null && DrawNebulae)
                 {
                     // Legacy fullscreen fog tint - the volumetric composite
                     // owns the in-cloud look now.
@@ -710,38 +652,9 @@ namespace LibreLancer.Render
             }
 
             OpaqueHook?.Invoke();
-            // Volumetric fog composites over opaque+starsphere, before the
-            // transparent pass (ships sink into the fog; engine trails and
-            // glass still draw on top - V8 teaches them the fog itself).
-            // MSAA path is excluded: multisampled depth can't be copied.
-            if (volumetricMaterialFrameActive &&
-                hdrPipeline.CurrentSceneTarget is { } volSceneTarget)
-            {
-                var volCompositeVrs = Settings.SelectedVrs &&
-                    rstate.HasFeature(GraphicsFeature.VariableRateShading) &&
-                    Environment.GetEnvironmentVariable("SIRIUS_VRS_HOOK_OFF") != "1";
-                if (volCompositeVrs)
-                {
-                    rstate.SetShadingRate(2);
-                }
-                try
-                {
-                    volumetricFog.Composite(volSceneTarget, renderWidth, renderHeight);
-                }
-                finally
-                {
-                    if (volCompositeVrs)
-                    {
-                        rstate.SetShadingRate(1);
-                    }
-                }
-            }
-            atmosphereLuts.CompositeClouds(rstate);
             // Transparent Pass
             rstate.DepthWrite = false;
-            RenderMaterial.VolumetricFogMaterialActive = volumetricMaterialFrameActive;
             Commands.DrawTransparent(rstate);
-            RenderMaterial.VolumetricFogMaterialActive = false;
             rstate.DepthWrite = true;
             rstate.DepthEnabled = true;
             PhysicsHook?.Invoke();
@@ -783,7 +696,6 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.End();
 
-            atmosphereLuts?.DrawDebug(rstate, renderWidth, renderHeight);
 
             if (debugBrdfLut)
             {
@@ -1054,8 +966,6 @@ namespace LibreLancer.Render
         {
             msaa?.Dispose();
             hdrPipeline?.Dispose();
-            volumetricFog?.Dispose();
-            atmosphereLuts?.Dispose();
             cubemapStarspheres?.Dispose();
 
             Polyline.Dispose();
