@@ -1,0 +1,36 @@
+[submodule "extern/LiteNetLib"]
+	path = extern/LiteNetLib
+	url = https://github.com/RevenantX/LiteNetLib.git
+[submodule "extern/SPIRV-Cross"]
+	path = extern/SPIRV-Cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "extern/SimpleMesh"]
+	path = extern/SimpleMesh
+	url = https://github.com/CallumDev/SimpleMesh.git
+[submodule "extern/StringSquash"]
+	path = extern/StringSquash
+	url = https://github.com/CallumDev/StringSquash.git
+[submodule "extern/bepuphysics2"]
+	path = extern/bepuphysics2
+	url = https://github.com/bepu/bepuphysics2.git
+[submodule "extern/blurgtext"]
+	path = extern/blurgtext
+	url = https://github.com/CallumDev/blurgtext.git
+[submodule "extern/crunch"]
+	path = extern/crunch
+	url = https://github.com/DaemonEngine/crunch.git
+[submodule "extern/imgui"]
+	path = extern/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "extern/lancerdecode"]
+	path = extern/lancerdecode
+	url = https://github.com/Librelancer/lancerdecode.git
+[submodule "extern/nativefiledialog-extended"]
+	path = extern/nativefiledialog-extended
+	url = https://github.com/btzy/nativefiledialog-extended.git
+[submodule "extern/thorncompiler"]
+	path = extern/thorncompiler
+	url = https://github.com/Librelancer/thorncompiler.git
+[submodule "extern/wattlescript"]
+	path = extern/wattlescript
+	url = https://github.com/WattleScript/wattlescript.git

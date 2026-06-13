@@ -31,10 +31,11 @@ jobs:
     runs-on: [self-hosted, gpu]
     timeout-minutes: 40
     steps:
-      - name: Checkout (code only; data comes from the owner's freelancer_path)
+      - name: Checkout (code + submodules; data comes from the owner's freelancer_path)
         uses: actions/checkout@v4
         with:
           lfs: false
+          submodules: recursive
 
       - name: Build + render poses
         env:
