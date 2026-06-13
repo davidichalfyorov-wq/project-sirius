@@ -155,12 +155,13 @@ public readonly record struct NebulaVolumeExclusion(string Nickname, Zone? Zone,
 
 public readonly record struct VolumetricNebulaFrameDebug(bool Requested, bool Active, bool LegacyFallback, string Reason, string ProfileNickname, int Quality, bool NearCascade, bool ShipDisplacement, bool AtmosphereLuts, string DebugView)
 {
-    public static VolumetricNebulaFrameDebug Evaluate(IRendererSettings settings, RenderContext rstate)
+    public static VolumetricNebulaFrameDebug Evaluate(GameSettings settings, RenderContext rstate)
     {
-        if (!settings.SelectedVolumetricNebula)
-            return new VolumetricNebulaFrameDebug(false, false, false, "disabled", "", settings.SelectedVolumetricQuality, false, false, settings.SelectedAtmosphereLuts, settings.SelectedDebugView);
+        var debugView = settings.Phase5DebugView;
+        if (!settings.VolumetricNebula)
+            return new VolumetricNebulaFrameDebug(false, false, false, "disabled", "", settings.VolumetricQuality, false, false, settings.AtmosphereLuts, debugView);
         if (!rstate.HasFeature(GraphicsFeature.Compute))
-            return new VolumetricNebulaFrameDebug(true, false, true, "backend has no compute feature", "", settings.SelectedVolumetricQuality, false, false, settings.SelectedAtmosphereLuts, settings.SelectedDebugView);
-        return new VolumetricNebulaFrameDebug(true, false, true, "froxel resources are scheduled for PR-5.2", "", settings.SelectedVolumetricQuality, settings.SelectedVolumetricNearCascade, settings.SelectedVolumetricShipDisplacement, settings.SelectedAtmosphereLuts, settings.SelectedDebugView);
+            return new VolumetricNebulaFrameDebug(true, false, true, "backend has no compute feature", "", settings.VolumetricQuality, false, false, settings.AtmosphereLuts, debugView);
+        return new VolumetricNebulaFrameDebug(true, false, true, "froxel resources are scheduled for PR-5.2", "", settings.VolumetricQuality, settings.Phase5NearCascadeEnabled, settings.Phase5ShipDisplacementEnabled, settings.AtmosphereLuts, debugView);
     }
 }
