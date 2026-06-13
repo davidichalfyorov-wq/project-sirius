@@ -65,6 +65,13 @@ jobs:
           chmod +x bin/builddeps/bin/dxc
           bin/builddeps/bin/dxc --version || true
 
+      - name: Generate CommonVersion.props (normally written by BuildLL, gitignored)
+        run: |
+          cat > src/CommonVersion.props <<'XML'
+          <!-- generated in CI -->
+          <Project><PropertyGroup><IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion><InformationalVersion>0.0.0-ci</InformationalVersion></PropertyGroup></Project>
+          XML
+
       - name: Build game + shaders (Release)
         run: dotnet build src/lancer/lancer.csproj -c Release -v minimal
 

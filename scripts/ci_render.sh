@@ -25,6 +25,22 @@ echo "OUTDIR=$OUTDIR  RENDERER=$RENDERER  LIVE=$LIVE"
 mkdir -p "$OUTDIR"
 cd "$ROOT" || { echo "bad ROOT"; exit 2; }
 
+# 0) Ensure gitignored build deps exist (a fresh CI checkout lacks them; an
+#    owner's working clone already has them, so these are no-ops there).
+if [ ! -x "$ROOT/bin/builddeps/bin/dxc" ]; then
+    echo "== fetch dxc (missing) =="
+    dxcurl=$(grep -E '^DXC_LINUXX64=' "$ROOT/build.config" | cut -d= -f2-)
+    mkdir -p "$ROOT/bin/builddeps"
+    curl -fsSL "$dxcurl" -o /tmp/dxc.tar.gz && tar -xzf /tmp/dxc.tar.gz -C "$ROOT/bin/builddeps"
+    [ -x "$ROOT/bin/builddeps/bin/dxc" ] || { d=$(find "$ROOT/bin/builddeps" -name dxc -type f | head -1); \
+        mkdir -p "$ROOT/bin/builddeps/bin"; ln -sf "$(realpath "$d")" "$ROOT/bin/builddeps/bin/dxc"; }
+    chmod +x "$ROOT/bin/builddeps/bin/dxc" 2>/dev/null || true
+fi
+if [ ! -f "$ROOT/src/CommonVersion.props" ]; then
+    printf '%s\n' '<Project><PropertyGroup><InformationalVersion>0.0.0-ci</InformationalVersion></PropertyGroup></Project>' \
+        > "$ROOT/src/CommonVersion.props"
+fi
+
 # 1) Build (Release) + sync into build/v3, exactly like ui2_build but root-relative.
 echo "== build =="
 if ! dotnet build "$ROOT/src/lancer/lancer.csproj" -c Release -v minimal 2>&1 | tail -6; then
