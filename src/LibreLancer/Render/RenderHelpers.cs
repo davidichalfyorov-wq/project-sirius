@@ -102,7 +102,7 @@ namespace LibreLancer.Render
                 lights.Ambient = new Color3f(ambient.Value.R, ambient.Value.G, ambient.Value.B);
             }
 
-            if (fogenabled)
+            if (fogenabled && !RenderMaterial.VolumetricFogActive)
             {
                 lights.FogMode = FogModes.Linear;
                 lights.FogColor = new Color3f(fogcolor.R, fogcolor.G, fogcolor.B);
@@ -138,4 +138,3 @@ namespace LibreLancer.Render
 		}
 	}
 }
-

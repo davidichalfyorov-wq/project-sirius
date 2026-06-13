@@ -44,4 +44,5 @@ public interface IRendererSettings
     bool SelectedMeshAsteroids { get; }
     bool SelectedVrs { get; }
     bool SelectedVolumetricNebulae { get; }
+    int SelectedVolumetricQuality { get; }
 }

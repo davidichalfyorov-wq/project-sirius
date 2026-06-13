@@ -1,5 +1,6 @@
 #include "includes/ColorSpace.hlsl"
 
+#define LL_ENABLE_MATERIAL_FOG 1
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
 

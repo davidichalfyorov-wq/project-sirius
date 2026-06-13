@@ -1385,6 +1385,10 @@ namespace LibreLancer.Server
         // SIRIUS_TELEPORT="x,y,z,yawDegrees" pins an arbitrary autoplay pose
         // for effect screenshots; the golden gate keeps its hardcoded pose.
         private static readonly Vector4? teleportOverride = ParseTeleportOverride();
+        // SIRIUS_TELEPORT_ONCE=1 lets probe-mode autoplay start from a pose
+        // and then release physics/input for motion captures.
+        private static readonly bool teleportOnce =
+            Environment.GetEnvironmentVariable("SIRIUS_TELEPORT_ONCE") == "1";
 
         private static Vector4? ParseTeleportOverride()
         {
@@ -1422,6 +1426,10 @@ namespace LibreLancer.Server
             if ((SiriusAutoplay.GoldenDir != null || (SiriusAutoplay.Enabled && teleportOverride != null))
                 && Players.Count > 0)
             {
+                if (teleportOnce && goldenTeleported)
+                {
+                    goto skipTeleport;
+                }
                 // Key off the player's arrival in SPACE, not absolute server
                 // time: load times differ per backend and an early teleport
                 // gets overwritten by the launch sequence.

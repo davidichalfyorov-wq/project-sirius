@@ -60,7 +60,9 @@ float PerlinFbm(float3 p, float period, uint octaves)
     float total = 0, amplitude = 0.5, frequency = 1;
     for (uint i = 0; i < octaves; i++)
     {
-        total += amplitude * PerlinTile(p * frequency, period);
+        // PerlinTile receives normalized p and multiplies by the lattice
+        // period internally; fBm octave frequency is the octave period.
+        total += amplitude * PerlinTile(p, period * frequency);
         amplitude *= 0.5;
         frequency *= 2.0;
     }

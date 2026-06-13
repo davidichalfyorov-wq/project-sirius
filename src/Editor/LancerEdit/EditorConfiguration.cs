@@ -154,6 +154,10 @@ namespace LancerEdit
 
         bool IRendererSettings.SelectedVrs => false;
 
+        bool IRendererSettings.SelectedVolumetricNebulae => false;
+
+        int IRendererSettings.SelectedVolumetricQuality => 2;
+
         public string LastExportPath
         {
             get => Decode(lastExportPath);

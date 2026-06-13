@@ -33,6 +33,7 @@ public class ParticleMaterial(StorageBuffer buffer) : RenderMaterial(null)
         var dk = Parameters[userData].drawKind;
         shader.SetUniformBlock(3, ref dk);
         rstate.BlendMode = Parameters[userData].blendMode;
+        SetVolumetricFog(shader, rstate, IsAdditiveBlend(Parameters[userData].blendMode));
         rstate.Shader = shader;
         Buffer.BindTo(9, Parameters[userData].drawStart,  Parameters[userData].drawCount);
     }

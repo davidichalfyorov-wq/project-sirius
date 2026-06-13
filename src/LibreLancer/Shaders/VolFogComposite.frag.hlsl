@@ -15,6 +15,8 @@ Texture3D<float4> Integrated : register(t0, TEXTURE_SPACE);
 SamplerState IntegratedSampler : register(s0, TEXTURE_SPACE);
 Texture2D<float> SceneDepth : register(t1, TEXTURE_SPACE);
 SamplerState DepthSampler : register(s1, TEXTURE_SPACE);
+Texture3D<float4> NearIntegrated : register(t2, TEXTURE_SPACE);
+SamplerState NearIntegratedSampler : register(s2, TEXTURE_SPACE);
 Texture2D<float4> Distant : register(t3, TEXTURE_SPACE); // half-res far layer (V6)
 SamplerState DistantSampler : register(s3, TEXTURE_SPACE);
 
@@ -23,8 +25,27 @@ cbuffer CompositeParams : register(b3, UNIFORM_SPACE)
     float4x4 InvViewProj;
     float4 CameraPosNear; // xyz camera, w froxel near
     float4 GridSizeFar;   // xyz grid dimensions, w froxel far
-    float4 DebugMode;     // x: 0 normal, 1 zone view; y: distant layer on
+    float4 NearGridSizeFar; // xyz near-cascade grid, w near far
+    float4 CascadeBlend;  // x near-cascade near, y blend start, z near active
+    float4 DebugMode;     // x: 0 normal, 1 zone view; y: distant layer on; z: min transmittance
 };
+
+float4 SampleIntegrated(
+    Texture3D<float4> tex, SamplerState samp, float2 uv,
+    float dist, float slices, float nearPlane, float farPlane)
+{
+    if (dist <= nearPlane)
+    {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+    float slice = DistanceToSlice(min(dist, farPlane), slices, nearPlane, farPlane);
+    return tex.SampleLevel(samp, float3(uv, saturate(slice / slices)), 0);
+}
+
+float4 ComposeVolume(float4 front, float4 back)
+{
+    return float4(front.rgb + front.a * back.rgb, front.a * back.a);
+}
 
 float4 main(Input input) : SV_Target0
 {
@@ -45,10 +66,35 @@ float4 main(Input input) : SV_Target0
         viewDist = length(scenePoint.xyz - CameraPosNear.xyz);
     }
 
-    float slice = DistanceToSlice(viewDist, GridSizeFar.z, CameraPosNear.w, GridSizeFar.w);
-    float w = saturate(slice / GridSizeFar.z);
-    float4 fog = Integrated.SampleLevel(IntegratedSampler,
-        float3(input.texCoord, w), 0);
+    float4 mainFog = SampleIntegrated(Integrated, IntegratedSampler,
+        input.texCoord, viewDist, GridSizeFar.z, CameraPosNear.w, GridSizeFar.w);
+    float4 fog = mainFog;
+
+    if (CascadeBlend.z > 0.5)
+    {
+        float blendStart = CascadeBlend.y;
+        float nearFar = NearGridSizeFar.w;
+        float4 nearAtDist = SampleIntegrated(NearIntegrated, NearIntegratedSampler,
+            input.texCoord, min(viewDist, nearFar), NearGridSizeFar.z,
+            CascadeBlend.x, nearFar);
+        float4 nearBase = SampleIntegrated(NearIntegrated, NearIntegratedSampler,
+            input.texCoord, blendStart, NearGridSizeFar.z, CascadeBlend.x, nearFar);
+        float4 composed = ComposeVolume(nearBase, mainFog);
+
+        if (viewDist < blendStart)
+        {
+            fog = nearAtDist;
+        }
+        else if (viewDist < nearFar)
+        {
+            float t = saturate((viewDist - blendStart) / max(nearFar - blendStart, 1e-3));
+            fog = lerp(nearAtDist, composed, t);
+        }
+        else
+        {
+            fog = composed;
+        }
+    }
 
     // Distant layer rides UNDER the froxel result: it only applies where
     // the scene depth reaches past the froxel range (sky/far geometry).
@@ -75,5 +121,5 @@ float4 main(Input input) : SV_Target0
         return float4(density, density * 0.5, fog.b * 0.25 + density * 0.1, 0.0);
     }
 
-    return float4(fog.rgb, fog.a);
+    return float4(fog.rgb, max(fog.a, DebugMode.z));
 }

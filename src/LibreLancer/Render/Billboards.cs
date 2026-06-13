@@ -326,6 +326,8 @@ namespace LibreLancer.Render
 
             rs.Textures[0] = rendat[datindex].Texture;
             rs.Samplers[0] = new SamplerState(rs.PreferredFilterLevel, WrapMode.ClampToEdge, WrapMode.ClampToEdge);
+            RenderMaterial.SetVolumetricFog(shaderBasic, rs,
+                RenderMaterial.IsAdditiveBlend(rendat[datindex].BlendMode));
             vboBasic.Draw(PrimitiveTypes.TriangleList, 0, start, count / 3);
             rs.Cull = true;
             lastDatHash = -1;

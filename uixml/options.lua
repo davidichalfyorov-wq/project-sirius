@@ -86,6 +86,13 @@ local bloom_modes = {
 	"ON"
 }
 
+local volumetric_quality_modes = {
+	"LOW",
+	"MEDIUM",
+	"HIGH",
+	"ULTRA"
+}
+
 local function tonemapper_to_idx(s) => s == "aces" ? 3 : (s == "off" ? 1 : 2);
 
 local function idx_to_tonemapper(i) => i == 3 ? "aces" : (i == 1 ? "off" : "filmic");
@@ -188,6 +195,10 @@ class options : options_Designer with Modal
 		this.MeshAsteroids = val_selection(e.meshast_left, e.meshast_right, e.meshast_display, pipeline_modes, 1, msmax, (msmax == 2 and this.opts.MeshAsteroids) ? 2 : 1)
 		local vrsmax = this.opts.VrsSupported() ? 2 : 1
 		this.Vrs = val_selection(e.vrs_left, e.vrs_right, e.vrs_display, bloom_modes, 1, vrsmax, (vrsmax == 2 and this.opts.Vrs) ? 2 : 1)
+		local volq = this.opts.VolumetricQuality + 1
+		if (volq < 1) volq = 1;
+		if (volq > 4) volq = 4;
+		this.VolumetricQuality = val_selection(e.volq_left, e.volq_right, e.volq_display, volumetric_quality_modes, 1, 4, volq)
 
 		this.controlcategories = { e.cat_ship, e.cat_ui, e.cat_mp }
 		e.cat_ship.OnClick(() => this.setcontrolcategory(1))
@@ -224,6 +235,7 @@ class options : options_Designer with Modal
 		this.opts.RtReflections = this.RtReflections.vcurrent == 2
 		this.opts.MeshAsteroids = this.MeshAsteroids.vcurrent == 2
 		this.opts.Vrs = this.Vrs.vcurrent == 2
+		this.opts.VolumetricQuality = this.VolumetricQuality.vcurrent - 1
 		this.keymap.Save();
 		Game.ApplySettings(this.opts)
 		if (this.isModal) {

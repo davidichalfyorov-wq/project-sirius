@@ -29,7 +29,8 @@ cbuffer DistantParams : register(b3, UNIFORM_SPACE)
     float4 TargetSizeEnd;    // xy half-res target size, z march end, w frame
     float4 SunDirAmbient;    // xyz to-sun, w ambient
     float4 SunColorIntensity; // rgb colour, w intensity
-    float4 ZoneCountsBlend;  // x zone count, y drift time, z history blend, w depth valid
+    float4 ZoneCountsBlend;  // x zone count, y drift time, z history blend
+    float4 DistantQuality;   // x step count, y depth valid
 };
 
 float SampleDensity(float3 worldPos, uint zoneCount)
@@ -132,17 +133,22 @@ void main(uint2 id : SV_DispatchThreadID)
         }
     }
     float marchStart = CameraPosStart.w; // fixed lattice origin (froxel far)
-    // Clip the march by LAST frame's scene depth: geometry inside the
-    // layer (stations 20-60km out) must occlude the cloud behind it. A
-    // one-frame lag is invisible at these distances.
-    if (ZoneCountsBlend.w > 0.5)
+    // Clip the march by LAST frame's scene depth only when the hit is
+    // inside the distant layer. Near geometry is masked by the froxel
+    // composite; using it here cuts clouds tens of km behind a ship and
+    // leaves a visible aura around the hull.
+    if (DistantQuality.y > 0.5)
     {
         float depth = SceneDepth.SampleLevel(SceneDepthSampler, uv, 0);
         if (depth < 0.9999999)
         {
             float4 scenePoint = mul(float4(ndc, depth, 1.0), InvViewProj);
             scenePoint /= scenePoint.w;
-            marchEnd = min(marchEnd, length(scenePoint.xyz - origin));
+            float depthDist = length(scenePoint.xyz - origin);
+            if (depthDist > CameraPosStart.w)
+            {
+                marchEnd = min(marchEnd, depthDist);
+            }
         }
     }
 
@@ -152,8 +158,8 @@ void main(uint2 id : SV_DispatchThreadID)
         return;
     }
 
-    const uint Steps = 48;
-    float stepLen = (TargetSizeEnd.z - CameraPosStart.w) / Steps;
+    uint stepCount = max(1u, (uint)DistantQuality.x);
+    float stepLen = (TargetSizeEnd.z - CameraPosStart.w) / stepCount;
     float jitter = InterleavedGradientNoise(id, (uint)TargetSizeEnd.w);
 
     float3 light = 0;
@@ -163,7 +169,7 @@ void main(uint2 id : SV_DispatchThreadID)
     float cosTheta = dot(dir, SunDirAmbient.xyz);
 
     [loop]
-    for (uint s = 0; s < Steps; s++)
+    for (uint s = 0; s < stepCount; s++)
     {
         float t = marchStart + (s + jitter) * stepLen;
         if (t < intervalStart || t > marchEnd)

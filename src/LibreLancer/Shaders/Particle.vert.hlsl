@@ -32,6 +32,8 @@ struct Output
 {
     float2 texCoord : TEXCOORD0;
     float4 color : TEXCOORD1;
+    float3 worldPosition : TEXCOORD2;
+    float4 viewPosition : TEXCOORD3;
     float4 position : SV_Position;
 };
 
@@ -108,7 +110,10 @@ Output main(int vertexID: SV_VertexID)
     };
 
     Output output;
-    output.position = mul(float4(positions[vertex], 1.0), ViewProjection);
+    float4 worldPos = float4(positions[vertex], 1.0);
+    output.position = mul(worldPos, ViewProjection);
+    output.worldPosition = worldPos.xyz;
+    output.viewPosition = mul(worldPos, View);
     output.texCoord = uvs[vertex];
     output.color = color;
     return output;

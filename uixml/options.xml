@@ -99,11 +99,14 @@
 				<Button id="vrs_left" style="sel_left" X="416" Y="323"/>
 				<Button id="vrs_right" style="sel_right" X="526" Y="323"/>
 				<TextBlock id="vrs_display" X="420" Y="316" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="VRS"/>
+				<TextBlock X="288" Y="350" HorizontalAlignment="Left" Height="22" Width="126" TextColor="text" TextShadow="black" TextSize="11" Text="NEBULA QUALITY"/>
+				<Button id="volq_left" style="sel_left" X="416" Y="357"/>
+				<Button id="volq_right" style="sel_right" X="526" Y="357"/>
+				<TextBlock id="volq_display" X="420" Y="350" Height="22" Width="110" TextColor="text" TextShadow="black" TextSize="11" Text="HIGH"/>
 			</Panel>
 		</Panel>
 	</Panel>
 </Scene> 
-
 
 
 

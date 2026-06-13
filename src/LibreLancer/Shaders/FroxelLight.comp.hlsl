@@ -131,6 +131,14 @@ void main(uint3 id : SV_DispatchThreadID)
     float3 viewDir = normalize(worldPos - CameraPosNear.xyz);
     float cosTheta = dot(viewDir, SunDirAmbient.xyz);
 
+    // Intensity < -1.5: media probe - bypass lighting so inject/debug
+    // outputs can be inspected through the same integration/composite path.
+    if (SunColorIntensity.w < -1.5)
+    {
+        Scatter[id] = media;
+        return;
+    }
+
     // Intensity < 0: lighting probe - cosTheta / sun visibility / phase
     // written directly (extinction pinned) for composite inspection.
     if (SunColorIntensity.w < 0)

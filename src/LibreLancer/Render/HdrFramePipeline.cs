@@ -40,6 +40,7 @@ internal sealed class HdrFramePipeline : IDisposable
     public int GodRaysSamples = 48;
     // Set per frame by SystemRenderer; W <= 0 means no visible sun.
     public Vector4 GodRaysSun = new(0, 0, 0, -1);
+    public float GodRaysSunTransmittance = 1f;
 
     private Shader? rayMaskShader;
     private Shader? rayBlurShader;
@@ -209,7 +210,8 @@ internal sealed class HdrFramePipeline : IDisposable
                 rstate.EndPassTimer();
                 bloomActive = targets.BloomChain.Count > 0;
             }
-            var raysActive = GodRaysEnabled && GodRaysIntensity > 0f && GodRaysSun.W > 0f;
+            var raysActive = GodRaysEnabled && GodRaysIntensity > 0f &&
+                             GodRaysSun.W > 0f && GodRaysSunTransmittance > 0.001f;
             if (raysActive)
             {
                 rstate.BeginPassTimer("post.godrays");
@@ -368,7 +370,8 @@ internal sealed class HdrFramePipeline : IDisposable
             SunPosition = GodRaysSun with { W = targets.Width / (float)targets.Height },
             // Cutoff keeps dim background out of the smear; the sun core
             // and glow sprites sit way above it (linear-light scale).
-            Params = new Vector4(0.05f, 0f, 0f, 0f)
+            Params = new Vector4(0.05f,
+                Math.Clamp(GodRaysSunTransmittance, 0f, 1f), 0f, 0f)
         };
         rstate.RenderTarget = targets.RayMaskTarget;
         var maskRect = new Rectangle(0, 0, targets.RayMaskTexture!.Width, targets.RayMaskTexture.Height);

@@ -38,6 +38,14 @@ public static class AllShaders
     public static ShaderBundle? VolFogComposite;
     public static ShaderBundle? NoiseGen;
     public static ShaderBundle? DistantNebula;
+    public static ShaderBundle? FogDisplace;
+    public static ShaderBundle? AtmoTransmittance;
+    public static ShaderBundle? AtmoMultiScattering;
+    public static ShaderBundle? AtmoSkyView;
+    public static ShaderBundle? AtmoAerial;
+    public static ShaderBundle? AtmoClouds;
+    public static ShaderBundle? AtmoCloudComposite;
+    public static ShaderBundle? AtmoLutDebug;
     public static ShaderBundle GodRaysMask = null!;
     public static ShaderBundle GodRaysBlur = null!;
     public static ShaderBundle IllumDetailMapMaterial = null!;
@@ -113,6 +121,14 @@ public static class AllShaders
             VolFogComposite ??= Compile(context, "VolFogComposite");
             NoiseGen ??= Compile(context, "NoiseGen");
             DistantNebula ??= Compile(context, "DistantNebula");
+            FogDisplace ??= Compile(context, "FogDisplace");
+            AtmoTransmittance ??= Compile(context, "AtmoTransmittance");
+            AtmoMultiScattering ??= Compile(context, "AtmoMultiScattering");
+            AtmoSkyView ??= Compile(context, "AtmoSkyView");
+            AtmoAerial ??= Compile(context, "AtmoAerial");
+            AtmoClouds ??= Compile(context, "AtmoClouds");
+            AtmoCloudComposite ??= Compile(context, "AtmoCloudComposite");
+            AtmoLutDebug ??= Compile(context, "AtmoLutDebug");
         }
         GodRaysMask ??= Compile(context, "GodRaysMask");
         GodRaysBlur ??= Compile(context, "GodRaysBlur");

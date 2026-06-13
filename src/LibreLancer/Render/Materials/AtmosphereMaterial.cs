@@ -6,6 +6,7 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using LibreLancer.Graphics;
+using LibreLancer.Graphics.Backends;
 using LibreLancer.Graphics.Vertices;
 using LibreLancer.Resources;
 using LibreLancer.Shaders;
@@ -15,12 +16,15 @@ namespace LibreLancer.Render.Materials
 {
     public class AtmosphereMaterial : RenderMaterial
     {
+        private static readonly bool ShellEnabled =
+            Environment.GetEnvironmentVariable("SIRIUS_ATMO_SHELL") != "0";
+
         public Color4 Ac = Color4.White;
         public Color4 Dc = Color4.White;
         public string DtSampler;
         public SamplerFlags DtFlags;
         public float Alpha;
-        public float Fade; // TODO: This is unimplemented in shader. Higher values seem to make the effect more intense?
+        public float Fade;
         public float Scale;
 
         public AtmosphereMaterial(ResourceManager library, string dtSampler) : base(library)
@@ -38,6 +42,7 @@ namespace LibreLancer.Render.Materials
             public float ShellScale;
             public float Pad0;
             public Vector4 PlanetCenter;
+            public Vector4 LutParams;
         }
 
         public override unsafe void Use(RenderContext rstate, IVertexType vertextype, ref Lighting lights, int userData)
@@ -54,16 +59,35 @@ namespace LibreLancer.Render.Materials
                 // The scatter shader recovers planet/shell radii from the
                 // fragment position, the center and this ratio alone.
                 ShellScale = Scale,
-                PlanetCenter = new Vector4(w.Translation, 0)
+                PlanetCenter = new Vector4(w.Translation, 0),
+                LutParams = AtmosphereLutSettings
             };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
+            if (!ShellEnabled)
+                p.Oc = 0;
             sh.SetUniformBlock(3, ref p);
             BindTexture(rstate, 0, DtSampler, 0, DtFlags);
+            if (rstate.HasFeature(GraphicsFeature.Compute) ||
+                RenderBackendSelector.Kind == RenderBackendKind.Vulkan)
+            {
+                BindAtmosphereLuts(rstate);
+                if (p.LutParams.X <= 0f)
+                {
+                    var fallback = GetTexture(0, DtSampler) ?? Library?.FindTexture(ResourceManager.NullTextureName);
+                    if (fallback != null)
+                    {
+                        rstate.Textures[11] = fallback;
+                        rstate.Samplers[11] = SamplerState.LinearClamp;
+                        rstate.Textures[12] = fallback;
+                        rstate.Samplers[12] = SamplerState.LinearClamp;
+                    }
+                }
+            }
             var normalmat = w;
             Matrix4x4.Invert(normalmat, out normalmat);
             normalmat = Matrix4x4.Transpose(normalmat);
-            SetLights(sh, ref lights, rstate.FrameNumber);
+            SetLights(sh, rstate, ref lights, rstate.FrameNumber);
             SetWorld(sh, w, normalmat);
 
             rstate.DepthEnabled = true;

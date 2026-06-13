@@ -31,6 +31,7 @@ public class QuadMaterial : RenderMaterial
         rstate.Textures[0] = Parameters[userData].texture;
         rstate.Samplers[0] = new SamplerState(rstate.PreferredFilterLevel, WrapMode.ClampToEdge, WrapMode.ClampToEdge);
         rstate.BlendMode = Parameters[userData].blendMode;
+        SetVolumetricFog(shader, rstate, IsAdditiveBlend(Parameters[userData].blendMode));
         rstate.Shader = shader;
     }
 

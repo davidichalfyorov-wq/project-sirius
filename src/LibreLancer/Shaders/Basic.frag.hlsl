@@ -1,4 +1,5 @@
 #define PIXEL_SHADOWS 1
+#define LL_ENABLE_MATERIAL_FOG 1
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
 #include "includes/Modulate.hlsl"
@@ -110,6 +111,7 @@ float4 main(Input input) : SV_Target0
 #ifdef VERTEX_LIGHTING
     float4 color = ApplyVertexLighting(ac, ec, Dc * input.color,
         dtSampled,
+        input.worldPosition,
         input.viewPosition,
         input.frontFacing ? input.diffuseTermFront : input.diffuseTermBack,
         input.frontFacing ? input.ambientTermFront : input.ambientTermBack);

@@ -45,7 +45,7 @@ public class AsteroidBandMaterial : RenderMaterial
         shader!.SetUniformBlock(3, ref p);
         var ma = new Vector4(0, 0, 1, 1);
         shader.SetUniformBlock(4, ref ma);
-        SetLights(shader, ref lights, rstate.FrameNumber);
+        SetLights(shader, rstate, ref lights, rstate.FrameNumber);
         BindTexture(rstate, 0, Texture, 0, SamplerFlags.Default);
         rstate.BlendMode = BlendMode.Normal;
         rstate.Shader = shader;

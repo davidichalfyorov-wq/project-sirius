@@ -1,4 +1,5 @@
 #define PIXEL_SHADOWS 1
+#define LL_ENABLE_MATERIAL_FOG 1
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
 
@@ -368,5 +369,6 @@ float4 main(Input input) : SV_Target0
 #endif
     // Linear HDR out - the tonemap pass owns the display encode
     // (phase 2 linear workflow, docs/LINEAR_AUDIT.md).
+    color = ApplyVolumetricFog(input.worldPosition, length(input.viewPosition.xyz), color);
     return float4(color, baseColor.a);
 }

@@ -152,8 +152,16 @@ namespace LibreLancer.Render
                 z = 900000;
             }
 
-            var distScale = nr != null ? nr.Nebula.SunBurnthroughScale : 1;
-            var alpha = nr != null ? nr.Nebula.SunBurnthroughIntensity : 1;
+            var volumeTransmittance = Math.Clamp(sysr.VolumetricSunTransmittance, 0f, 1f);
+            // The star should DIM and soften in fog, not blink out: scaling
+            // both size and alpha straight by transmittance erased the disc
+            // the instant the nebula thickened. Keep a glowing presence (size
+            // barely shrinks, alpha floored) so "the sun burning through the
+            // murk" still reads even deep inside a dense bank.
+            var burnScale = nr != null ? nr.Nebula.SunBurnthroughScale : 1f;
+            var burnAlpha = nr != null ? nr.Nebula.SunBurnthroughIntensity : 1f;
+            var distScale = burnScale * MathF.Sqrt(Math.Clamp(volumeTransmittance, 0.35f, 1f));
+            var alpha = burnAlpha * Math.Clamp(volumeTransmittance, 0.18f, 1f);
             var idx = bufferIndex;
             // draw center
             if (Sun.CenterSprite != null)
@@ -183,4 +191,3 @@ namespace LibreLancer.Render
         }
     }
 }
-

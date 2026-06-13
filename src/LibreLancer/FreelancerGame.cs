@@ -39,6 +39,7 @@ namespace LibreLancer
 		public ScreenshotManager Screenshots = null!;
         public SaveGameFolder Saves = null!;
         public LineRenderer Lines = null!;
+        public Render.Volumetrics.VolumetricFogStatus VolumetricFogStatus;
 		public bool InitialLoadComplete = false;
         public Stopwatch? LoadTimer;
         public InputMap InputMap = null!;

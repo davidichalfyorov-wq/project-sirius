@@ -16,6 +16,11 @@ public static class NebulaVolumeData
 {
     public const int MaxZones = 16;
 
+    // Core extinction scale (1/m, divided by the zone fog range). Tuned so a
+    // dense nebula reads as a cloud you fly through rather than a flat tint.
+    private const float CoreExtinction = 0.2f;
+    private const float ExclusionInfluenceRange = 18000f;
+
     // Mirrors VolumeZone in includes/VolumeCommon.hlsl (112 bytes).
     public const int GpuZoneSize = 112;
 
@@ -67,23 +72,35 @@ public static class NebulaVolumeData
 
             // Runtime density profile. The legacy linear fog kills ALL
             // visibility at FogRange.Y; the volumetric look wants cloud
-            // banks readable a few kilometres deep instead, so the core
-            // extinction is softer (2.5/far) and the noise carves it into
-            // dense hearts and clear lanes.
+            // banks readable across the froxel range instead. Keep core
+            // extinction soft enough for noise-carved voids to survive
+            // front-to-back integration as dense hearts and clear lanes.
             var fogFar = MathF.Max(nebula.FogRange.Y, 200f);
             var colour = ColorSpace.SrgbToLinear(nebula.FogColor);
             // The authored FogColor was a fullscreen TINT for the legacy
             // path - dark by design. A scattering medium wants a bright
             // albedo: keep the authored hue, lift it to cloud reflectivity.
+            var profile = RuntimeProfileFor(zone);
             var maxComp = MathF.Max(colour.R, MathF.Max(colour.G, MathF.Max(colour.B, 1e-3f)));
             // Per feedback: nebulae read dark and moody, not milky -
-            // lift to mid albedo only.
-            var albedoScale = 0.5f / maxComp;
+            // lift to profile-specific mid albedo only.
+            var albedoScale = profile.Albedo / maxComp;
+            // Core extinction per metre. The previous 0.1x factor made the
+            // medium so thin (optical depth ~0.9 across the whole 14km froxel
+            // range) that the eye averaged through it into a flat veil -
+            // density structure could not read. A scattering cloud you are
+            // INSIDE wants the near body opaque within a couple of km so the
+            // big soft forms and carved lanes show; this matches the proven
+            // dark-mood baseline while keeping the ship and HUD readable.
             gpu.ColorDensity = new Vector4(
                 colour.R * albedoScale, colour.G * albedoScale, colour.B * albedoScale,
-                2.5f / fogFar);
+                (CoreExtinction * profile.Extinction) / fogFar);
             gpu.Params.Z = 0;
-            gpu.NoiseProfile = NoiseProfileFor(zone);
+            // Domain-warp amount (Н1): bends the round Perlin-Worley blobs
+            // into flowing banks. Free Params.w slot, so the GPU stride is
+            // untouched.
+            gpu.Params.W = profile.Warp;
+            gpu.NoiseProfile = profile.Noise;
             zones[count++] = gpu;
 
             if (nebula.ExclusionZones != null)
@@ -94,7 +111,9 @@ public static class NebulaVolumeData
                     {
                         break;
                     }
-                    if (exclusion.Zone == null || !TryBuildZone(exclusion.Zone, out var cut))
+                    if (exclusion.Zone == null ||
+                        !ShouldIncludeExclusion(exclusion.Zone, cameraPos) ||
+                        !TryBuildZone(exclusion.Zone, out var cut))
                     {
                         continue;
                     }
@@ -112,6 +131,22 @@ public static class NebulaVolumeData
     }
 
     private static readonly List<(float Distance, NebulaRenderer Renderer)> sortScratch = new();
+
+    private static bool ShouldIncludeExclusion(Zone zone, Vector3 cameraPos)
+    {
+        var reach = ZoneBoundsRadius(zone) + ExclusionInfluenceRange;
+        return Vector3.DistanceSquared(cameraPos, zone.Position) <= reach * reach;
+    }
+
+    private static float ZoneBoundsRadius(Zone zone)
+    {
+        return zone.Shape switch
+        {
+            ShapeKind.Box => MathF.Max(zone.Size.X, MathF.Max(zone.Size.Y, zone.Size.Z)) * 0.5f,
+            ShapeKind.Cylinder or ShapeKind.Ring => MathF.Max(zone.Size.X, zone.Size.Y * 0.5f),
+            _ => MathF.Max(zone.Size.X, MathF.Max(zone.Size.Y, zone.Size.Z))
+        };
+    }
 
     /// <summary>True when the camera is inside (or near) any nebula zone -
     /// the froxel early-out. Bounds are inflated by the edge band.</summary>
@@ -134,36 +169,131 @@ public static class NebulaVolumeData
     }
 
     /// <summary>
+    /// Analytic Beer transmittance from the camera toward the sun, using
+    /// the same cloud-scale mean extinction as ZonesAnalyticSunTau. This
+    /// is intentionally a scalar for V7: it feeds the existing sun/god-ray
+    /// sprites without adding another full-screen march.
+    /// </summary>
+    public static float SunTransmittance(List<NebulaRenderer> nebulae,
+        Vector3 cameraPos, Vector3 toSun, GpuZone[] scratch)
+    {
+        if (toSun.LengthSquared() < 1e-6f)
+        {
+            return 1f;
+        }
+        var zoneCount = Collect(nebulae, cameraPos, scratch);
+        if (zoneCount == 0)
+        {
+            return 1f;
+        }
+        return SunTransmittance(scratch.AsSpan(0, zoneCount), cameraPos,
+            Vector3.Normalize(toSun));
+    }
+
+    public static float SunTransmittance(ReadOnlySpan<GpuZone> zones,
+        Vector3 cameraPos, Vector3 toSun)
+    {
+        var tau = 0f;
+        var p = new Vector4(cameraPos, 1f);
+        foreach (var z in zones)
+        {
+            if (z.Params.Z > 0.5f)
+            {
+                continue;
+            }
+            var q = new Vector3(
+                Vector4.Dot(z.InvCol0, p),
+                Vector4.Dot(z.InvCol1, p),
+                Vector4.Dot(z.InvCol2, p));
+            var s = new Vector3(
+                Vector3.Dot(new Vector3(z.InvCol0.X, z.InvCol0.Y, z.InvCol0.Z), toSun),
+                Vector3.Dot(new Vector3(z.InvCol1.X, z.InvCol1.Y, z.InvCol1.Z), toSun),
+                Vector3.Dot(new Vector3(z.InvCol2.X, z.InvCol2.Y, z.InvCol2.Z), toSun));
+            var a = Vector3.Dot(s, s);
+            if (a < 1e-12f)
+            {
+                continue;
+            }
+            var b = Vector3.Dot(q, s);
+            var c = Vector3.Dot(q, q) - 1f;
+            var h = b * b - a * c;
+            if (h <= 0)
+            {
+                continue;
+            }
+            var root = MathF.Sqrt(h);
+            var t0 = (-b - root) / a;
+            var t1 = (-b + root) / a;
+            var insideLength = MathF.Max(t1, 0f) - MathF.Max(t0, 0f);
+            if (insideLength <= 0)
+            {
+                continue;
+            }
+            var meanExt = z.ColorDensity.W * (z.NoiseProfile.Y * 0.4f + 0.05f);
+            tau += meanExt * insideLength;
+        }
+        return Math.Clamp(MathF.Exp(-MathF.Min(tau, 20f)), 0f, 1f);
+    }
+
+    /// <summary>
     /// Runtime noise-profile mapping (master-PDF rule: never extend the
     /// Discovery INI - profiles derive from existing zone PropertyFlags).
     /// x: base noise scale (1/m), y: coverage, z: detail erosion strength,
     /// w: drift speed (m/s).
     /// </summary>
-    private static Vector4 NoiseProfileFor(Zone zone)
+    private readonly record struct RuntimeProfile(
+        Vector4 Noise, float Albedo, float Extinction, float Warp);
+
+    private static RuntimeProfile RuntimeProfileFor(Zone zone)
     {
         var flags = zone.PropertyFlags;
-        if ((flags & ZonePropFlags.Badlands) != 0)
+        var nickname = zone.Nickname ?? "";
+        if ((flags & ZonePropFlags.Badlands) != 0 ||
+            nickname.Contains("badlands", StringComparison.OrdinalIgnoreCase))
         {
-            // Dirty rolling banks: large features, moderate coverage.
-            return new Vector4(1f / 5200f, 0.62f, 0.55f, 14f);
+            // Dirty rolling banks: broad bodies with carved lanes.
+            return new RuntimeProfile(new Vector4(1f / 6500f, 0.56f, 0.60f, 13f), 0.42f, 0.65f, 0.42f);
+        }
+        if ((flags & (ZonePropFlags.Ice | ZonePropFlags.Crystal)) != 0 ||
+            nickname.Contains("ice", StringComparison.OrdinalIgnoreCase) ||
+            nickname.Contains("li05", StringComparison.OrdinalIgnoreCase))
+        {
+            // Crystalline haze: sharp wisps with readable cold voids.
+            return new RuntimeProfile(new Vector4(1f / 7000f, 0.54f, 0.55f, 5f), 0.46f, 0.48f, 0.18f);
+        }
+        if ((flags & ZonePropFlags.Nomad) != 0 ||
+            nickname.Contains("nomad", StringComparison.OrdinalIgnoreCase))
+        {
+            // Alien clouds: slow large sheets with brighter local scattering.
+            return new RuntimeProfile(new Vector4(1f / 6200f, 0.52f, 0.62f, 14f), 0.48f, 0.55f, 0.40f);
+        }
+        if (nickname.Contains("crow", StringComparison.OrdinalIgnoreCase))
+        {
+            // Crow storms: dark blue-violet, high erosion, visible holes.
+            return new RuntimeProfile(new Vector4(1f / 6500f, 0.50f, 0.62f, 12f), 0.34f, 0.48f, 0.46f);
+        }
+        if (nickname.Contains("okha", StringComparison.OrdinalIgnoreCase))
+        {
+            // Edge nebulae: compact broken shelves with strong silhouettes.
+            return new RuntimeProfile(new Vector4(1f / 5600f, 0.54f, 0.62f, 9f), 0.40f, 0.58f, 0.30f);
+        }
+        if (nickname.Contains("walker", StringComparison.OrdinalIgnoreCase))
+        {
+            // Walker clouds: smoky orange cells, denser than generic clouds.
+            return new RuntimeProfile(new Vector4(1f / 5200f, 0.58f, 0.62f, 7f), 0.44f, 0.65f, 0.34f);
         }
         if ((flags & ZonePropFlags.GasPockets) != 0)
         {
             // Pocketed gas: smaller cells, patchier coverage.
-            return new Vector4(1f / 2600f, 0.5f, 0.7f, 10f);
+            return new RuntimeProfile(new Vector4(1f / 4800f, 0.45f, 0.64f, 10f), 0.42f, 0.55f, 0.28f);
         }
         if ((flags & ZonePropFlags.Cloud) != 0)
         {
-            // Soft cloud banks: big soft features, high coverage.
-            return new Vector4(1f / 7000f, 0.72f, 0.4f, 8f);
-        }
-        if ((flags & (ZonePropFlags.Ice | ZonePropFlags.Crystal)) != 0)
-        {
-            // Crystalline haze: fine sharp wisps.
-            return new Vector4(1f / 3200f, 0.55f, 0.8f, 6f);
+            // Soft cloud banks: broad but no longer solid fullscreen fills.
+            return new RuntimeProfile(new Vector4(1f / 5200f, 0.60f, 0.62f, 8f), 0.42f, 0.62f, 0.38f);
         }
         // Generic nebula interior.
-        return new Vector4(1f / 4500f, 0.6f, 0.5f, 10f);
+        return new RuntimeProfile(new Vector4(1f / 4000f, 0.55f, 0.65f, 10f), 0.42f, 0.60f, 0.35f);
     }
 
     private static bool TryBuildZone(Zone zone, out GpuZone gpu)

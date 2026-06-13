@@ -196,18 +196,34 @@ float ZonesAnalyticSunTau(StructuredBuffer<VolumeZone> zones, uint zoneCount,
 
 // Cloud-literature density shaping (Schneider): Perlin-Worley shape
 // remapped by a Worley fbm, coverage cut, then high-frequency erosion.
-// Shared by the froxel inject and the distant march.
-float NoiseDensityShared(VolumeZone z, float3 worldPos, float falloff,
+// Returns shape, shaped coverage, final density and scale-ok flag.
+float4 NoiseDensityStagesEx(VolumeZone z, float3 worldPos, float falloff,
     float driftTime, Texture3D<float4> noiseBase, SamplerState baseSampler,
-    Texture3D<float4> noiseDetail, SamplerState detailSampler)
+    Texture3D<float4> noiseDetail, SamplerState detailSampler,
+    float detailScaleMul, float detailErosionMul)
 {
     float scale = z.NoiseProfile.x;
     if (scale <= 0)
     {
-        return falloff; // profile opts out of noise
+        return float4(0, 0, falloff, 0); // profile opts out of noise
     }
     float3 drift = float3(0.7, 0.06, 0.45) * (z.NoiseProfile.w * driftTime * scale);
     float3 baseUvw = worldPos * scale + drift;
+
+    // Domain warp (Quilez fBm-warp): a low-frequency offset sampled from the
+    // base volume's Worley octaves bends the round Perlin-Worley blobs into
+    // flowing banks and wisps - the single biggest step from "procedural
+    // soup" to "real cloud". Amplitude lives in the free Params.w slot so the
+    // GPU struct stride is untouched (0 = legacy isotropic look).
+    // Keep the warp subtle: a fraction of a noise period bends the blobs into
+    // banks; a whole period just smears the field back into a flat average.
+    float warpAmt = z.Params.w;
+    if (warpAmt > 0.001)
+    {
+        float3 warp = noiseBase.SampleLevel(baseSampler, baseUvw * 0.34, 0).gba * 2.0 - 1.0;
+        baseUvw += warp * warpAmt * 0.25;
+    }
+
     float4 nb = noiseBase.SampleLevel(baseSampler, baseUvw, 0);
     float worleyFbm = nb.g * 0.625 + nb.b * 0.25 + nb.a * 0.125;
     float shape = RemapClamped(nb.r, worleyFbm - 1.0, 1.0, 0.0, 1.0);
@@ -218,11 +234,37 @@ float NoiseDensityShared(VolumeZone z, float3 worldPos, float falloff,
     float shaped = RemapClamped(shape, 1.0 - coverage, 1.0, 0.0, 1.0);
     if (shaped <= 0)
     {
-        return 0;
+        return float4(shape, 0, 0, 1);
     }
 
-    float3 detailUvw = worldPos * scale * 6.0 + drift * 1.7;
+    // Mid-frequency detail erosion (Schneider). This carves the readable
+    // cloud forms (at ~scale*6 it sits around the hundreds-of-metres band the
+    // eye reads as billows), so it runs across the whole body, NOT just the
+    // rim - edge-gating it flattened the interior into a smooth tint. A light
+    // edge lift keeps the densest hearts from being over-eroded into holes.
+    float3 detailUvw = worldPos * scale * (3.0 * max(detailScaleMul, 0.01)) + drift * 1.7;
     float3 dn = noiseDetail.SampleLevel(detailSampler, detailUvw, 0).rgb;
     float detailFbm = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
-    return RemapClamped(shaped, detailFbm * z.NoiseProfile.z, 1.0, 0.0, 1.0);
+    float coreKeep = 1.0 - 0.4 * smoothstep(0.7, 1.0, shaped);
+    float erosion = detailFbm * z.NoiseProfile.z * max(detailErosionMul, 0.0) * coreKeep;
+    float finalDensity = RemapClamped(shaped, erosion, 1.0, 0.0, 1.0);
+    return float4(shape, shaped, finalDensity, 1);
+}
+
+float4 NoiseDensityStages(VolumeZone z, float3 worldPos, float falloff,
+    float driftTime, Texture3D<float4> noiseBase, SamplerState baseSampler,
+    Texture3D<float4> noiseDetail, SamplerState detailSampler)
+{
+    return NoiseDensityStagesEx(z, worldPos, falloff, driftTime,
+        noiseBase, baseSampler, noiseDetail, detailSampler, 1.0, 1.0);
+}
+
+// Shared by the froxel inject and the distant march.
+float NoiseDensityShared(VolumeZone z, float3 worldPos, float falloff,
+    float driftTime, Texture3D<float4> noiseBase, SamplerState baseSampler,
+    Texture3D<float4> noiseDetail, SamplerState detailSampler)
+{
+    float4 stages = NoiseDensityStages(z, worldPos, falloff, driftTime,
+        noiseBase, baseSampler, noiseDetail, detailSampler);
+    return stages.w <= 0 ? falloff : stages.z;
 }

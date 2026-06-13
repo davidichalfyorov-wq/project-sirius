@@ -4,7 +4,7 @@ SamplerState SceneSampler : register(s0, TEXTURE_SPACE);
 cbuffer GodRaysMaskParameters : register(b3, UNIFORM_SPACE)
 {
     float4 SunPosition; // xy: sun uv, z: sun uv radius, w: viewport aspect
-    float4 MaskParams;  // x: luminance cutoff
+    float4 MaskParams;  // x: luminance cutoff, y: sun transmittance
 };
 
 struct Input
@@ -25,5 +25,5 @@ float4 main(Input input) : SV_Target0
     float3 scene = SceneTexture.Sample(SceneSampler, input.texCoord).rgb;
     float luminance = dot(scene, float3(0.2126, 0.7152, 0.0722));
     float gate = saturate(luminance - MaskParams.x);
-    return float4(scene * gate * disk, 1.0);
+    return float4(scene * gate * disk * MaskParams.y, 1.0);
 }

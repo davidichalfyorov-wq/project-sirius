@@ -95,6 +95,15 @@ namespace LibreLancer.Render
             public PackedLight Light6;
             public PackedLight Light7;
             public PackedLight Light8;
+            public Vector4 VolFogParams;
+            public Vector4 VolFogParams2;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private struct VolumetricFogBlock
+        {
+            public Vector4 VolFogParams;
+            public Vector4 VolFogParams2;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -146,6 +155,23 @@ namespace LibreLancer.Render
         // True while the frame has both an active sun shadow pass and a
         // built TLAS; materials then pick RT_SHADOWS permutations (phase 4).
         public static bool RtShadowsActive;
+
+        // True when this frame's volumetric nebula path owns fogging.
+        // RenderHelpers uses this to stop legacy Linear fog being submitted
+        // on top of the fullscreen volume composite.
+        public static bool VolumetricFogActive;
+
+        // Set only around the transparent pass: opaque geometry is already
+        // covered by the fullscreen depth composite.
+        public static bool VolumetricFogMaterialActive;
+
+        public static Texture3D? VolumetricFogIntegrated;
+        public static Vector4 VolumetricFogSettings;
+        public static Texture3D? AtmosphereTransmittance;
+        public static Texture3D? AtmosphereMultiScattering;
+        public static Vector4 AtmosphereLutSettings;
+        public static Texture3D? AtmosphereAerial;
+        public static Vector4 AtmosphereAerialSettings;
 
         // Ray-traced ambient occlusion (phase 4): modulates ambient/IBL
         // terms in the PBR shader while a TLAS is being built this frame.
@@ -223,27 +249,114 @@ namespace LibreLancer.Render
                 enabled ? position with { W = MathF.Max(position.W, 1e-6f) } : position with { W = 0f };
         }
 
-        public static unsafe void SetLights(Shader shader, ref Lighting lighting, long frameNumber)
+        public static void SetVolumetricFogSource(Texture3D? integrated, Vector4 settings)
+        {
+            VolumetricFogIntegrated = integrated;
+            VolumetricFogSettings = settings;
+        }
+
+        public static void SetAtmosphereAerialSource(Texture3D? aerial, Vector4 settings)
+        {
+            AtmosphereAerial = aerial;
+            AtmosphereAerialSettings = settings;
+        }
+
+        public static void SetAtmosphereLutSource(Texture3D? transmittance, Texture3D? multiScattering)
+        {
+            AtmosphereTransmittance = transmittance;
+            AtmosphereMultiScattering = multiScattering;
+            AtmosphereLutSettings = new Vector4(
+                transmittance != null && multiScattering != null ? 1f : 0f,
+                0f,
+                0f,
+                0f);
+        }
+
+        private static VolumetricFogBlock BuildVolumetricFogBlock(bool extinctionOnly)
+        {
+            var active = VolumetricFogActive &&
+                         VolumetricFogMaterialActive &&
+                         VolumetricFogIntegrated != null;
+            var aerialActive = AtmosphereAerial != null && AtmosphereAerialSettings.X > 0f;
+            return new VolumetricFogBlock
+            {
+                VolFogParams = new Vector4(active ? 1f : 0f,
+                    VolumetricFogSettings.X,
+                    VolumetricFogSettings.Y,
+                    VolumetricFogSettings.Z),
+                VolFogParams2 = new Vector4(VolumetricFogSettings.W,
+                    extinctionOnly ? 1f : 0f,
+                    aerialActive ? 1f : 0f,
+                    AtmosphereAerialSettings.Y)
+            };
+        }
+
+        internal static void SetVolumetricFog(Shader shader, RenderContext rstate, bool extinctionOnly)
+        {
+            BindVolumetricFogTexture(rstate);
+            if (shader.HasUniformBlock(2))
+            {
+                var data = BuildVolumetricFogBlock(extinctionOnly);
+                shader.SetUniformBlock(2, ref data);
+            }
+        }
+
+        private static void BindVolumetricFogTexture(RenderContext rstate)
+        {
+            if (AtmosphereAerial != null)
+            {
+                rstate.Textures[14] = AtmosphereAerial;
+                rstate.Samplers[14] = SamplerState.LinearClamp;
+            }
+            if (VolumetricFogIntegrated == null)
+            {
+                return;
+            }
+            rstate.Textures[15] = VolumetricFogIntegrated;
+            rstate.Samplers[15] = SamplerState.LinearClamp;
+        }
+
+        protected static void BindAtmosphereLuts(RenderContext rstate)
+        {
+            if (AtmosphereTransmittance != null)
+            {
+                rstate.Textures[11] = AtmosphereTransmittance;
+                rstate.Samplers[11] = SamplerState.LinearClamp;
+            }
+            if (AtmosphereMultiScattering != null)
+            {
+                rstate.Textures[12] = AtmosphereMultiScattering;
+                rstate.Samplers[12] = SamplerState.LinearClamp;
+            }
+        }
+
+        internal static bool IsAdditiveBlend(ushort blendMode)
+        {
+            var (_, dst) = BlendMode.Deconstruct(blendMode);
+            return dst == BlendOp.One;
+        }
+
+        public static unsafe void SetLights(Shader shader, RenderContext rstate, ref Lighting lighting, long frameNumber)
         {
             SetShadowData(shader);
+            BindVolumetricFogTexture(rstate);
+            var data = new ShaderLighting();
+            var fogBlock = BuildVolumetricFogBlock(true);
+            data.VolFogParams = fogBlock.VolFogParams;
+            data.VolFogParams2 = fogBlock.VolFogParams2;
             if (!lighting.Enabled)
             {
-                var disable = Vector4.Zero;
-                shader.SetUniformBlock(2, ref disable, false, 16);
+                shader.SetUniformBlock<ShaderLighting>(2, ref data, false, sizeof(ShaderLighting));
                 return;
             }
 
             // INI light/fog colours are display-referred: decode once here
             // so the shader math runs linear (docs/LINEAR_AUDIT.md).
-            var data = new ShaderLighting
-            {
-                UseLighting = 1,
-                // fog
-                FogMode = (float) lighting.FogMode,
-                FogRange = lighting.FogRange,
-                FogColor = ColorSpace.SrgbToLinear(lighting.FogColor),
-                AmbientColor = ColorSpace.SrgbToLinear(lighting.Ambient)
-            };
+            data.UseLighting = 1;
+            data.FogMode = (float) lighting.FogMode;
+            data.FogRange = lighting.FogRange;
+            data.FogColor = ColorSpace.SrgbToLinear(lighting.FogColor);
+            data.AmbientColor = ColorSpace.SrgbToLinear(lighting.Ambient);
 
             var lt = 0;
             var lights = new Span<PackedLight>(&data.Light0, 9);
@@ -291,9 +404,7 @@ namespace LibreLancer.Render
             }
 
             data.LightCount = lt;
-            var szCount = 3 * sizeof(Vector4) + // header
-                          lt * sizeof(PackedLight); // lights
-            shader.SetUniformBlock<ShaderLighting>(2, ref data, false, szCount);
+            shader.SetUniformBlock<ShaderLighting>(2, ref data, false, sizeof(ShaderLighting));
         }
 
         protected Texture? GetTexture(int cacheIndex, string? tex)

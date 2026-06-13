@@ -26,6 +26,7 @@ public class SunRadialMaterial : RenderMaterial
         shader.SetUniformBlock(4, ref OuterAlpha);
         BindTexture(rstate, 0, Texture, 0, SamplerFlags.Default);
         rstate.BlendMode = Additive ? BlendMode.Additive : BlendMode.Normal;
+        SetVolumetricFog(shader, rstate, Additive);
         rstate.Shader = shader;
     }
 

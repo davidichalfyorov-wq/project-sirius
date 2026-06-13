@@ -372,7 +372,7 @@ namespace LibreLancer.Render.Materials
             }
 
             // Set lights
-            SetLights(shader, ref lights, rstate.FrameNumber);
+            SetLights(shader, rstate, ref lights, rstate.FrameNumber);
             rstate.Shader = shader;
         }
 

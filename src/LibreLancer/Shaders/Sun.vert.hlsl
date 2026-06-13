@@ -14,6 +14,8 @@ struct Output
     float2 texCoord : TEXCOORD0;
     float4 innerColor : TEXCOORD1;
     float4 outerColor : TEXCOORD2;
+    float3 worldPosition : TEXCOORD3;
+    float4 viewPosition : TEXCOORD4;
     float4 position : SV_Position;
 };
 
@@ -42,7 +44,10 @@ Output main(VSInput input)
     float3 pos = input.position + (right * dim.x) + (up * dim.y);
 
     Output output;
-    output.position = mul(float4(pos, 1.0), ViewProjection);
+    float4 worldPos = float4(pos, 1.0);
+    output.position = mul(worldPos, ViewProjection);
+    output.worldPosition = worldPos.xyz;
+    output.viewPosition = mul(worldPos, View);
     output.texCoord = input.uv;
     output.innerColor = input.color;
     output.outerColor = input.color2;

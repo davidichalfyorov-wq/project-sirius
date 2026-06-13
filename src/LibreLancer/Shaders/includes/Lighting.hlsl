@@ -38,7 +38,24 @@ cbuffer Lighting : register(b2, UNIFORM_SPACE)
     float _Padding; //3x float4
     //[3]
     Light Lights[MAX_LIGHTS];
+    float4 VolFogParams;  // x active, y near, z far, w gridZ
+    float4 VolFogParams2; // x meanExtinction, yzw unused
 }
+
+#ifdef LL_ENABLE_MATERIAL_FOG
+#define LL_VOLF_USE_LIGHTING_CBUFFER 1
+#include "VolumetricMaterialFog.hlsl"
+#else
+float3 ApplyVolumetricFog(float3 worldPos, float viewDist, float3 color)
+{
+    return color;
+}
+
+float4 ApplyVolumetricFog(float3 worldPos, float viewDist, float4 color)
+{
+    return color;
+}
+#endif
 
 #ifdef PIXEL_SHADOWS
 // Cascaded shadow maps (roadmap 5.4): linear light depth RGB-packed
@@ -381,10 +398,11 @@ float3 ApplyFog(float4 viewPosition, float3 objectColor)
 
 float4 ApplyVertexLighting(
     float4 ac,float4 ec, float4 dc, float4 tex,
-    float4 viewPosition, float3 vertexDiffuseTerm, float3 vertexAmbientTerm)
+    float3 position, float4 viewPosition,
+    float3 vertexDiffuseTerm, float3 vertexAmbientTerm)
 {
     if (UseLighting <= 0)
-        return dc * tex;
+        return ApplyVolumetricFog(position, length(viewPosition.xyz), dc * tex);
     float3 color = ac.rgb * (AmbientColor + vertexAmbientTerm) + vertexDiffuseTerm;
     color = clamp(color, 0.0f, 1.0f);
     float3 objectColor = (ec.rgb * tex.rgb) + (tex.rgb * dc.rgb * color);
@@ -392,6 +410,7 @@ float4 ApplyVertexLighting(
     {
         objectColor = ApplyFog(viewPosition, objectColor);
     }
+    objectColor = ApplyVolumetricFog(position, length(viewPosition.xyz), objectColor);
     return float4(objectColor, tex.a);
 }
 
@@ -402,7 +421,7 @@ float4 ApplyPixelLighting(
 )
 {
     if (UseLighting <= 0)
-        return dc * tex;
+        return ApplyVolumetricFog(position, length(viewPosition.xyz), dc * tex);
     float3 ambientTerm = float3(0.0, 0.0, 0.0);
     float3 diffuseTerm = float3(0.0, 0.0, 0.0);
     float3 n = frontFacing ? normalize(normal) : normalize(-normal);
@@ -460,5 +479,6 @@ float4 ApplyPixelLighting(
     {
         objectColor = ApplyFog(viewPosition, objectColor);
     }
+    objectColor = ApplyVolumetricFog(position, length(viewPosition.xyz), objectColor);
     return float4(objectColor, tex.a);
 }

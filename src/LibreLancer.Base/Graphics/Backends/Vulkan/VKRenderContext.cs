@@ -455,12 +455,14 @@ internal unsafe partial class VKRenderContext : IRenderContext
         {
             fallbackCube.SetData((CubeMapFace)face, new uint[] { 0xFFFFFFFF });
         }
+        // 3D sampled fallback is white (volumetric transmittance 1). It is
+        // needed even when compute is disabled because graphics shaders can
+        // still declare Texture3D descriptors for their fallback paths.
+        fallbackTexture3D = new VKTexture3D(this, 1, 1, 2, SurfaceFormat.HdrBlendable, storage: false);
+        fallbackTexture3D.SetData(new ushort[] { 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00 });
         if (computeSupported)
         {
-            // 3D sampled fallback is white (volumetric transmittance 1);
-            // the storage fallback satisfies unbound RWTexture3D bindings.
-            fallbackTexture3D = new VKTexture3D(this, 1, 1, 2, SurfaceFormat.HdrBlendable, storage: false);
-            fallbackTexture3D.SetData(new ushort[] { 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00 });
+            // The storage fallback satisfies unbound RWTexture3D bindings.
             fallbackStorage3D = new VKTexture3D(this, 1, 1, 2, SurfaceFormat.HdrBlendable, storage: true);
         }
         // Shader inputs the bound vertex declaration doesn't provide read
@@ -2911,7 +2913,7 @@ internal unsafe partial class VKRenderContext : IRenderContext
         var ring = uniformRings[frameIndex][uniformRingIndex];
         var uniformSets = GetUniformSets(shader, ring);
 
-        var dynamicOffsets = stackalloc uint[8];
+        var dynamicOffsets = stackalloc uint[16];
         for (var i = 0; i < blocks.Count; i++)
         {
             var data = shader.BlockData((int)blocks[i].Binding);
@@ -2977,8 +2979,8 @@ internal unsafe partial class VKRenderContext : IRenderContext
 
         // Every block points at the ring base; the per-draw location is the
         // dynamic offset supplied at bind time.
-        var writes = stackalloc VkWriteDescriptorSet[8];
-        var bufferInfos = stackalloc VkDescriptorBufferInfo[8];
+        var writes = stackalloc VkWriteDescriptorSet[16];
+        var bufferInfos = stackalloc VkDescriptorBufferInfo[16];
         var count = 0;
         foreach (var block in shader.UniformBlocks)
         {

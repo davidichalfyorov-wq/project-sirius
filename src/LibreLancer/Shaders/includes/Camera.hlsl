@@ -1,3 +1,6 @@
+#ifndef LL_CAMERA_INCLUDED
+#define LL_CAMERA_INCLUDED
+
 cbuffer Camera : register(b1, UNIFORM_SPACE)
 {
     float4x4 View;
@@ -6,3 +9,5 @@ cbuffer Camera : register(b1, UNIFORM_SPACE)
     float3 CameraPosition;
     float __camera_padding;
 }
+
+#endif

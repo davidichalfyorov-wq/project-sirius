@@ -1,5 +1,6 @@
 #include "includes/ColorSpace.hlsl"
 
+#define LL_ENABLE_MATERIAL_FOG 1
 #include "includes/Lighting.hlsl"
 #include "includes/Modulate.hlsl"
 
@@ -45,7 +46,7 @@ float4 main(Input input) : SV_Target0
 
     float4 baseColor;
 #ifdef VERTEX_LIGHTING
-    baseColor = ApplyVertexLighting(Ac, 0, Dc, tex, input.viewPosition,
+    baseColor = ApplyVertexLighting(Ac, 0, Dc, tex, input.worldPosition, input.viewPosition,
         input.frontFacing ? input.diffuseTermFront : input.diffuseTermBack,
         input.frontFacing ? input.ambientTermFront : input.ambientTermBack);
 #else

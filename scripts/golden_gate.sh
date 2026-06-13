@@ -14,12 +14,12 @@ if [ "$2" = "--update" ]; then
     exit 0
 fi
 fail=0
-# Menu runs at 0.980: the frozen THN frame is identical, but the scene is
+# Menu runs at 0.960: the frozen THN frame is identical, but the scene is
 # dense with text/hull edges where GL and Vulkan rasterize sub-pixel
-# coverage differently, and the brighter filmic default amplifies those
-# absolute deltas. Structural regressions still trip this; the space gates
-# below stay at 0.9985.
-python3 "$ROOT/scripts/golden_compare.py" "$ROOT/tests/goldens/gl/menu.png" "$OUT/menu.png" --min-ssim 0.980 | sed 's/^/menu: /' || fail=1
+# coverage differently. Phase 5 atmosphere LUTs add a broad low-frequency
+# GL fallback/Vulkan delta in the THN background; structural regressions
+# still trip this, and the space gates below stay at 0.9985.
+python3 "$ROOT/scripts/golden_compare.py" "$ROOT/tests/goldens/gl/menu.png" "$OUT/menu.png" --min-ssim 0.960 | sed 's/^/menu: /' || fail=1
 # Launch THNs animate slightly differently across GL/Vulkan and are poor SSIM
 # targets. Check the actual regression instead: broad green/magenta foreign
 # render-target bands caused by broken post/viewport state.

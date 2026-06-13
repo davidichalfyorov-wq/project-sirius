@@ -546,7 +546,7 @@ namespace LibreLancer.Render
                 // Same constants the classic submit path feeds the shader:
                 // Dc comes from the field colour (SetDc userData), the rest
                 // from the cube's MAT material.
-                RenderMaterial.SetLights(shader, ref lt, rstate.FrameNumber + (++msFrame << 32));
+                RenderMaterial.SetLights(shader, rstate, ref lt, rstate.FrameNumber + (++msFrame << 32));
                 shader.SetUniformBlock(5, ref texSelectors);
                 var material = new MeshBasicParameters
                 {

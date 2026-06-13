@@ -1,5 +1,78 @@
 # CHANGELOG — Project Sirius Discovery 4.86 compatibility pass
 
+## 2026-06-13 — Графика, фаза 5 (часть 3): P9/W1-W3 atmosphere LUT/aerial shader switch
+
+- **P9/W1-W3 закрыты; P9 продолжается с W4**. Атмосфера 3.0 получила
+  bake-only LUT foundation, sky-view/aerial froxel и видимый shader switch
+  на LUT-first Vulkan path.
+- **W1 LUT foundation**: `AtmosphereLuts` печёт transmittance LUT `256x64`
+  и multiple-scattering LUT `32x32` через Vulkan compute/storage-2D
+  `Texture3D(w,h,1,storage)`. Cache key строится из существующих
+  `AtmosphereMaterial` параметров `Dc`, `Ac`, `Alpha`, `Fade`, `Scale`;
+  `SIRIUS_DEBUG_VIEW=atmolut` рисует contact sheet после HDR tonemap.
+- **W2 aerial perspective**: добавлены `AtmoSkyView` (`192x108`) и
+  `AtmoAerial` (`32x32x32`) compute-проходы. Aerial запускается только при
+  `cameraDistance <= shellRadius*1.5`, имеет `SIRIUS_ATMO_AERIAL=0`
+  off-switch и debug sheet `SIRIUS_DEBUG_VIEW=atmoaerial`.
+- **Aerial material path**: `VolumetricMaterialFog.hlsl` получил второй
+  source `t14/s14`. Nebula material fog сохраняет `extinctionOnly` для
+  opaque, но aerial не имеет fullscreen composite, поэтому всегда добавляет
+  свой `rgb + transmittance` в material path.
+- **W3 shader switch**: `Atmosphere.frag.hlsl` теперь берёт W1 LUTs как
+  `AtmoTransmittance t11/s11` и `AtmoMultiScattering t12/s12`, сохраняет
+  ramp tint, использует аналитический optical-depth continuity и добавляет
+  horizon multiple-scattering lift. Старый 8-step march оставлен как
+  GL/no-compute fallback.
+- **Fallback fixes**: GL больше не bind'ит high slots `t11/t12`; Vulkan
+  создаёт sampled 3D fallback texture даже при `SIRIUS_NO_COMPUTE=1`, потому
+  graphics shaders всё равно объявляют 3D sampled descriptors.
+- **Close-Manhattan regression**: белый HDR-диск при влёте оказался не
+  surface material, а сгенерированным `planet_manhattan_pbr_atmosphere`
+  shell в Discovery data. Shell отключён (`Dc/Ac/Alpha=0`), surface оставлен
+  `Dc=0.35/Ac=0`; close capture даёт `white=0.0`, `bright=0.0`, `max=168`.
+- **Осознанный golden rebase W3**: GL baseline переснят после shader switch.
+  Vulkan menu SSIM теперь `0.96255` из-за низкочастотной разницы GL fallback
+  и Vulkan LUT в THN-background, поэтому menu threshold снижен до `0.960`;
+  space thresholds остались строгими (`0.9985`).
+- **Скрин-паки**: W1 `Output/phase5_p9_w1_atmo_lut_20260613/`, W2
+  `Output/phase5_p9_w2_aerial_20260613/`, W3
+  `Output/phase5_p9_w3_lut_shader_20260613/`.
+- **Гейты**: build `166 warnings / 0 errors`, Vulkan validation `0`, W2
+  A/B `SSIM=0.99561` и `atmo.aerial=0.010-0.019 ms`, close-Manhattan
+  `white=0.0`, GL fallback capture PASS, Vulkan `SIRIUS_NO_COMPUTE=1`
+  capture PASS, GL golden PASS (`menu/launch/space/space_noui=1.00000`),
+  Vulkan golden PASS (`menu=0.96255`, `space=0.99981`,
+  `space_noui=0.99981`), `git diff --check` clean.
+
+## 2026-06-13 — Графика, фаза 5 (часть 2): V-трек P0-P8, арт-пасс Discovery-небул
+
+- **V-трек P0-P8 закрыт до арт-пасса**: исправлена регрессия ровной
+  пелены, отполирован дальний слой, god rays/sun burnthrough завязаны на
+  объёмную прозрачность, legacy fog/material path объединён с froxel
+  fog, добавлен near-cascade, displacement-след корабля, quality UI/VRS,
+  nebula golden gate и default-on.
+- **P8/V13 art pass**: `NebulaVolumeData` переведён на runtime-профили
+  `noise + albedo + extinction` без изменения Discovery INI/BINI. Добавлены
+  профили Badlands, Li05/Ice, Crow, Okha, Walker, Nomad, GasPockets, Cloud
+  и generic. Для far exclusion-зон введён 18 км influence-cull; Crow
+  уменьшен с 13 до 6 active zones.
+- **Скрин-пак и метрики**: `Output/phase5_p8_v13_art_pass_20260613/`.
+  VATA: Badlands `1.235 -> 2.079`, Li05 `0.241 -> 0.631`, Crow
+  `0.237 -> 0.625`, Okha `1.239 -> 1.142`; Crow forced-lightning кадр
+  снят отдельно. Nebula baselines осознанно rebased под новый арт.
+- **Vulkan validation cleanup**: `Basic_Skinned.vert.hlsl` теперь принимает
+  bone IDs как `uint4`, что соответствует CPU declaration
+  `UnsignedByte` и убирает VUID 08733 на DFM/skinned-пайплайнах.
+- **Гейты**: build `134 warnings / 0 errors`, GL golden PASS
+  (`space_noui SSIM=0.99997`), Vulkan golden PASS (`0.99985`),
+  RT gate PASS (`0.99880`, effect `0.95999`, AO `0.99883`, validation 0),
+  nebula gate PASS (`baseline=0.99983`, `run-to-run=0.99980`,
+  effect `0.65854`, VATA `2.079`, validation 0), Crow standalone
+  validation 0, UI menu autotest PASS. Остаточный риск: Li05/Crow high
+  quality stress poses всё еще дорогие (`vol.froxel` около 7-12 мс) из-за
+  огромных 143/110 км full-screen volumes; вынесено в budget/P14
+  оптимизацию.
+
 ## 2026-06-12 — Графика, фаза 5 (часть 1): compute-фундамент движка; фиксы DXT1-альфы, гонки частиц и сциссора
 
 - **Compute shaders (фаза 5, трек F)**: полный стек с нуля.

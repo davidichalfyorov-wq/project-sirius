@@ -17,6 +17,7 @@ public class ProjectileMaterial : RenderMaterial
         var shader = AllShaders.Sprite.Get(0);
         BindTexture(rstate, 0, "code_beam", 0, SamplerFlags.ClampToEdgeU | SamplerFlags.ClampToEdgeV);
         rstate.BlendMode = BlendMode.Additive;
+        SetVolumetricFog(shader, rstate, true);
         rstate.Shader = shader;
     }
 

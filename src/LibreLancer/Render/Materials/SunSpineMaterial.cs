@@ -25,6 +25,7 @@ public class SunSpineMaterial : RenderMaterial
         shader.SetUniformBlock(3, ref SizeMultiplier);
         BindTexture(rstate, 0, Texture, 0, SamplerFlags.Default);
         rstate.BlendMode = BlendMode.Normal;
+        SetVolumetricFog(shader, rstate, false);
         rstate.Shader = shader;
     }
 

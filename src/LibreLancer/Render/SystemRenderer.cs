@@ -68,6 +68,12 @@ namespace LibreLancer.Render
 
         public int ZoneVersion = 0;
         public IRendererSettings Settings;
+        internal float VolumetricSunTransmittance { get; private set; } = 1f;
+        private readonly Volumetrics.NebulaVolumeData.GpuZone[] sunTransmittanceZones =
+            new Volumetrics.NebulaVolumeData.GpuZone[Volumetrics.NebulaVolumeData.MaxZones];
+        private static readonly bool logVolumetricSun =
+            Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LOGSUN") == "1";
+        private int volumetricSunLogCount;
         private Billboards billboards;
         private ResourceManager resman;
 
@@ -132,6 +138,7 @@ namespace LibreLancer.Render
         public void LoadStarspheres(StarSystem system)
         {
             starSystem = system;
+            atmosphereLuts?.Invalidate();
 
             cubemapStarspheres ??= new StarsphereCubemapRenderer(rstate);
             cubemapStarspheres.Clear();
@@ -288,6 +295,7 @@ namespace LibreLancer.Render
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
         private Volumetrics.VolumetricFog? volumetricFog;
+        private AtmosphereLuts? atmosphereLuts;
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
         private bool rtShadowsWasActive;
@@ -393,6 +401,12 @@ namespace LibreLancer.Render
             hdrPipeline.Begin(renderWidth, renderHeight);
             volumetricFog ??= new Volumetrics.VolumetricFog(rstate);
             volumetricFog.Enabled = Settings.SelectedVolumetricNebulae;
+            volumetricFog.Quality = Settings.SelectedVolumetricQuality;
+            atmosphereLuts ??= new AtmosphereLuts();
+            atmosphereLuts.Ensure(rstate, World.Objects, resman);
+            RenderMaterial.SetAtmosphereLutSource(
+                atmosphereLuts.Transmittance,
+                atmosphereLuts.MultiScattering);
             rstate.BeginPassTimer("scene");
 
             RenderTarget? restoreTarget = rstate.RenderTarget;
@@ -426,14 +440,46 @@ namespace LibreLancer.Render
             var volSunColor = volSunLight != null
                 ? new Vector3(volSunLight.Light.Color.R, volSunLight.Light.Color.G, volSunLight.Light.Color.B)
                 : Vector3.One;
+            var driftTime = RenderClock.Get(game.TotalTime);
+            atmosphereLuts.RunAerial(rstate, camera, World.Objects, resman,
+                volSun ? -volSunDir : Vector3.UnitY, volSunColor);
+            RenderMaterial.SetAtmosphereAerialSource(
+                atmosphereLuts.AerialActive ? atmosphereLuts.AerialTexture : null,
+                atmosphereLuts.AerialSettings);
+            atmosphereLuts.RunClouds(rstate, camera, World.Objects, resman,
+                volSun ? -volSunDir : Vector3.UnitY, volSunColor, driftTime,
+                renderWidth, renderHeight);
             // CSM atlas is valid for the fog when the cascade pass actually
             // runs (RT shadows skip it; the atlas would be stale).
             var volCsmLive = Settings.SelectedShadows &&
                 rstate.HasFeature(GraphicsFeature.SceneShadows) &&
                 !(Settings.SelectedRtShadows && rstate.HasFeature(GraphicsFeature.RayQuery));
-            volumetricFog.RunDispatches(camera, Nebulae, RenderClock.Get(game.TotalTime),
+            volumetricFog.RunDispatches(camera, Nebulae, driftTime,
                 volSunDir, volSunColor, volSun, shadowMaps, volCsmLive, nr,
-                renderWidth, renderHeight);
+                renderWidth, renderHeight, World.Objects);
+            if (game is FreelancerGame flGame)
+            {
+                flGame.VolumetricFogStatus = volumetricFog.Status;
+            }
+            var volumetricMaterialFrameActive = volumetricFog.Active &&
+                                                Settings.SelectedMSAA <= 0 &&
+                                                hdrPipeline.CurrentSceneTarget != null;
+            RenderMaterial.VolumetricFogActive = volumetricMaterialFrameActive;
+            RenderMaterial.VolumetricFogMaterialActive = false;
+            RenderMaterial.SetVolumetricFogSource(
+                volumetricMaterialFrameActive ? volumetricFog.IntegratedTexture : null,
+                volumetricMaterialFrameActive ? volumetricFog.MaterialFogSettings : Vector4.Zero);
+            VolumetricSunTransmittance = volumetricFog.Active
+                ? Volumetrics.NebulaVolumeData.SunTransmittance(Nebulae, camera.Position,
+                    volSun ? -volSunDir : Vector3.UnitY, sunTransmittanceZones)
+                : 1f;
+            if (logVolumetricSun && volumetricFog.Active && volumetricSunLogCount < 8)
+            {
+                volumetricSunLogCount++;
+                FLLog.Info("Volumetrics",
+                    $"sun transmittance={VolumetricSunTransmittance:F4} active={volumetricFog.Active} camera=({camera.Position.X:F0},{camera.Position.Y:F0},{camera.Position.Z:F0}) toSun=({(-volSunDir).X:F2},{(-volSunDir).Y:F2},{(-volSunDir).Z:F2})");
+            }
+            hdrPipeline.GodRaysSunTransmittance = VolumetricSunTransmittance;
             var transitioned = false;
 
             if (nr != null)
@@ -668,14 +714,34 @@ namespace LibreLancer.Render
             // transparent pass (ships sink into the fog; engine trails and
             // glass still draw on top - V8 teaches them the fog itself).
             // MSAA path is excluded: multisampled depth can't be copied.
-            if (volumetricFog is { Active: true } && Settings.SelectedMSAA <= 0 &&
+            if (volumetricMaterialFrameActive &&
                 hdrPipeline.CurrentSceneTarget is { } volSceneTarget)
             {
-                volumetricFog.Composite(volSceneTarget, renderWidth, renderHeight);
+                var volCompositeVrs = Settings.SelectedVrs &&
+                    rstate.HasFeature(GraphicsFeature.VariableRateShading) &&
+                    Environment.GetEnvironmentVariable("SIRIUS_VRS_HOOK_OFF") != "1";
+                if (volCompositeVrs)
+                {
+                    rstate.SetShadingRate(2);
+                }
+                try
+                {
+                    volumetricFog.Composite(volSceneTarget, renderWidth, renderHeight);
+                }
+                finally
+                {
+                    if (volCompositeVrs)
+                    {
+                        rstate.SetShadingRate(1);
+                    }
+                }
             }
+            atmosphereLuts.CompositeClouds(rstate);
             // Transparent Pass
             rstate.DepthWrite = false;
+            RenderMaterial.VolumetricFogMaterialActive = volumetricMaterialFrameActive;
             Commands.DrawTransparent(rstate);
+            RenderMaterial.VolumetricFogMaterialActive = false;
             rstate.DepthWrite = true;
             rstate.DepthEnabled = true;
             PhysicsHook?.Invoke();
@@ -716,6 +782,8 @@ namespace LibreLancer.Render
             rstate.EndPassTimer();
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.End();
+
+            atmosphereLuts?.DrawDebug(rstate, renderWidth, renderHeight);
 
             if (debugBrdfLut)
             {
@@ -763,9 +831,42 @@ namespace LibreLancer.Render
         // a directional light - at station scale its direction is constant,
         // so the dominant point light doubles as the cascade sun. A true
         // directional light (THN sets author those) still wins.
+        // Nearest visible star - anchors the sun direction deterministically.
+        private bool TryGetDominantSun(Vector3 nearPosition, out Vector3 sunPosition)
+        {
+            sunPosition = default;
+            float best = float.MaxValue;
+            bool found = false;
+            foreach (var obj in objects)
+            {
+                if (obj is not SunRenderer sun)
+                {
+                    continue;
+                }
+                float d = Vector3.DistanceSquared(sun.WorldPosition, nearPosition);
+                if (d < best)
+                {
+                    best = d;
+                    sunPosition = sun.WorldPosition;
+                    found = true;
+                }
+            }
+            return found;
+        }
+
         private bool FindShadowLight(Vector3 nearPosition, out Vector3 direction, out DynamicLight? shadowLight)
         {
-            DynamicLight? sun = null;
+            // Brightest active directional and widest point, both picked
+            // order-INDEPENDENTLY. The previous version returned whichever
+            // directional happened to be first in SystemLighting.Lights, but
+            // that list is built lazily and its order is not stable - the
+            // volumetric sun direction flipped between otherwise identical
+            // captures (e.g. (0.13,0,-0.99) vs (1,0,0.03)), so the fog
+            // lighting, god rays and CSM jumped run-to-run.
+            DynamicLight? bestDir = null;
+            float bestLum = float.NegativeInfinity;
+            DynamicLight? bestPoint = null;
+            float bestRange = float.NegativeInfinity;
             foreach (var light in SystemLighting.Lights)
             {
                 if (!light.Active)
@@ -774,22 +875,46 @@ namespace LibreLancer.Render
                 }
                 if (light.Light.Kind == LightKind.Directional)
                 {
-                    direction = Vector3.Normalize(light.Light.Direction);
-                    shadowLight = light;
-                    return true;
+                    float lum = light.Light.Color.R + light.Light.Color.G + light.Light.Color.B;
+                    if (lum > bestLum)
+                    {
+                        bestLum = lum;
+                        bestDir = light;
+                    }
                 }
-                if (sun == null || light.Light.Range > sun.Light.Range)
+                else if (light.Light.Range > bestRange)
                 {
-                    sun = light;
+                    bestRange = light.Light.Range;
+                    bestPoint = light;
                 }
             }
-            if (sun != null)
+
+            // Anchor on the visible star when one is loaded: it is stable and
+            // is where the player actually sees the light come from, so the
+            // god rays and the sun-lit side of the cloud line up with the disc.
+            if (TryGetDominantSun(nearPosition, out var sunPos))
             {
-                var toScene = nearPosition - sun.Light.Position;
+                var toSun = sunPos - nearPosition;
+                if (toSun.LengthSquared() > 1)
+                {
+                    direction = Vector3.Normalize(toSun);
+                    shadowLight = bestDir ?? bestPoint;
+                    return true;
+                }
+            }
+            if (bestDir != null)
+            {
+                direction = Vector3.Normalize(bestDir.Light.Direction);
+                shadowLight = bestDir;
+                return true;
+            }
+            if (bestPoint != null)
+            {
+                var toScene = nearPosition - bestPoint.Light.Position;
                 if (toScene.LengthSquared() > 1)
                 {
                     direction = Vector3.Normalize(toScene);
-                    shadowLight = sun;
+                    shadowLight = bestPoint;
                     return true;
                 }
             }
@@ -930,6 +1055,7 @@ namespace LibreLancer.Render
             msaa?.Dispose();
             hdrPipeline?.Dispose();
             volumetricFog?.Dispose();
+            atmosphereLuts?.Dispose();
             cubemapStarspheres?.Dispose();
 
             Polyline.Dispose();

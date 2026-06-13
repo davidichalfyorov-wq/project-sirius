@@ -69,7 +69,7 @@ namespace LibreLancer.Render.Materials
             sh.SetUniformBlock(4, ref noAnim);
 			BindTexture (rstate ,0, DtSampler, 0, DtFlags);
             BindTexture(rstate, 1, Dm1Sampler, 1, Dm1Flags, ResourceManager.GreyTextureName);
-			SetLights(sh, ref lights, rstate.FrameNumber);
+			SetLights(sh, rstate, ref lights, rstate.FrameNumber);
             rstate.Shader = sh;
         }
 
@@ -82,4 +82,3 @@ namespace LibreLancer.Render.Materials
 		}
 	}
 }
-

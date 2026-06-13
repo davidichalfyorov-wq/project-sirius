@@ -25,7 +25,7 @@ struct VSInput
     [[vk::location(2)]] float3 normal: NORMAL;
     [[vk::location(3)]] float2 uv: TEXCOORD0;
     [[vk::location(4)]] float2 uv1: TEXCOORD1;
-    [[vk::location(10)]] int4 boneIds: TEXCOORD8;
+    [[vk::location(10)]] uint4 boneIds: TEXCOORD8;
     [[vk::location(11)]] float4 boneWeights: TEXCOORD9;
 };
 

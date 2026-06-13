@@ -75,7 +75,7 @@ namespace LibreLancer.Render.Materials
 			BindTexture (rstate, 0, DtSampler, 0, DtFlags);
 			BindTexture (rstate, 1, Dm0Sampler, 1, Dm0Flags);
 			BindTexture (rstate, 2, Dm1Sampler, 2, Dm1Flags);
-			SetLights(sh, ref lights, rstate.FrameNumber);
+			SetLights(sh, rstate, ref lights, rstate.FrameNumber);
             rstate.Shader = sh;
         }
 
@@ -88,4 +88,3 @@ namespace LibreLancer.Render.Materials
 		}
 	}
 }
-

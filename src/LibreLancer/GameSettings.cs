@@ -98,9 +98,12 @@ namespace LibreLancer
         [Entry("vrs")]
         public bool Vrs = false;
         // Phase 5 track V: froxel volumetric nebulae (Vulkan/compute only).
-        // Default off until the V12 acceptance flips it.
+        // Default on after V12; Validate() disables it on backends without compute.
         [Entry("volumetric_nebulae")]
-        public bool VolumetricNebulae = false;
+        public bool VolumetricNebulae = true;
+        // 0 low, 1 medium, 2 high, 3 ultra. High matches the P5 baseline.
+        [Entry("volumetric_quality")]
+        public int VolumetricQuality = 2;
 
         float IRendererSettings.LodMultiplier => LodMultiplier;
 
@@ -134,6 +137,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedMeshAsteroids => MeshAsteroids;
         bool IRendererSettings.SelectedVrs => Vrs;
         bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulae;
+        int IRendererSettings.SelectedVolumetricQuality => VolumetricQuality;
         PostAaMode IRendererSettings.SelectedPostAa => !Hdr
             ? PostAaMode.Off
             : PostAA.ToLowerInvariant() switch
@@ -188,6 +192,7 @@ namespace LibreLancer
             writer.WriteLine($"mesh_asteroids = {(MeshAsteroids ? "true" : "false")}");
             writer.WriteLine($"vrs = {(Vrs ? "true" : "false")}");
             writer.WriteLine($"volumetric_nebulae = {(VolumetricNebulae ? "true" : "false")}");
+            writer.WriteLine($"volumetric_quality = {VolumetricQuality}");
         }
 
         [WattleScriptHidden]
@@ -229,7 +234,9 @@ namespace LibreLancer
                 Rtao = Rtao,
                 RtReflections = RtReflections,
                 MeshAsteroids = MeshAsteroids,
-                Vrs = Vrs
+                Vrs = Vrs,
+                VolumetricNebulae = VolumetricNebulae,
+                VolumetricQuality = VolumetricQuality
             };
 
             return gs;
@@ -291,6 +298,7 @@ namespace LibreLancer
                 FLLog.Info("Config", "volumetric_nebulae requires compute support, disabling.");
                 VolumetricNebulae = false;
             }
+            VolumetricQuality = System.Math.Clamp(VolumetricQuality, 0, 3);
             if (!PostAA.Equals("off", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("fxaa", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("smaa", System.StringComparison.OrdinalIgnoreCase))
