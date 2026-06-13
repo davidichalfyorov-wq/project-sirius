@@ -97,13 +97,35 @@ namespace LibreLancer
         // Roadmap 7.6: variable rate shading (2x2 on background passes).
         [Entry("vrs")]
         public bool Vrs = false;
-        // Phase 5 track V: froxel volumetric nebulae (Vulkan/compute only).
-        // Default on after V12; Validate() disables it on backends without compute.
+
+        // PR-5.0 feature flags. Defaults are deliberately conservative:
+        // no output pixels change until PR-5.2 wires actual froxel resources.
+        [Entry("volumetric_nebula")]
+        public bool VolumetricNebula = false;
+        // Backward-compatible alias from earlier experiments.
         [Entry("volumetric_nebulae")]
-        public bool VolumetricNebulae = true;
+        public bool VolumetricNebulae = false;
+        [Entry("volumetric_near_cascade")]
+        public bool VolumetricNearCascade = false;
+        [Entry("volumetric_ship_displacement")]
+        public bool VolumetricShipDisplacement = false;
+        [Entry("atmosphere_luts")]
+        public bool AtmosphereLuts = false;
         // 0 low, 1 medium, 2 high, 3 ultra. High matches the P5 baseline.
         [Entry("volumetric_quality")]
         public int VolumetricQuality = 2;
+        [Entry("debug_view")]
+        public string DebugView = "off";
+        [Entry("render_debug_markers")]
+        public bool RenderDebugMarkers = true;
+        [Entry("render_capture_startup")]
+        public bool RenderCaptureStartup = false;
+        [Entry("render_capture_next_frame")]
+        public bool RenderCaptureNextFrame = false;
+        [Entry("render_capture_path")]
+        public string RenderCapturePath = "";
+
+        private bool VolumetricNebulaRequested => VolumetricNebula || VolumetricNebulae;
 
         float IRendererSettings.LodMultiplier => LodMultiplier;
 
@@ -136,8 +158,17 @@ namespace LibreLancer
         bool IRendererSettings.SelectedRtReflections => RtReflections;
         bool IRendererSettings.SelectedMeshAsteroids => MeshAsteroids;
         bool IRendererSettings.SelectedVrs => Vrs;
-        bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulae;
+        bool IRendererSettings.SelectedVolumetricNebula => VolumetricNebulaRequested;
+        bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulaRequested;
+        bool IRendererSettings.SelectedVolumetricNearCascade => VolumetricNebulaRequested && VolumetricNearCascade;
+        bool IRendererSettings.SelectedVolumetricShipDisplacement => VolumetricNebulaRequested && VolumetricShipDisplacement;
+        bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
         int IRendererSettings.SelectedVolumetricQuality => VolumetricQuality;
+        string IRendererSettings.SelectedDebugView => DebugView;
+        bool IRendererSettings.SelectedRenderDebugMarkers => RenderDebugMarkers;
+        bool IRendererSettings.SelectedRenderCaptureStartup => RenderCaptureStartup;
+        bool IRendererSettings.SelectedRenderCaptureNextFrame => RenderCaptureNextFrame;
+        string? IRendererSettings.SelectedRenderCapturePath => string.IsNullOrWhiteSpace(RenderCapturePath) ? null : RenderCapturePath;
         PostAaMode IRendererSettings.SelectedPostAa => !Hdr
             ? PostAaMode.Off
             : PostAA.ToLowerInvariant() switch
@@ -191,8 +222,19 @@ namespace LibreLancer
             writer.WriteLine($"rt_reflections = {(RtReflections ? "true" : "false")}");
             writer.WriteLine($"mesh_asteroids = {(MeshAsteroids ? "true" : "false")}");
             writer.WriteLine($"vrs = {(Vrs ? "true" : "false")}");
-            writer.WriteLine($"volumetric_nebulae = {(VolumetricNebulae ? "true" : "false")}");
+            writer.WriteLine($"volumetric_nebula = {(VolumetricNebulaRequested ? "true" : "false")}");
+            writer.WriteLine($"volumetric_near_cascade = {(VolumetricNearCascade ? "true" : "false")}");
+            writer.WriteLine($"volumetric_ship_displacement = {(VolumetricShipDisplacement ? "true" : "false")}");
+            writer.WriteLine($"atmosphere_luts = {(AtmosphereLuts ? "true" : "false")}");
             writer.WriteLine($"volumetric_quality = {VolumetricQuality}");
+            writer.WriteLine($"debug_view = {DebugView}");
+            writer.WriteLine($"render_debug_markers = {(RenderDebugMarkers ? "true" : "false")}");
+            writer.WriteLine($"render_capture_startup = {(RenderCaptureStartup ? "true" : "false")}");
+            writer.WriteLine($"render_capture_next_frame = {(RenderCaptureNextFrame ? "true" : "false")}");
+            if (!string.IsNullOrWhiteSpace(RenderCapturePath))
+            {
+                writer.WriteLine($"render_capture_path = {RenderCapturePath}");
+            }
         }
 
         [WattleScriptHidden]
@@ -235,8 +277,17 @@ namespace LibreLancer
                 RtReflections = RtReflections,
                 MeshAsteroids = MeshAsteroids,
                 Vrs = Vrs,
+                VolumetricNebula = VolumetricNebula,
                 VolumetricNebulae = VolumetricNebulae,
-                VolumetricQuality = VolumetricQuality
+                VolumetricNearCascade = VolumetricNearCascade,
+                VolumetricShipDisplacement = VolumetricShipDisplacement,
+                AtmosphereLuts = AtmosphereLuts,
+                VolumetricQuality = VolumetricQuality,
+                DebugView = DebugView,
+                RenderDebugMarkers = RenderDebugMarkers,
+                RenderCaptureStartup = RenderCaptureStartup,
+                RenderCaptureNextFrame = RenderCaptureNextFrame,
+                RenderCapturePath = RenderCapturePath
             };
 
             return gs;
@@ -293,12 +344,29 @@ namespace LibreLancer
                 FLLog.Info("Config", "vrs requires fragment shading rate support, disabling.");
                 Vrs = false;
             }
-            if (VolumetricNebulae && !RenderContext.HasFeature(GraphicsFeature.Compute))
+            if (VolumetricNebulaRequested && !RenderContext.HasFeature(GraphicsFeature.Compute))
             {
-                FLLog.Info("Config", "volumetric_nebulae requires compute support, disabling.");
+                FLLog.Info("Config", "volumetric_nebula requires compute support, disabling.");
+                VolumetricNebula = false;
                 VolumetricNebulae = false;
+                VolumetricNearCascade = false;
+                VolumetricShipDisplacement = false;
+            }
+            if (!VolumetricNebulaRequested)
+            {
+                VolumetricNearCascade = false;
+                VolumetricShipDisplacement = false;
+            }
+            if (AtmosphereLuts && !RenderContext.HasFeature(GraphicsFeature.Compute))
+            {
+                FLLog.Info("Config", "atmosphere_luts requires compute support, disabling.");
+                AtmosphereLuts = false;
             }
             VolumetricQuality = System.Math.Clamp(VolumetricQuality, 0, 3);
+            if (string.IsNullOrWhiteSpace(DebugView))
+            {
+                DebugView = "off";
+            }
             if (!PostAA.Equals("off", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("fxaa", System.StringComparison.OrdinalIgnoreCase) &&
                 !PostAA.Equals("smaa", System.StringComparison.OrdinalIgnoreCase))
