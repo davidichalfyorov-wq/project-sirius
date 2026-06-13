@@ -17,13 +17,14 @@ public class DevHudOverlay
         Environment.GetEnvironmentVariable("SIRIUS_DEV_HUD") == "1";
 
     private readonly FreelancerGame game;
-    private bool enabled = startEnabled;
+    private bool enabled;
     private double cpuMsAvg = 16.6;
     private double fpsAvg = 60;
 
     public DevHudOverlay(FreelancerGame game)
     {
         this.game = game;
+        enabled = startEnabled || game.Config.Settings.DevHud;
         game.Keyboard.KeyDown += e =>
         {
             if (e.Key == Keys.F11)
@@ -86,6 +87,18 @@ public class DevHudOverlay
             Line(FormattableString.Invariant(
                 $"rt inst    {rayTracing.LastInstanceCount,8}"));
         }
+
+        IRendererSettings settings = game.Config.Settings;
+        var vol = VolumetricNebulaFrameDebug.Evaluate(settings, game.RenderContext);
+        var volStatus = vol.Active ? "active" : vol.LegacyFallback ? "legacy" : "off";
+        Line(FormattableString.Invariant($"vol nebula {volStatus,>8}"), vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
+        if (vol.Requested || settings.SelectedDebugView != "off")
+        {
+            Line(FormattableString.Invariant($"vol q/n/d/a {vol.Quality}/{vol.NearCascade}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
+            Line($"debug view {settings.SelectedDebugView}", Color4.LightBlue);
+            Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
+        }
+
         var memory = game.RenderContext.DeviceMemoryAllocated;
         if (memory > 0)
         {
