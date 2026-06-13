@@ -107,8 +107,22 @@ namespace LibreLancer
         public bool VolumetricNebulae = false;
         [Entry("volumetric_near_cascade")]
         public bool VolumetricNearCascade = false;
+        [Entry("volumetric_near_composite")]
+        public bool VolumetricNearComposite = false;
         [Entry("volumetric_ship_displacement")]
         public bool VolumetricShipDisplacement = false;
+        [Entry("volumetric_composite")]
+        public bool VolumetricComposite = false;
+        [Entry("volumetric_material_fog")]
+        public bool VolumetricMaterialFog = false;
+        [Entry("volumetric_lightning_channels")]
+        public bool VolumetricLightningChannels = false;
+        [Entry("volumetric_temporal")]
+        public bool VolumetricTemporal = false;
+        [Entry("volumetric_reprojection")]
+        public bool VolumetricReprojection = false;
+        [Entry("volumetric_blue_noise")]
+        public bool VolumetricBlueNoise = false;
         [Entry("atmosphere_luts")]
         public bool AtmosphereLuts = false;
         // 0 low, 1 medium, 2 high, 3 ultra. High matches the P5 baseline.
@@ -133,7 +147,22 @@ namespace LibreLancer
 
         public bool Phase5NearCascadeEnabled => VolumetricNebulaRequested && VolumetricNearCascade;
 
+        public bool Phase5NearCompositeEnabled =>
+            Phase5NearCascadeEnabled && Phase5CompositeEnabled && VolumetricNearComposite;
+
         public bool Phase5ShipDisplacementEnabled => VolumetricNebulaRequested && VolumetricShipDisplacement;
+
+        public bool Phase5CompositeEnabled => VolumetricNebulaRequested && VolumetricComposite;
+
+        public bool Phase5MaterialFogEnabled => VolumetricNebulaRequested && VolumetricMaterialFog;
+
+        public bool Phase5LightningChannelsEnabled => VolumetricNebulaRequested && VolumetricLightningChannels;
+
+        public bool Phase5TemporalEnabled => VolumetricNebulaRequested && VolumetricTemporal;
+
+        public bool Phase5ReprojectionEnabled => Phase5TemporalEnabled && VolumetricReprojection;
+
+        public bool Phase5BlueNoiseEnabled => VolumetricNebulaRequested && VolumetricBlueNoise;
 
         public string Phase5DebugView => NormalizePhase5DebugView(DebugView);
 
@@ -147,8 +176,13 @@ namespace LibreLancer
                 "vol_density" or "voldensity" or "density" or "volumetric_density" => "vol_density",
                 "vol_transmittance" or "voltransmittance" or "transmittance" or "volumetric_transmittance" => "vol_transmittance",
                 "vol_froxels" or "volfroxels" or "froxels" or "froxel" => "vol_froxels",
+                "vol_near" or "volnear" or "near" or "near_froxels" or "volumetric_near" => "vol_near",
                 "vol_zones" or "volzones" or "zones" or "volumetric_zones" or "volume_zones" => "vol_zones",
                 "vol_displacement" or "voldisp" or "displacement" => "vol_displacement",
+                "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => "vol_lightning",
+                "vol_history" or "volhistory" or "history" or "volumetric_history" => "vol_history",
+                "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => "vol_history_confidence",
+                "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => "vol_jitter",
                 "atmosphere_luts" or "atmoluts" or "atmo_luts" => "atmosphere_luts",
                 "atmo_aerial" or "atmoaerial" or "aerial" => "atmo_aerial",
                 _ => "off"
@@ -189,7 +223,14 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricNebula => VolumetricNebulaRequested;
         bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulaRequested;
         bool IRendererSettings.SelectedVolumetricNearCascade => VolumetricNebulaRequested && VolumetricNearCascade;
+        bool IRendererSettings.SelectedVolumetricNearComposite => Phase5NearCompositeEnabled;
         bool IRendererSettings.SelectedVolumetricShipDisplacement => VolumetricNebulaRequested && VolumetricShipDisplacement;
+        bool IRendererSettings.SelectedVolumetricComposite => VolumetricNebulaRequested && VolumetricComposite;
+        bool IRendererSettings.SelectedVolumetricMaterialFog => VolumetricNebulaRequested && VolumetricMaterialFog;
+        bool IRendererSettings.SelectedVolumetricLightningChannels => VolumetricNebulaRequested && VolumetricLightningChannels;
+        bool IRendererSettings.SelectedVolumetricTemporal => VolumetricNebulaRequested && VolumetricTemporal;
+        bool IRendererSettings.SelectedVolumetricReprojection => Phase5ReprojectionEnabled;
+        bool IRendererSettings.SelectedVolumetricBlueNoise => Phase5BlueNoiseEnabled;
         bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
         int IRendererSettings.SelectedVolumetricQuality => VolumetricQuality;
         string IRendererSettings.SelectedDebugView => DebugView;
@@ -252,7 +293,14 @@ namespace LibreLancer
             writer.WriteLine($"vrs = {(Vrs ? "true" : "false")}");
             writer.WriteLine($"volumetric_nebula = {(VolumetricNebulaRequested ? "true" : "false")}");
             writer.WriteLine($"volumetric_near_cascade = {(VolumetricNearCascade ? "true" : "false")}");
+            writer.WriteLine($"volumetric_near_composite = {(VolumetricNearComposite ? "true" : "false")}");
             writer.WriteLine($"volumetric_ship_displacement = {(VolumetricShipDisplacement ? "true" : "false")}");
+            writer.WriteLine($"volumetric_composite = {(VolumetricComposite ? "true" : "false")}");
+            writer.WriteLine($"volumetric_material_fog = {(VolumetricMaterialFog ? "true" : "false")}");
+            writer.WriteLine($"volumetric_lightning_channels = {(VolumetricLightningChannels ? "true" : "false")}");
+            writer.WriteLine($"volumetric_temporal = {(VolumetricTemporal ? "true" : "false")}");
+            writer.WriteLine($"volumetric_reprojection = {(VolumetricReprojection ? "true" : "false")}");
+            writer.WriteLine($"volumetric_blue_noise = {(VolumetricBlueNoise ? "true" : "false")}");
             writer.WriteLine($"atmosphere_luts = {(AtmosphereLuts ? "true" : "false")}");
             writer.WriteLine($"volumetric_quality = {VolumetricQuality}");
             writer.WriteLine($"debug_view = {DebugView}");
@@ -310,7 +358,14 @@ namespace LibreLancer
                 VolumetricNebula = VolumetricNebula,
                 VolumetricNebulae = VolumetricNebulae,
                 VolumetricNearCascade = VolumetricNearCascade,
+                VolumetricNearComposite = VolumetricNearComposite,
                 VolumetricShipDisplacement = VolumetricShipDisplacement,
+                VolumetricComposite = VolumetricComposite,
+                VolumetricMaterialFog = VolumetricMaterialFog,
+                VolumetricLightningChannels = VolumetricLightningChannels,
+                VolumetricTemporal = VolumetricTemporal,
+                VolumetricReprojection = VolumetricReprojection,
+                VolumetricBlueNoise = VolumetricBlueNoise,
                 AtmosphereLuts = AtmosphereLuts,
                 VolumetricQuality = VolumetricQuality,
                 DebugView = DebugView,
@@ -382,12 +437,35 @@ namespace LibreLancer
                 VolumetricNebula = false;
                 VolumetricNebulae = false;
                 VolumetricNearCascade = false;
+                VolumetricNearComposite = false;
                 VolumetricShipDisplacement = false;
+                VolumetricComposite = false;
+                VolumetricMaterialFog = false;
+                VolumetricLightningChannels = false;
+                VolumetricTemporal = false;
+                VolumetricReprojection = false;
+                VolumetricBlueNoise = false;
             }
             if (!VolumetricNebulaRequested)
             {
                 VolumetricNearCascade = false;
+                VolumetricNearComposite = false;
                 VolumetricShipDisplacement = false;
+                VolumetricComposite = false;
+                VolumetricMaterialFog = false;
+                VolumetricLightningChannels = false;
+                VolumetricTemporal = false;
+                VolumetricReprojection = false;
+                VolumetricBlueNoise = false;
+            }
+            if (!VolumetricTemporal)
+            {
+                VolumetricReprojection = false;
+            }
+            if (VolumetricNearComposite && (!VolumetricNearCascade || !VolumetricComposite))
+            {
+                FLLog.Info("Config", "volumetric_near_composite requires volumetric_near_cascade and volumetric_composite, disabling.");
+                VolumetricNearComposite = false;
             }
             if (AtmosphereLuts && !RenderContext.HasFeature(GraphicsFeature.Compute))
             {

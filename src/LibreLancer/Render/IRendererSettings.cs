@@ -60,8 +60,29 @@ public interface IRendererSettings
     /// <summary>Near-camera high-frequency froxel cascade. Stubbed until PR-5.2+.</summary>
     bool SelectedVolumetricNearCascade => false;
 
+    /// <summary>Composite the near froxel cascade together with the main volume. Opt-in PR-5.12 path.</summary>
+    bool SelectedVolumetricNearComposite => false;
+
     /// <summary>Interactive ship density displacement/wake. Stubbed until PR-5.2+.</summary>
     bool SelectedVolumetricShipDisplacement => false;
+
+    /// <summary>First visible opt-in froxel composite. Default false; legacy nebula remains fallback.</summary>
+    bool SelectedVolumetricComposite => false;
+
+    /// <summary>Bind integrated froxel fog to material shaders. Scaffold for transparent effects.</summary>
+    bool SelectedVolumetricMaterialFog => false;
+
+    /// <summary>Inject segmented lightning-channel light into the froxel lighting volume.</summary>
+    bool SelectedVolumetricLightningChannels => false;
+
+    /// <summary>Temporal history/reprojection scaffold for integrated froxel fog.</summary>
+    bool SelectedVolumetricTemporal => false;
+
+    /// <summary>Depth-aware history reprojection/rejection for temporal froxel fog.</summary>
+    bool SelectedVolumetricReprojection => false;
+
+    /// <summary>Blue-noise/STBN jitter source for density and temporal passes.</summary>
+    bool SelectedVolumetricBlueNoise => false;
 
     /// <summary>Atmosphere LUT pipeline for planets with atmospheres. Stubbed until B1.</summary>
     bool SelectedAtmosphereLuts => false;

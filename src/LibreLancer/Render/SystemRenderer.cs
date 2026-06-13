@@ -12,6 +12,7 @@ using LibreLancer.Fx;
 using LibreLancer.Graphics;
 using LibreLancer.Graphics.Backends.OpenGL;
 using LibreLancer.Render.Materials;
+using LibreLancer.Render.Volumetrics;
 using LibreLancer.Resources;
 using LibreLancer.Thn;
 using LibreLancer.World;
@@ -290,6 +291,7 @@ namespace LibreLancer.Render
 
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
+        private VolumetricNebulaFrameResources? volumetricNebulaResources;
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
         private bool rtShadowsWasActive;
@@ -415,6 +417,17 @@ namespace LibreLancer.Render
             rstate.PreferredFilterLevel = Settings.SelectedFiltering;
             rstate.AnisotropyLevel = Settings.SelectedAnisotropy;
             var nr = CheckNebulae(); // are we in a nebula?
+            var renderFeatures = RenderFeatureSet.FromSettings(Settings);
+            NebulaVolumeProfile activeProfile = default;
+            var hasActiveProfile = nr != null && NebulaVolumeProfileMapper.TryCreate(nr.Nebula, out activeProfile);
+            UpdateVolumetricNebulaFrame(renderWidth, renderHeight, renderFeatures,
+                hasActiveProfile ? activeProfile : null);
+            if (!renderFeatures.VolumetricReprojection)
+            {
+                ApplyVolumetricNebulaTemporal(renderFeatures, hasActiveProfile, activeProfile);
+            }
+            var useVolumetricCompositeThisFrame =
+                ShouldUseVolumetricCompositeThisFrame(renderFeatures, hasActiveProfile);
 
             rstate.SetCamera(camera);
             Commands.Camera = camera;
@@ -432,7 +445,7 @@ namespace LibreLancer.Render
                 // Volumetrics never "transition": the starsphere stays and
                 // the gas itself swallows it physically (legacy hid the sky
                 // behind a fog-coloured clear once deep enough).
-                transitioned = nr.FogTransitioned() && DrawNebulae;
+                transitioned = !useVolumetricCompositeThisFrame && nr.FogTransitioned() && DrawNebulae;
             }
 
             rstate.DepthEnabled = true;
@@ -597,7 +610,7 @@ namespace LibreLancer.Render
             // (exterior puffs, fill quad, interior puffs): drawing both
             // doubled the fog with hard-edged sprite blobs on top of the
             // real gas (the "ромбы и рваные углы" report).
-            if (DrawNebulae)
+            if (DrawNebulae && !useVolumetricCompositeThisFrame)
             {
                 if (nr == null)
                 {
@@ -644,7 +657,7 @@ namespace LibreLancer.Render
                     rstate.SetCamera(thn2);
                 }
 
-                if (nr != null && DrawNebulae)
+                if (nr != null && DrawNebulae && !useVolumetricCompositeThisFrame)
                 {
                     // Legacy fullscreen fog tint - the volumetric composite
                     // owns the in-cloud look now.
@@ -656,10 +669,21 @@ namespace LibreLancer.Render
 
             OpaqueHook?.Invoke();
             // Transparent Pass
+            var materialFogBound = BindVolumetricMaterialFog(renderFeatures, hasActiveProfile, activeProfile);
             rstate.DepthWrite = false;
-            Commands.DrawTransparent(rstate);
-            rstate.DepthWrite = true;
-            rstate.DepthEnabled = true;
+            try
+            {
+                Commands.DrawTransparent(rstate);
+            }
+            finally
+            {
+                if (materialFogBound)
+                {
+                    UnbindVolumetricMaterialFog();
+                }
+                rstate.DepthWrite = true;
+                rstate.DepthEnabled = true;
+            }
             PhysicsHook?.Invoke();
 
             foreach (var point in debugPoints)
@@ -696,8 +720,15 @@ namespace LibreLancer.Render
             }
 
             rstate.EndPassTimer();
+            if (renderFeatures.VolumetricReprojection)
+            {
+                var temporalDepth = hdrPipeline.CopySceneDepthForVolumetrics();
+                ApplyVolumetricNebulaTemporal(renderFeatures, hasActiveProfile, activeProfile, temporalDepth);
+            }
+            ApplyVolumetricNebulaComposite(renderFeatures, hasActiveProfile, activeProfile);
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.End();
+            DrawVolumetricNebulaDebugView(renderWidth, renderHeight, renderFeatures.DebugView);
 
 
             if (debugBrdfLut)
@@ -730,6 +761,93 @@ namespace LibreLancer.Render
             objects.Clear();
         }
 
+        private void UpdateVolumetricNebulaFrame(int renderWidth, int renderHeight, RenderFeatureSet features,
+            NebulaVolumeProfile? profile)
+        {
+            if (!features.VolumetricNebula && volumetricNebulaResources == null)
+            {
+                return;
+            }
+
+            volumetricNebulaResources ??= new VolumetricNebulaFrameResources();
+            volumetricNebulaResources.Ensure(rstate, renderWidth, renderHeight, features, profile,
+                (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position));
+        }
+
+        private bool ShouldUseVolumetricCompositeThisFrame(RenderFeatureSet features, bool hasActiveProfile) =>
+            features.VolumetricComposite &&
+            hasActiveProfile &&
+            volumetricNebulaResources is { GpuIntegratedThisFrame: true, Integrated: { IsDisposed: false } } &&
+            LibreLancer.Shaders.AllShaders.FroxelComposite != null;
+
+        private void ApplyVolumetricNebulaTemporal(RenderFeatureSet features, bool hasActiveProfile,
+            NebulaVolumeProfile activeProfile, Texture2D? sceneDepth = null)
+        {
+            if (!features.VolumetricTemporal || !hasActiveProfile || volumetricNebulaResources == null)
+            {
+                return;
+            }
+            volumetricNebulaResources.ApplyTemporal(rstate, features, activeProfile, camera, sceneDepth);
+        }
+
+        private void ApplyVolumetricNebulaComposite(RenderFeatureSet features, bool hasActiveProfile,
+            NebulaVolumeProfile activeProfile)
+        {
+            if (!features.VolumetricComposite || !hasActiveProfile || volumetricNebulaResources == null || hdrPipeline == null)
+            {
+                return;
+            }
+            volumetricNebulaResources.CompositeIntoHdr(hdrPipeline, features, activeProfile, camera);
+        }
+
+        private bool BindVolumetricMaterialFog(RenderFeatureSet features, bool hasActiveProfile,
+            NebulaVolumeProfile activeProfile)
+        {
+            if (!features.VolumetricMaterialFog || !hasActiveProfile || volumetricNebulaResources == null)
+            {
+                return false;
+            }
+            return volumetricNebulaResources.BindMaterialFog(features, activeProfile);
+        }
+
+        private static void UnbindVolumetricMaterialFog()
+        {
+            RenderMaterial.VolumetricFogMaterialActive = false;
+            RenderMaterial.VolumetricFogActive = false;
+            RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);
+        }
+
+        private void DrawVolumetricNebulaDebugView(int renderWidth, int renderHeight, RenderDebugView debugView)
+        {
+            if (volumetricNebulaResources == null)
+            {
+                return;
+            }
+            if (debugView is not (RenderDebugView.VolumetricDensity or
+                                  RenderDebugView.VolumetricTransmittance or
+                                  RenderDebugView.VolumetricFroxels or
+                                  RenderDebugView.VolumetricZones or
+                                  RenderDebugView.VolumetricDisplacement or
+                                  RenderDebugView.VolumetricLightning or
+                                  RenderDebugView.VolumetricHistory or
+                                  RenderDebugView.VolumetricHistoryConfidence or
+                                  RenderDebugView.VolumetricJitter or
+                                  RenderDebugView.VolumetricNear))
+            {
+                return;
+            }
+
+            rstate.BeginPassTimer("vol_nebula_debug_view");
+            try
+            {
+                volumetricNebulaResources.DrawDebugView(rstate, debugView, renderWidth, renderHeight);
+            }
+            finally
+            {
+                rstate.EndPassTimer();
+            }
+        }
+
         private bool HasSunRenderer()
         {
             foreach (var obj in objects)
@@ -740,6 +858,19 @@ namespace LibreLancer.Render
                 }
             }
             return false;
+        }
+
+        private Vector3 ResolveVolumetricSunDirection(Vector3 nearPosition)
+        {
+            if (FindShadowLight(nearPosition, out var direction, out _))
+            {
+                var lenSq = direction.LengthSquared();
+                if (lenSq > 1e-6f)
+                {
+                    return direction / MathF.Sqrt(lenSq);
+                }
+            }
+            return Vector3.Normalize(new Vector3(0.35f, 0.18f, -0.92f));
         }
 
         // FL space systems author the sun as a huge-range point source, not
@@ -970,6 +1101,7 @@ namespace LibreLancer.Render
             msaa?.Dispose();
             hdrPipeline?.Dispose();
             cubemapStarspheres?.Dispose();
+            volumetricNebulaResources?.Dispose();
 
             Polyline.Dispose();
             FxPool.Dispose();

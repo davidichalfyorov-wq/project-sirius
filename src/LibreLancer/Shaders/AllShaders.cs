@@ -31,6 +31,14 @@ public static class AllShaders
     // Compute bundles are SPIR-V-only: loaded behind GraphicsFeature.Compute.
     public static ShaderBundle? ComputeSmoke;
     public static ShaderBundle? Texture3DVis;
+    public static ShaderBundle? FroxelClear;
+    public static ShaderBundle? FroxelDebugSlice;
+    public static ShaderBundle? FroxelInject;
+    public static ShaderBundle? FroxelLight;
+    public static ShaderBundle? FroxelLightning;
+    public static ShaderBundle? FroxelIntegrate;
+    public static ShaderBundle? FroxelTemporal;
+    public static ShaderBundle? FroxelComposite;
     // Volumetric nebulae (phase 5 track V): froxel chain + composite.
     public static ShaderBundle GodRaysMask = null!;
     public static ShaderBundle GodRaysBlur = null!;
@@ -101,6 +109,14 @@ public static class AllShaders
         {
             ComputeSmoke ??= Compile(context, "ComputeSmoke");
             Texture3DVis ??= Compile(context, "Texture3DVis");
+            FroxelClear ??= Compile(context, "FroxelClear");
+            FroxelDebugSlice ??= Compile(context, "FroxelDebugSlice");
+            FroxelInject ??= Compile(context, "FroxelInject");
+            FroxelLight ??= Compile(context, "FroxelLight");
+            FroxelLightning ??= Compile(context, "FroxelLightning");
+            FroxelIntegrate ??= Compile(context, "FroxelIntegrate");
+            FroxelTemporal ??= Compile(context, "FroxelTemporal");
+            FroxelComposite ??= Compile(context, "FroxelComposite");
         }
         GodRaysMask ??= Compile(context, "GodRaysMask");
         GodRaysBlur ??= Compile(context, "GodRaysBlur");

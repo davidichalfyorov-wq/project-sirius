@@ -47,9 +47,19 @@ internal sealed class HdrFramePipeline : IDisposable
 
     public PostAaMode PostAa = PostAaMode.Off;
     private Shader? fxaaShader;
+    private Shader? volumetricCompositeShader;
     private Shader? smaaEdgesShader;
     private Shader? smaaWeightsShader;
     private Shader? smaaBlendShader;
+
+    private struct FroxelCompositeParams
+    {
+        public Vector4 CompositeParams;
+        public Vector4 GridParams;
+        public Vector4 DepthParams;
+        public Vector4 NearParams;
+        public Matrix4x4 InverseProjection;
+    }
 
     /// <summary>
     /// Every render-size-dependent target of the frame, bundled. THN
@@ -79,6 +89,10 @@ internal sealed class HdrFramePipeline : IDisposable
 
         public RenderTarget2D? LdrTarget;
         public Texture2D? LdrTexture;
+
+        public RenderTarget2D? VolumetricCompositeTarget;
+        public Texture2D? VolumetricCompositeTexture;
+        public Texture2D? VolumetricDepthTexture;
 
         // SMAA intermediates (roadmap 4.7): edges in RG, blending weights
         // in RGBA. Targets stay alive next to their textures (disposing a
@@ -115,6 +129,8 @@ internal sealed class HdrFramePipeline : IDisposable
             RayMaskTarget?.Dispose();
             RayBlurTarget?.Dispose();
             LdrTarget?.Dispose();
+            VolumetricCompositeTarget?.Dispose();
+            VolumetricDepthTexture?.Dispose();
             SmaaEdgesTarget?.Dispose();
             SmaaWeightsTarget?.Dispose();
         }
@@ -185,6 +201,131 @@ internal sealed class HdrFramePipeline : IDisposable
         rstate.PushScissor(new Rectangle(0, 0, renderWidth, renderHeight), false);
         rstate.RenderTarget = current.Scene;
         rstate.ClearAll();
+    }
+
+    public Texture2D? CopySceneDepthForVolumetrics()
+    {
+        var targets = current;
+        if (targets == null)
+        {
+            return null;
+        }
+        if (targets.VolumetricDepthTexture == null)
+        {
+            targets.VolumetricDepthTexture = new Texture2D(rstate, targets.Width, targets.Height, false,
+                SurfaceFormat.Depth);
+            FLLog.Info("Volumetrics", $"Scene depth copy texture created: {targets.Width}x{targets.Height}");
+        }
+        rstate.BeginPassTimer("vol_nebula_depth_copy");
+        try
+        {
+            rstate.CopyDepth(targets.Scene, targets.VolumetricDepthTexture);
+        }
+        finally
+        {
+            rstate.EndPassTimer();
+        }
+        return targets.VolumetricDepthTexture;
+    }
+
+    /// <summary>
+    /// Opt-in Phase 5 bridge from integrated froxel volume into the HDR scene.
+    /// The pass ping-pongs through a private HDR target so it never samples and
+    /// writes the same scene texture.
+    /// </summary>
+    public bool CompositeVolumetricNebula(Texture3D integrated, Texture2D sceneDepth,
+        Matrix4x4 inverseProjection, Vector4 settings, Vector4 gridParams, Vector4 depthParams,
+        Texture3D? nearIntegrated = null, Vector4 nearParams = default)
+    {
+        var targets = current;
+        if (targets == null || AllShaders.FroxelComposite == null || integrated.IsDisposed)
+        {
+            return false;
+        }
+        if (targets.VolumetricCompositeTarget == null)
+        {
+            targets.VolumetricCompositeTexture = new Texture2D(rstate, targets.Width, targets.Height, false,
+                SurfaceFormat.HdrBlendable);
+            targets.VolumetricCompositeTarget = new RenderTarget2D(rstate, targets.VolumetricCompositeTexture);
+            FLLog.Info("Volumetrics", $"HDR volumetric composite target created: {targets.Width}x{targets.Height}");
+        }
+
+        var oldTarget = rstate.RenderTarget;
+        var oldBlend = rstate.BlendMode;
+        var oldCull = rstate.Cull;
+        var oldDepth = rstate.DepthEnabled;
+        var fullRect = new Rectangle(0, 0, targets.Width, targets.Height);
+        try
+        {
+            rstate.BeginPassTimer("vol_nebula_composite");
+            rstate.BlendMode = BlendMode.Opaque;
+            rstate.Cull = false;
+            rstate.DepthEnabled = false;
+            volumetricCompositeShader ??= AllShaders.FroxelComposite.Get(0);
+
+            var compositeBlock = new FroxelCompositeParams
+            {
+                CompositeParams = settings,
+                GridParams = gridParams,
+                DepthParams = depthParams,
+                NearParams = nearParams,
+                InverseProjection = inverseProjection
+            };
+            rstate.RenderTarget = targets.VolumetricCompositeTarget;
+            rstate.PushViewport(fullRect);
+            rstate.PushScissor(fullRect, false);
+            volumetricCompositeShader.SetUniformBlock(3, ref compositeBlock);
+            rstate.Textures[0] = targets.Scene.Texture;
+            rstate.Samplers[0] = SamplerState.LinearClamp;
+            rstate.Textures[1] = integrated;
+            rstate.Samplers[1] = SamplerState.LinearClamp;
+            rstate.Textures[2] = sceneDepth;
+            rstate.Samplers[2] = SamplerState.PointClamp;
+            rstate.Textures[3] = nearIntegrated ?? integrated;
+            rstate.Samplers[3] = SamplerState.LinearClamp;
+            rstate.Shader = volumetricCompositeShader;
+            rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+            rstate.PopScissor();
+            rstate.PopViewport();
+
+            var copyBlock = new FroxelCompositeParams
+            {
+                CompositeParams = new Vector4(0f, settings.Y, settings.Z, 0f),
+                GridParams = gridParams,
+                DepthParams = depthParams with { X = 0f },
+                NearParams = nearParams,
+                InverseProjection = inverseProjection
+            };
+            rstate.RenderTarget = targets.Scene;
+            rstate.PushViewport(fullRect);
+            rstate.PushScissor(fullRect, false);
+            volumetricCompositeShader.SetUniformBlock(3, ref copyBlock);
+            rstate.Textures[0] = targets.VolumetricCompositeTexture!;
+            rstate.Samplers[0] = SamplerState.LinearClamp;
+            rstate.Textures[1] = integrated;
+            rstate.Samplers[1] = SamplerState.LinearClamp;
+            rstate.Textures[2] = sceneDepth;
+            rstate.Samplers[2] = SamplerState.PointClamp;
+            rstate.Textures[3] = nearIntegrated ?? integrated;
+            rstate.Samplers[3] = SamplerState.LinearClamp;
+            rstate.Shader = volumetricCompositeShader;
+            rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+            rstate.PopScissor();
+            rstate.PopViewport();
+            return true;
+        }
+        finally
+        {
+            rstate.Textures[0] = null;
+            rstate.Textures[1] = null;
+            rstate.Textures[2] = null;
+            rstate.Textures[3] = null;
+            rstate.RenderTarget = oldTarget;
+            rstate.BlendMode = oldBlend;
+            rstate.Cull = oldCull;
+            rstate.DepthEnabled = oldDepth;
+            rstate.EndPassTimer();
+        }
     }
 
     /// <summary>Resolve the HDR target to the real output via the tonemap pass.</summary>

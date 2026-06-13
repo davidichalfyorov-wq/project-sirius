@@ -11,7 +11,14 @@ public enum RenderFeatureBits
     VolumetricShipDisplacement = 1 << 2,
     AtmosphereLuts = 1 << 3,
     DebugMarkers = 1 << 4,
-    CaptureTooling = 1 << 5
+    CaptureTooling = 1 << 5,
+    VolumetricComposite = 1 << 6,
+    VolumetricMaterialFog = 1 << 7,
+    VolumetricLightningChannels = 1 << 8,
+    VolumetricTemporal = 1 << 9,
+    VolumetricReprojection = 1 << 10,
+    VolumetricBlueNoise = 1 << 11,
+    VolumetricNearComposite = 1 << 12
 }
 
 /// <summary>
@@ -33,6 +40,11 @@ public enum RenderDebugView
     VolumetricTransmittance,
     VolumetricFroxels,
     VolumetricDisplacement,
+    VolumetricLightning,
+    VolumetricHistory,
+    VolumetricHistoryConfidence,
+    VolumetricJitter,
+    VolumetricNear,
     AtmosphereLuts,
     AtmosphereAerial
 }
@@ -50,6 +62,13 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricNebula => Bits.HasFlag(RenderFeatureBits.VolumetricNebula);
     public bool VolumetricNearCascade => Bits.HasFlag(RenderFeatureBits.VolumetricNearCascade);
     public bool VolumetricShipDisplacement => Bits.HasFlag(RenderFeatureBits.VolumetricShipDisplacement);
+    public bool VolumetricComposite => Bits.HasFlag(RenderFeatureBits.VolumetricComposite);
+    public bool VolumetricMaterialFog => Bits.HasFlag(RenderFeatureBits.VolumetricMaterialFog);
+    public bool VolumetricLightningChannels => Bits.HasFlag(RenderFeatureBits.VolumetricLightningChannels);
+    public bool VolumetricTemporal => Bits.HasFlag(RenderFeatureBits.VolumetricTemporal);
+    public bool VolumetricReprojection => Bits.HasFlag(RenderFeatureBits.VolumetricReprojection);
+    public bool VolumetricBlueNoise => Bits.HasFlag(RenderFeatureBits.VolumetricBlueNoise);
+    public bool VolumetricNearComposite => Bits.HasFlag(RenderFeatureBits.VolumetricNearComposite);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
@@ -63,6 +82,24 @@ public readonly record struct RenderFeatureSet(
             bits |= RenderFeatureBits.VolumetricNearCascade;
         if (OverrideBool(settings.SelectedVolumetricShipDisplacement, "SIRIUS_VOLUMETRIC_SHIP_DISPLACEMENT", "SIRIUS_VOLDISP"))
             bits |= RenderFeatureBits.VolumetricShipDisplacement;
+        if (OverrideBool(settings.SelectedVolumetricComposite, "SIRIUS_VOLFOG_COMPOSITE", "SIRIUS_VOLUMETRIC_COMPOSITE"))
+            bits |= RenderFeatureBits.VolumetricComposite;
+        if (OverrideBool(settings.SelectedVolumetricMaterialFog, "SIRIUS_VOLFOG_MATERIALS", "SIRIUS_VOLUMETRIC_MATERIAL_FOG"))
+            bits |= RenderFeatureBits.VolumetricMaterialFog;
+        if (OverrideBool(settings.SelectedVolumetricLightningChannels, "SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS",
+                "SIRIUS_VOLFOG_LIGHTNING", "SIRIUS_VOLLIGHTNING"))
+            bits |= RenderFeatureBits.VolumetricLightningChannels;
+        if (OverrideBool(settings.SelectedVolumetricTemporal, "SIRIUS_VOLFOG_TEMPORAL", "SIRIUS_VOLUMETRIC_TEMPORAL"))
+            bits |= RenderFeatureBits.VolumetricTemporal;
+        if (OverrideBool(settings.SelectedVolumetricReprojection, "SIRIUS_VOLFOG_REPROJECT",
+                "SIRIUS_VOLUMETRIC_REPROJECTION"))
+            bits |= RenderFeatureBits.VolumetricReprojection;
+        if (OverrideBool(settings.SelectedVolumetricBlueNoise, "SIRIUS_VOLFOG_BLUE_NOISE",
+                "SIRIUS_VOLFOG_STBN", "SIRIUS_VOLUMETRIC_BLUE_NOISE"))
+            bits |= RenderFeatureBits.VolumetricBlueNoise;
+        if (OverrideBool(settings.SelectedVolumetricNearComposite, "SIRIUS_VOLFOG_NEAR_COMPOSITE",
+                "SIRIUS_VOLNEAR_COMPOSITE", "SIRIUS_VOLUMETRIC_NEAR_COMPOSITE"))
+            bits |= RenderFeatureBits.VolumetricNearComposite;
         if (OverrideBool(settings.SelectedAtmosphereLuts, "SIRIUS_ATMOSPHERE_LUTS", "SIRIUS_ATMO_LUTS"))
             bits |= RenderFeatureBits.AtmosphereLuts;
         if (OverrideBool(settings.SelectedRenderDebugMarkers, "SIRIUS_RENDER_DEBUG_MARKERS", "SIRIUS_DEBUG_MARKERS"))
@@ -74,7 +111,24 @@ public readonly record struct RenderFeatureSet(
         // Dependent toggles cannot run without the parent medium.
         if ((bits & RenderFeatureBits.VolumetricNebula) == 0)
         {
-            bits &= ~(RenderFeatureBits.VolumetricNearCascade | RenderFeatureBits.VolumetricShipDisplacement);
+            bits &= ~(RenderFeatureBits.VolumetricNearCascade |
+                      RenderFeatureBits.VolumetricShipDisplacement |
+                      RenderFeatureBits.VolumetricComposite |
+                      RenderFeatureBits.VolumetricMaterialFog |
+                      RenderFeatureBits.VolumetricLightningChannels |
+                      RenderFeatureBits.VolumetricTemporal |
+                      RenderFeatureBits.VolumetricReprojection |
+                      RenderFeatureBits.VolumetricBlueNoise |
+                      RenderFeatureBits.VolumetricNearComposite);
+        }
+        if ((bits & RenderFeatureBits.VolumetricTemporal) == 0)
+        {
+            bits &= ~RenderFeatureBits.VolumetricReprojection;
+        }
+        if ((bits & (RenderFeatureBits.VolumetricNearCascade | RenderFeatureBits.VolumetricComposite)) !=
+            (RenderFeatureBits.VolumetricNearCascade | RenderFeatureBits.VolumetricComposite))
+        {
+            bits &= ~RenderFeatureBits.VolumetricNearComposite;
         }
 
         var debugView = ParseDebugView(
@@ -119,6 +173,11 @@ public readonly record struct RenderFeatureSet(
             "vol_transmittance" or "voltransmittance" or "transmittance" or "volumetric_transmittance" => RenderDebugView.VolumetricTransmittance,
             "vol_froxels" or "froxels" or "volfroxels" or "froxel" => RenderDebugView.VolumetricFroxels,
             "vol_displacement" or "voldisp" or "displacement" => RenderDebugView.VolumetricDisplacement,
+            "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => RenderDebugView.VolumetricLightning,
+            "vol_history" or "volhistory" or "history" or "volumetric_history" => RenderDebugView.VolumetricHistory,
+            "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => RenderDebugView.VolumetricHistoryConfidence,
+            "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => RenderDebugView.VolumetricJitter,
+            "vol_near" or "volnear" or "near" or "near_froxels" or "volumetric_near" => RenderDebugView.VolumetricNear,
             "atmoluts" or "atmosphere_luts" or "atmo_luts" => RenderDebugView.AtmosphereLuts,
             "atmo_aerial" or "atmoaerial" or "aerial" => RenderDebugView.AtmosphereAerial,
             _ => RenderDebugView.Off

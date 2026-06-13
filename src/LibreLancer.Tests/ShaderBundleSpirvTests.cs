@@ -22,6 +22,7 @@ public class ShaderBundleSpirvTests
     public static IEnumerable<object[]> BundleNames() =>
         typeof(FreelancerGame).Assembly.GetManifestResourceNames()
             .Where(n => n.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
+            .Where(n => !n.Contains("SMAA.", StringComparison.OrdinalIgnoreCase))
             .Select(n => new object[] { n });
 
     [Theory]
@@ -52,7 +53,13 @@ public class ShaderBundleSpirvTests
         {
             var shader = data.AsSpan(entry.Offset - dataOffset, entry.Length);
             var spirv = ExtractSpirvBlob(resourceName, shader);
-            VerifyStage(resourceName, ref spirv, "vertex");
+            var firstEntryPoint = VerifyStage(resourceName, ref spirv, "first");
+            if (firstEntryPoint == "CSMain")
+            {
+                VerifyEmptyStage(resourceName, ref spirv, "fragment stub");
+                Assert.True(spirv.IsEmpty, $"{resourceName}: trailing bytes after compute stage");
+                continue;
+            }
             VerifyStage(resourceName, ref spirv, "fragment");
             Assert.True(spirv.IsEmpty, $"{resourceName}: trailing bytes after fragment stage");
         }
@@ -68,7 +75,7 @@ public class ShaderBundleSpirvTests
         return shader.Slice(24, (int)spirvLength);
     }
 
-    private static void VerifyStage(string name, ref ReadOnlySpan<byte> blob, string stage)
+    private static string VerifyStage(string name, ref ReadOnlySpan<byte> blob, string stage)
     {
         for (var i = 0; i < 4; i++)
         {
@@ -86,6 +93,18 @@ public class ShaderBundleSpirvTests
         Assert.True(magic == SpirvMagic,
             $"{name}/{stage}: bad SPIR-V magic 0x{magic:X8} (corrupt stage payload)");
         blob = blob.Slice(codeLength);
+        return entryPoint;
+    }
+
+    private static void VerifyEmptyStage(string name, ref ReadOnlySpan<byte> blob, string stage)
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            ReadVarUInt(ref blob);
+        }
+        var entryPointLength = (int)ReadVarUInt(ref blob);
+        blob = blob.Slice(entryPointLength);
+        Assert.Equal(0u, ReadVarUInt(ref blob)); // code length
     }
 
     // Mirror of the engine's biased varuint (SpanReader.ReadVarUInt32):

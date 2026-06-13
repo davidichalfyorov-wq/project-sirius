@@ -110,6 +110,10 @@ public class DevHudOverlay
                 Line(FormattableString.Invariant($"vol memory {froxels.EstimatedBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightGreen);
             }
             Line($"vol op     {froxels.LastOperation}", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            Line($"vol comp   {(froxels.Allocated ? (froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "hdr" : "off") : "off")}",
+                froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
+            Line($"vol depth  {(froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "copy" : "no")}",
+                froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
         }
 
         var memory = game.RenderContext.DeviceMemoryAllocated;
@@ -123,6 +127,15 @@ public class DevHudOverlay
             var features = RenderFeatureSet.FromSettings(rendererSettings);
             Line(FormattableString.Invariant($"debug view {features.DebugView}"), Color4.LightSkyBlue);
             Line($"vol nebula {(features.VolumetricNebula ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"vol comp   {(features.VolumetricComposite ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol nearc  {(features.VolumetricNearComposite ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol matfog {(features.VolumetricMaterialFog ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol bolt   {(features.VolumetricLightningChannels ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol temp   {(features.VolumetricTemporal ? (volumetricHistoryActive(froxels) ? "hist" : "req") : "off")}",
+                features.VolumetricTemporal ? Color4.LightYellow : Color4.LightSkyBlue);
+            Line($"vol reproj {(features.VolumetricReprojection ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol noise  {(features.VolumetricBlueNoise ? VolumetricNebulaFrameResources.LastBlueNoiseSource : "off")}",
+                features.VolumetricBlueNoise ? Color4.LightYellow : Color4.LightSkyBlue);
             Line($"vol near   {(features.VolumetricNearCascade ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"vol ship   {(features.VolumetricShipDisplacement ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
@@ -130,6 +143,11 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricTransmittance or
                 RenderDebugView.VolumetricFroxels or
                 RenderDebugView.VolumetricDisplacement or
+                RenderDebugView.VolumetricLightning or
+                RenderDebugView.VolumetricHistory or
+                RenderDebugView.VolumetricHistoryConfidence or
+                RenderDebugView.VolumetricJitter or
+                RenderDebugView.VolumetricNear or
                 RenderDebugView.AtmosphereLuts or
                 RenderDebugView.AtmosphereAerial)
             {
@@ -137,5 +155,8 @@ public class DevHudOverlay
             }
         }
         drawList.Render();
+
+        static bool volumetricHistoryActive(VolumetricNebulaResourceDebug debug) =>
+            debug.LastOperation.Contains("temporal", StringComparison.OrdinalIgnoreCase);
     }
 }
