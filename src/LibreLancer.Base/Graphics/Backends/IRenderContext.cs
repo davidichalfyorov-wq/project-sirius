@@ -89,12 +89,19 @@ internal interface IRenderContext
     // GPU pass timers (graphics roadmap 9.3). Results arrive with a
     // frames-in-flight delay; backends without timer support no-op.
     void BeginPassTimer(string name) { }
+    void EndPassTimer() { }
+
+    /// <summary>Backend debug marker group. Vulkan maps this to VK_EXT_debug_utils; other backends no-op.</summary>
+    void PushDebugGroup(string name) { }
+    void PopDebugGroup() { }
+
+    /// <summary>Requests capture of the current/next frame. Returns false until a backend capture API is linked.</summary>
+    bool RequestFrameCapture(string? outputPath) => false;
 
     /// <summary>Device memory held by backend allocators (0 when untracked).</summary>
     long DeviceMemoryAllocated => 0;
 
     /// <summary>Ray tracing services; null without ray-query support.</summary>
     IRayTracing? RayTracing => null;
-    void EndPassTimer() { }
     IReadOnlyList<PassTiming> PassTimings => Array.Empty<PassTiming>();
 }
