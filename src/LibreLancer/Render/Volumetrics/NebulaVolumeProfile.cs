@@ -1,5 +1,5 @@
 using System.Numerics;
-using LibreLancer.Data.Schema.Universe;
+using LibreLancer.Data.GameData.World;
 
 namespace LibreLancer.Render.Volumetrics;
 
