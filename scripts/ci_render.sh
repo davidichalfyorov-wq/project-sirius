@@ -68,6 +68,19 @@ mkdir -p "$ROOT/build/v3"
 # native libs) - a hand-picked DLL list left a fresh build/v3 unrunnable
 # ("libhostpolicy.so / lancer.runtimeconfig.json not found").
 cp -r "$SRCOUT/." "$ROOT/build/v3/"
+# Runtime native libs (audio/text/thorn) come from BuildLL's native step, which
+# a fresh CI checkout does not run - without them the game crashes right after
+# Vulkan init while loading a native. On the owner's machine they already exist
+# in the main clone; copy any the workspace is missing (no-op on that clone).
+NATIVE_REF="${SIRIUS_NATIVE_REF:-/run/media/ddavidich/Disk1/Project Sirius}"
+if [ -d "$NATIVE_REF/build/v3" ] && \
+   [ "$(readlink -f "$NATIVE_REF/build/v3")" != "$(readlink -f "$ROOT/build/v3")" ]; then
+    for so in "$NATIVE_REF/build/v3"/*.so "$NATIVE_REF/build/v3"/*.so.*; do
+        [ -e "$so" ] || continue
+        b=$(basename "$so")
+        [ -e "$ROOT/build/v3/$b" ] || cp "$so" "$ROOT/build/v3/$b"
+    done
+fi
 echo "build/v3 refreshed"
 
 # 2) Capture each pose into its own dir (golden autoplay rig: menu->launch->settle->shot).
