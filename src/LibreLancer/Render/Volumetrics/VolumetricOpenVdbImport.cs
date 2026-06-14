@@ -58,6 +58,11 @@ public static class VolumetricOpenVdbImport
             values[line[..split].Trim()] = line[(split + 1)..].Trim();
         }
 
+        if (!ValidateTypedManifestValues(values, out var typedError))
+        {
+            return VolumetricOpenVdbImportResult.Invalid(typedError);
+        }
+
         foreach (var key in ForbiddenPlacementKeys)
         {
             if (values.ContainsKey(key))
@@ -287,6 +292,55 @@ public static class VolumetricOpenVdbImport
         return hash.Contains(':') ? hash : $"{algorithm}:{hash}";
     }
 
+    private static bool ValidateTypedManifestValues(Dictionary<string, string> values, out string error)
+    {
+        foreach (var key in new[] { "width", "height", "depth" })
+        {
+            if (values.TryGetValue(key, out var value) &&
+                !int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            {
+                error = $"invalid {key}";
+                return false;
+            }
+        }
+
+        foreach (var key in new[]
+                 {
+                     "voxel_size_meters",
+                     "density_min",
+                     "density_max",
+                     "density_multiplier"
+                 })
+        {
+            if (values.TryGetValue(key, out var value) &&
+                !float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+            {
+                error = $"invalid {key}";
+                return false;
+            }
+        }
+
+        foreach (var key in new[] { "origin_meters", "scale_meters" })
+        {
+            if (values.TryGetValue(key, out var value) &&
+                !TryParseVector3(value, out _))
+            {
+                error = $"invalid {key}";
+                return false;
+            }
+        }
+
+        if (values.TryGetValue("preserve_zone_transform", out var preserve) &&
+            !TryParseBool(preserve, out _))
+        {
+            error = "invalid preserve_zone_transform";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+
     private static int ParseInt(Dictionary<string, string> values, string key, int fallback = 0) =>
         values.TryGetValue(key, out var value) &&
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
@@ -300,30 +354,58 @@ public static class VolumetricOpenVdbImport
             : fallback;
 
     private static bool ParseBool(Dictionary<string, string> values, string key, bool fallback) =>
-        values.TryGetValue(key, out var value)
-            ? value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
-              value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
-              value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+        values.TryGetValue(key, out var value) && TryParseBool(value, out var result)
+            ? result
             : fallback;
 
     private static Vector3 ParseVector3(Dictionary<string, string> values, string key, Vector3 fallback)
     {
-        if (!values.TryGetValue(key, out var value))
-        {
-            return fallback;
-        }
+        return values.TryGetValue(key, out var value) && TryParseVector3(value, out var result)
+            ? result
+            : fallback;
+    }
 
+    private static bool TryParseVector3(string value, out Vector3 result)
+    {
         var parts = value.Split(',', StringSplitOptions.TrimEntries);
         if (parts.Length != 3)
         {
-            return fallback;
+            result = default;
+            return false;
         }
 
-        return float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) &&
-               float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) &&
-               float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z)
-            ? new Vector3(x, y, z)
-            : fallback;
+        if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) &&
+            float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) &&
+            float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            result = new Vector3(x, y, z);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    private static bool TryParseBool(string value, out bool result)
+    {
+        var normalized = value.Trim();
+        if (normalized.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("yes", StringComparison.OrdinalIgnoreCase))
+        {
+            result = true;
+            return true;
+        }
+        if (normalized.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("no", StringComparison.OrdinalIgnoreCase))
+        {
+            result = false;
+            return true;
+        }
+
+        result = false;
+        return false;
     }
 
     private static bool Matches(string authored, string runtime) =>

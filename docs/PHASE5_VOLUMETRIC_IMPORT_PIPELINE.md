@@ -54,6 +54,10 @@ Rules for the OpenVDB layer:
   `canonical_system` is present whenever the runtime knows the active system.
   This prevents a valid density cache from being accidentally applied to the
   wrong Freelancer nebula zone.
+- Manifest typed fields are strict when present. Integer dimensions,
+  floating-point density/scale fields, vector bounds, and boolean lock fields
+  must parse cleanly instead of falling back to defaults; an export typo should
+  fail review rather than silently altering density normalization.
 - `data` and `source_file` must be portable project-relative paths. Absolute
   paths, Windows drive paths, backslashes, empty segments, `.` segments, and
   `..` traversal are rejected so Blender/Houdini exports remain reproducible and

@@ -299,6 +299,74 @@ public class VolumetricOpenVdbImportTests
         Assert.Contains("offline import tool", verification.Error);
     }
 
+    [Theory]
+    [InlineData("width", "wide")]
+    [InlineData("height", "tall")]
+    [InlineData("depth", "deep")]
+    [InlineData("voxel_size_meters", "large")]
+    [InlineData("density_min", "low")]
+    [InlineData("density_max", "high")]
+    [InlineData("density_multiplier", "strong")]
+    public void RejectsMalformedScalarManifestFields(string key, string value)
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            $"{key} = {value}",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains(key, result.Error);
+    }
+
+    [Theory]
+    [InlineData("origin_meters", "0, no, 0")]
+    [InlineData("origin_meters", "0, 0")]
+    [InlineData("scale_meters", "1, yes, 1")]
+    [InlineData("scale_meters", "1, 1")]
+    public void RejectsMalformedVectorManifestFields(string key, string value)
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            $"{key} = {value}",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains(key, result.Error);
+    }
+
+    [Fact]
+    public void RejectsMalformedPreserveZoneTransform()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "preserve_zone_transform = maybe",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("preserve_zone_transform", result.Error);
+    }
+
     [Fact]
     public void BuildsProfileLockedImportPlanWithDensityNormalization()
     {
