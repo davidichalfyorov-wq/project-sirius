@@ -412,7 +412,7 @@ GBufferOutput main(Input input)
     GBufferOutput o;
     o.color = lit;
     o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
-    o.viewZ = input.viewPosition.z;
+    o.viewZ = 0.7; // DIAG: constant to isolate RT2 write-plumbing (phase 0.1.2)
     return o;
 }
 #else
