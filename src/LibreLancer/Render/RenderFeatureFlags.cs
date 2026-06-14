@@ -25,7 +25,8 @@ public enum RenderFeatureBits
     VolumetricWakeCurl = 1 << 15,
     VolumetricLightningDeterministic = 1 << 16,
     VolumetricLightningGoldenDisable = 1 << 17,
-    VolumetricAdaptiveQuality = 1 << 18
+    VolumetricAdaptiveQuality = 1 << 18,
+    VolumetricGodRays = 1 << 19
 }
 
 /// <summary>
@@ -49,6 +50,7 @@ public enum RenderDebugView
     VolumetricDisplacement,
     VolumetricDisplacementHistory,
     VolumetricWakeVectors,
+    VolumetricGodRays,
     VolumetricLightning,
     VolumetricLightningMask,
     VolumetricHistory,
@@ -76,6 +78,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricNearCascade => Bits.HasFlag(RenderFeatureBits.VolumetricNearCascade);
     public bool VolumetricShipDisplacement => Bits.HasFlag(RenderFeatureBits.VolumetricShipDisplacement);
     public bool VolumetricComposite => Bits.HasFlag(RenderFeatureBits.VolumetricComposite);
+    public bool VolumetricGodRays => Bits.HasFlag(RenderFeatureBits.VolumetricGodRays);
     public bool VolumetricMaterialFog => Bits.HasFlag(RenderFeatureBits.VolumetricMaterialFog);
     public bool VolumetricLightningChannels => Bits.HasFlag(RenderFeatureBits.VolumetricLightningChannels);
     public bool VolumetricLightningDeterministic => Bits.HasFlag(RenderFeatureBits.VolumetricLightningDeterministic);
@@ -109,6 +112,9 @@ public readonly record struct RenderFeatureSet(
             bits |= RenderFeatureBits.VolumetricWakeCurl;
         if (OverrideBool(settings.SelectedVolumetricComposite, "SIRIUS_VOLFOG_COMPOSITE", "SIRIUS_VOLUMETRIC_COMPOSITE"))
             bits |= RenderFeatureBits.VolumetricComposite;
+        if (OverrideBool(settings.SelectedVolumetricGodRays, "SIRIUS_VOLFOG_GOD_RAYS",
+                "SIRIUS_VOLGODRAYS", "SIRIUS_VOLUMETRIC_GOD_RAYS"))
+            bits |= RenderFeatureBits.VolumetricGodRays;
         if (OverrideBool(settings.SelectedVolumetricMaterialFog, "SIRIUS_VOLFOG_MATERIALS", "SIRIUS_VOLUMETRIC_MATERIAL_FOG"))
             bits |= RenderFeatureBits.VolumetricMaterialFog;
         if (OverrideBool(settings.SelectedVolumetricLightningChannels, "SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS",
@@ -164,7 +170,8 @@ public readonly record struct RenderFeatureSet(
                       RenderFeatureBits.VolumetricWakeCurl |
                       RenderFeatureBits.VolumetricLightningDeterministic |
                       RenderFeatureBits.VolumetricLightningGoldenDisable |
-                      RenderFeatureBits.VolumetricAdaptiveQuality);
+                      RenderFeatureBits.VolumetricAdaptiveQuality |
+                      RenderFeatureBits.VolumetricGodRays);
         }
         if ((bits & RenderFeatureBits.VolumetricLightningChannels) == 0)
         {
@@ -279,6 +286,7 @@ public readonly record struct RenderFeatureSet(
             "vol_displacement" or "voldisp" or "displacement" => RenderDebugView.VolumetricDisplacement,
             "vol_displacement_history" or "voldisphistory" or "vol_wake_history" or "wake_history" => RenderDebugView.VolumetricDisplacementHistory,
             "vol_wake_vectors" or "wake_vectors" or "volwakevectors" or "vol_curl" or "wake_curl" => RenderDebugView.VolumetricWakeVectors,
+            "vol_god_rays" or "volgodrays" or "god_rays" or "sun_burnthrough" or "vol_burnthrough" => RenderDebugView.VolumetricGodRays,
             "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => RenderDebugView.VolumetricLightning,
             "vol_lightning_mask" or "vollightningmask" or "lightning_mask" or "vol_lightning_debug" => RenderDebugView.VolumetricLightningMask,
             "vol_history" or "volhistory" or "history" or "volumetric_history" => RenderDebugView.VolumetricHistory,

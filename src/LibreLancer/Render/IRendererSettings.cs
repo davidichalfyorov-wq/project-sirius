@@ -78,6 +78,9 @@ public interface IRendererSettings
     /// <summary>First visible opt-in froxel composite. Default false; legacy nebula remains fallback.</summary>
     bool SelectedVolumetricComposite => false;
 
+    /// <summary>Attenuate sun sprites and post god rays through the active volumetric nebula medium.</summary>
+    bool SelectedVolumetricGodRays => false;
+
     /// <summary>Bind integrated froxel fog to material shaders. Scaffold for transparent effects.</summary>
     bool SelectedVolumetricMaterialFog => false;
 

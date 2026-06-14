@@ -119,6 +119,8 @@ namespace LibreLancer
         public bool VolumetricWakeCurl = false;
         [Entry("volumetric_composite")]
         public bool VolumetricComposite = false;
+        [Entry("volumetric_god_rays")]
+        public bool VolumetricGodRays = false;
         [Entry("volumetric_material_fog")]
         public bool VolumetricMaterialFog = false;
         [Entry("volumetric_lightning_channels")]
@@ -176,6 +178,8 @@ namespace LibreLancer
 
         public bool Phase5CompositeEnabled => VolumetricNebulaRequested && VolumetricComposite;
 
+        public bool Phase5GodRaysEnabled => VolumetricNebulaRequested && VolumetricGodRays;
+
         public bool Phase5MaterialFogEnabled => VolumetricNebulaRequested && VolumetricMaterialFog;
 
         public bool Phase5LightningChannelsEnabled => VolumetricNebulaRequested && VolumetricLightningChannels;
@@ -211,6 +215,7 @@ namespace LibreLancer
                 "vol_displacement" or "voldisp" or "displacement" => "vol_displacement",
                 "vol_displacement_history" or "voldisphistory" or "vol_wake_history" or "wake_history" => "vol_displacement_history",
                 "vol_wake_vectors" or "wake_vectors" or "volwakevectors" or "vol_curl" or "wake_curl" => "vol_wake_vectors",
+                "vol_god_rays" or "volgodrays" or "god_rays" or "sun_burnthrough" or "vol_burnthrough" => "vol_god_rays",
                 "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => "vol_lightning",
                 "vol_lightning_mask" or "vollightningmask" or "lightning_mask" or "vol_lightning_debug" => "vol_lightning_mask",
                 "vol_history" or "volhistory" or "history" or "volumetric_history" => "vol_history",
@@ -263,6 +268,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricWakeHistory => Phase5WakeHistoryEnabled;
         bool IRendererSettings.SelectedVolumetricWakeCurl => Phase5WakeCurlEnabled;
         bool IRendererSettings.SelectedVolumetricComposite => VolumetricNebulaRequested && VolumetricComposite;
+        bool IRendererSettings.SelectedVolumetricGodRays => Phase5GodRaysEnabled;
         bool IRendererSettings.SelectedVolumetricMaterialFog => VolumetricNebulaRequested && VolumetricMaterialFog;
         bool IRendererSettings.SelectedVolumetricLightningChannels => VolumetricNebulaRequested && VolumetricLightningChannels;
         bool IRendererSettings.SelectedVolumetricLightningDeterministic => Phase5LightningDeterministicEnabled;
@@ -343,6 +349,7 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_wake_history = {(VolumetricWakeHistory ? "true" : "false")}");
             writer.WriteLine($"volumetric_wake_curl = {(VolumetricWakeCurl ? "true" : "false")}");
             writer.WriteLine($"volumetric_composite = {(VolumetricComposite ? "true" : "false")}");
+            writer.WriteLine($"volumetric_god_rays = {(VolumetricGodRays ? "true" : "false")}");
             writer.WriteLine($"volumetric_material_fog = {(VolumetricMaterialFog ? "true" : "false")}");
             writer.WriteLine($"volumetric_lightning_channels = {(VolumetricLightningChannels ? "true" : "false")}");
             writer.WriteLine($"volumetric_lightning_deterministic = {(VolumetricLightningDeterministic ? "true" : "false")}");
@@ -416,6 +423,7 @@ namespace LibreLancer
                 VolumetricWakeHistory = VolumetricWakeHistory,
                 VolumetricWakeCurl = VolumetricWakeCurl,
                 VolumetricComposite = VolumetricComposite,
+                VolumetricGodRays = VolumetricGodRays,
                 VolumetricMaterialFog = VolumetricMaterialFog,
                 VolumetricLightningChannels = VolumetricLightningChannels,
                 VolumetricLightningDeterministic = VolumetricLightningDeterministic,
@@ -503,6 +511,7 @@ namespace LibreLancer
                 VolumetricWakeHistory = false;
                 VolumetricWakeCurl = false;
                 VolumetricComposite = false;
+                VolumetricGodRays = false;
                 VolumetricMaterialFog = false;
                 VolumetricLightningChannels = false;
                 VolumetricLightningDeterministic = false;
@@ -522,6 +531,7 @@ namespace LibreLancer
                 VolumetricWakeHistory = false;
                 VolumetricWakeCurl = false;
                 VolumetricComposite = false;
+                VolumetricGodRays = false;
                 VolumetricMaterialFog = false;
                 VolumetricLightningChannels = false;
                 VolumetricLightningDeterministic = false;

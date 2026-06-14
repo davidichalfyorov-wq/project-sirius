@@ -69,9 +69,8 @@ namespace LibreLancer.Render
 
         public int ZoneVersion = 0;
         public IRendererSettings Settings;
-        // Volumetrics removed: the sun burns through at full strength (no fog
-        // transmittance to dim it). Kept so SunRenderer/god rays still compile.
-        internal float VolumetricSunTransmittance => 1f;
+        private float volumetricSunTransmittance = 1f;
+        internal float VolumetricSunTransmittance => volumetricSunTransmittance;
         private Billboards billboards;
         private ResourceManager resman;
 
@@ -394,6 +393,8 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysEnabled = Settings.SelectedGodRays;
             hdrPipeline.GodRaysIntensity = Settings.SelectedGodRaysIntensity;
             hdrPipeline.GodRaysSamples = Settings.SelectedGodRaysSamples;
+            hdrPipeline.GodRaysDensity = 0.9f;
+            hdrPipeline.GodRaysDecay = 0.95f;
             hdrPipeline.PostAa = Settings.SelectedPostAa;
             hdrPipeline.Begin(renderWidth, renderHeight);
             rstate.BeginPassTimer("scene");
@@ -438,7 +439,7 @@ namespace LibreLancer.Render
             RenderMaterial.VolumetricFogActive = false;
             RenderMaterial.VolumetricFogMaterialActive = false;
             RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);
-            hdrPipeline.GodRaysSunTransmittance = 1f;
+            UpdateVolumetricGodRays(renderFeatures, hasActiveProfile, activeProfile);
             var transitioned = false;
 
             if (nr != null)
@@ -728,6 +729,7 @@ namespace LibreLancer.Render
             }
             ApplyVolumetricNebulaComposite(renderFeatures, hasActiveProfile, activeProfile);
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
+            hdrPipeline.GodRaysSunTransmittance = volumetricSunTransmittance;
             hdrPipeline.End();
             DrawVolumetricNebulaDebugView(renderWidth, renderHeight, renderFeatures.DebugView);
 
@@ -814,6 +816,32 @@ namespace LibreLancer.Render
             return volumetricNebulaResources.BindMaterialFog(features, activeProfile);
         }
 
+        private void UpdateVolumetricGodRays(RenderFeatureSet features, bool hasActiveProfile,
+            NebulaVolumeProfile activeProfile)
+        {
+            volumetricSunTransmittance = 1f;
+            hdrPipeline!.GodRaysSunTransmittance = 1f;
+            VolumetricNebulaFrameResources.NoteGodRays(false, "");
+            if (!features.VolumetricGodRays || !hasActiveProfile)
+            {
+                return;
+            }
+
+            var sunDistance = activeProfile.FogRange.Y;
+            if (TryGetDominantSun(camera.Position, out var sunPosition))
+            {
+                sunDistance = Vector3.Distance(camera.Position, sunPosition);
+            }
+
+            var godRays = VolumetricGodRayMath.ForProfile(activeProfile, sunDistance,
+                features.VolumetricQuality, Settings.SelectedGodRaysIntensity, enabled: true);
+            volumetricSunTransmittance = godRays.SunTransmittance;
+            hdrPipeline.GodRaysSunTransmittance = godRays.SunTransmittance;
+            hdrPipeline.GodRaysDensity = godRays.RayDensity;
+            hdrPipeline.GodRaysDecay = godRays.RayDecay;
+            VolumetricNebulaFrameResources.NoteGodRays(true, godRays.DebugSummary);
+        }
+
         private static void UnbindVolumetricMaterialFog()
         {
             RenderMaterial.VolumetricFogMaterialActive = false;
@@ -834,6 +862,7 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricDisplacement or
                                   RenderDebugView.VolumetricDisplacementHistory or
                                   RenderDebugView.VolumetricWakeVectors or
+                                  RenderDebugView.VolumetricGodRays or
                                   RenderDebugView.VolumetricLightning or
                                   RenderDebugView.VolumetricLightningMask or
                                   RenderDebugView.VolumetricHistory or

@@ -99,6 +99,15 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     private float lastDisplacementHistoryTime;
     private Vector3 lastWakeVelocity;
 
+    public static void NoteGodRays(bool applied, string summary)
+    {
+        LastDebug = LastDebug with
+        {
+            GodRaysApplied = applied,
+            GodRaySummary = summary
+        };
+    }
+
     public void Ensure(
         RenderContext rstate,
         int renderWidth,
@@ -381,6 +390,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             WakeHistoryDebugSummary,
             WakeCurlUpdatedThisFrame,
             WakeCurlDebugSummary,
+            LastDebug.GodRaysApplied,
+            LastDebug.GodRaySummary,
             GpuLightningInjectedThisFrame,
             LightningDebugSummary);
     }
@@ -1108,6 +1119,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     {
         RenderDebugView.VolumetricDensity => 1,
         RenderDebugView.VolumetricTransmittance => 2,
+        RenderDebugView.VolumetricGodRays => 2,
         RenderDebugView.VolumetricFroxels or RenderDebugView.VolumetricZones => 3,
         RenderDebugView.VolumetricDisplacement => 4,
         RenderDebugView.VolumetricDisplacementHistory => 4,
@@ -1487,15 +1499,17 @@ public readonly record struct VolumetricNebulaResourceDebug(
     string WakeHistorySummary,
     bool WakeCurlUpdated,
     string WakeCurlSummary,
+    bool GodRaysApplied,
+    string GodRaySummary,
     bool LightningUpdated,
     string LightningSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
         new(false, "not allocated", "not allocated", "off", -1, "", "", 0, reason, "vol_nebula.none", 0, false, "",
-            false, 0, "", false, "", false, "", false, "");
+            false, 0, "", false, "", false, "", false, "", false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
         new(false, "waiting", "waiting", "waiting", -1, "", "", 0, reason, "vol_nebula.waiting",
             VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "",
-            false, "");
+            false, "", false, "");
 }

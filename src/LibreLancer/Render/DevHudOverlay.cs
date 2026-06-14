@@ -139,6 +139,13 @@ public class DevHudOverlay
                 Line($"vol curl   {froxels.WakeCurlSummary}",
                     froxels.WakeCurlUpdated ? Color4.LightGreen : Color4.LightBlue);
             }
+            if (froxels.GodRaysApplied || !string.IsNullOrWhiteSpace(froxels.GodRaySummary))
+            {
+                Line($"vol rays   {(froxels.GodRaysApplied ? "medium" : "off")}",
+                    froxels.GodRaysApplied ? Color4.LightGreen : Color4.LightBlue);
+                Line($"vol rays   {froxels.GodRaySummary}",
+                    froxels.GodRaysApplied ? Color4.LightGreen : Color4.LightBlue);
+            }
             if (froxels.LightningUpdated || !string.IsNullOrWhiteSpace(froxels.LightningSummary))
             {
                 Line($"vol bolt   {(froxels.LightningUpdated ? "chan" : "off")}",
@@ -168,6 +175,7 @@ public class DevHudOverlay
             Line($"vol nearD  {(features.VolumetricNearDetail ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol wakeH  {(features.VolumetricWakeHistory ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol curl   {(features.VolumetricWakeCurl ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol rays   {(features.VolumetricGodRays ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol matfog {(features.VolumetricMaterialFog ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol bolt   {(features.VolumetricLightningChannels ? "req" : "off")}", Color4.LightSkyBlue);
             if (features.VolumetricLightningChannels)
@@ -189,6 +197,7 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricDisplacement or
                 RenderDebugView.VolumetricDisplacementHistory or
                 RenderDebugView.VolumetricWakeVectors or
+                RenderDebugView.VolumetricGodRays or
                 RenderDebugView.VolumetricLightning or
                 RenderDebugView.VolumetricLightningMask or
                 RenderDebugView.VolumetricHistory or
