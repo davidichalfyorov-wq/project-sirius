@@ -836,14 +836,16 @@ namespace LibreLancer.Render
         {
             try
             {
-                if (!resman.ResourceExists(manifestPath))
+                if (!TryOpenVolumetricAsset(manifestPath, out var manifestStream, out var triedManifestPaths))
                 {
-                    return VolumetricImportedDensityFrame.Invalid("OpenVDB density manifest not found in VFS");
+                    return VolumetricImportedDensityFrame.Invalid(
+                        "OpenVDB density manifest not found in VFS: " +
+                        string.Join(", ", triedManifestPaths));
                 }
 
                 string[] manifestLines;
-                using (var stream = resman.OpenResource(manifestPath))
-                using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+                using (manifestStream)
+                using (var reader = new StreamReader(manifestStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
                 {
                     manifestLines = reader.ReadToEnd()
                         .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
@@ -863,17 +865,39 @@ namespace LibreLancer.Render
             bool LoadArtifact(string relativePath, out byte[] artifact)
             {
                 artifact = [];
-                if (!resman.ResourceExists(relativePath))
+                if (!TryOpenVolumetricAsset(relativePath, out var stream, out _))
                 {
                     return false;
                 }
 
-                using var stream = resman.OpenResource(relativePath);
-                using var buffer = new MemoryStream();
-                stream.CopyTo(buffer);
-                artifact = buffer.ToArray();
+                using (stream)
+                using (var buffer = new MemoryStream())
+                {
+                    stream.CopyTo(buffer);
+                    artifact = buffer.ToArray();
+                }
                 return artifact.Length > 0;
             }
+        }
+
+        private bool TryOpenVolumetricAsset(string relativePath, out Stream stream, out string[] triedPaths)
+        {
+            triedPaths = VolumetricAssetPathResolver.BuildVfsCandidates(
+                relativePath,
+                game.GameData?.Items?.Ini?.Freelancer?.DataPath);
+            foreach (var candidate in triedPaths)
+            {
+                if (!resman.ResourceExists(candidate))
+                {
+                    continue;
+                }
+
+                stream = resman.OpenResource(candidate);
+                return true;
+            }
+
+            stream = Stream.Null;
+            return false;
         }
 
         private void UpdateVolumetricAtmosphereResources(RenderFeatureSet features, int renderWidth, int renderHeight)
