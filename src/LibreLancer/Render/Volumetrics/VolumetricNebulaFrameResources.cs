@@ -44,6 +44,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public Texture3D? ShipDisplacement { get; private set; }
     public Texture3D? ShipDisplacementHistory { get; private set; }
     public Texture3D? ShipDisplacementHistoryPrevious { get; private set; }
+    public Texture3D? WakeVectorField { get; private set; }
     private Texture2D? fallbackDepthTexture;
 
     public VolumetricNebulaQualityProfile QualityProfile => qualityProfile;
@@ -55,11 +56,13 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                                  NearIntegrated != null && NearHistory != null && NearHistoryConfidence != null;
     public bool DisplacementAllocated => ShipDisplacement != null;
     public bool DisplacementHistoryAllocated => ShipDisplacementHistory != null && ShipDisplacementHistoryPrevious != null;
+    public bool WakeVectorAllocated => WakeVectorField != null;
     public long EstimatedBytes => Allocated
         ? mainDesc.BytesPerVolume() * 6 +
           (NearAllocated ? nearDesc.BytesPerVolume() * 5 : 0) +
           (ShipDisplacement != null ? TextureBytes(ShipDisplacement) : 0) +
-          (DisplacementHistoryAllocated ? TextureBytes(ShipDisplacementHistory!) * 2 : 0)
+          (DisplacementHistoryAllocated ? TextureBytes(ShipDisplacementHistory!) * 2 : 0) +
+          (WakeVectorField != null ? TextureBytes(WakeVectorField) : 0)
         : 0;
     public string ActiveProfile => activeProfile;
     public bool GpuIdentityClearedThisFrame { get; private set; }
@@ -83,6 +86,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public string DisplacementDebugSummary { get; private set; } = string.Empty;
     public bool WakeHistoryUpdatedThisFrame { get; private set; }
     public string WakeHistoryDebugSummary { get; private set; } = string.Empty;
+    public bool WakeCurlUpdatedThisFrame { get; private set; }
+    public string WakeCurlDebugSummary { get; private set; } = string.Empty;
     public bool MaterialFogBoundThisFrame { get; private set; }
     public string LightningDebugSummary { get; private set; } = string.Empty;
     public bool BlueNoiseBoundThisFrame { get; private set; }
@@ -92,6 +97,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         VolumetricNebulaResourceDebug.Disabled("not initialized");
     public static string LastBlueNoiseSource { get; private set; } = "off";
     private float lastDisplacementHistoryTime;
+    private Vector3 lastWakeVelocity;
 
     public void Ensure(
         RenderContext rstate,
@@ -131,13 +137,15 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         var wantsNear = features.VolumetricNearCascade;
         var wantsDisplacement = wantsNear && features.VolumetricShipDisplacement;
         var wantsWakeHistory = wantsDisplacement && features.VolumetricWakeHistory;
+        var wantsWakeCurl = wantsWakeHistory && features.VolumetricWakeCurl;
         var needsAllocate = !Allocated ||
                             desired != mainDesc ||
                             allocatedQuality != desired.Quality ||
                             wantsNear != NearAllocated ||
                             (wantsNear && desiredNear != nearDesc) ||
                             wantsDisplacement != DisplacementAllocated ||
-                            wantsWakeHistory != DisplacementHistoryAllocated;
+                            wantsWakeHistory != DisplacementHistoryAllocated ||
+                            wantsWakeCurl != WakeVectorAllocated;
 
         if (needsAllocate)
         {
@@ -173,6 +181,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                         ShipDisplacementHistory = CreateDisplacementVolume(rstate);
                         ShipDisplacementHistoryPrevious = CreateDisplacementVolume(rstate);
                     }
+                    if (wantsWakeCurl)
+                    {
+                        WakeVectorField = CreateDisplacementVolume(rstate);
+                    }
                 }
                 generation++;
                 UploadIdentity(HistoryPrevious);
@@ -180,7 +192,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                 ClearVolume(ShipDisplacement);
                 ClearVolume(ShipDisplacementHistory);
                 ClearVolume(ShipDisplacementHistoryPrevious);
+                ClearVolume(WakeVectorField);
                 lastDisplacementHistoryTime = 0f;
+                lastWakeVelocity = Vector3.Zero;
             }
             finally
             {
@@ -205,6 +219,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         DisplacementDebugSummary = string.Empty;
         WakeHistoryUpdatedThisFrame = false;
         WakeHistoryDebugSummary = string.Empty;
+        WakeCurlUpdatedThisFrame = false;
+        WakeCurlDebugSummary = string.Empty;
         MaterialFogBoundThisFrame = false;
         GpuLightningInjectedThisFrame = false;
         LightningDebugSummary = string.Empty;
@@ -252,6 +268,20 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             try
             {
                 wakeHistoryUpdated = UpdateShipDisplacementHistoryGpu(rstate, features, totalTimeSeconds);
+            }
+            finally
+            {
+                rstate.EndPassTimer();
+            }
+        }
+
+        var wakeCurlUpdated = false;
+        if (features.VolumetricWakeCurl)
+        {
+            rstate.BeginPassTimer("vol_nebula_wake_curl");
+            try
+            {
+                wakeCurlUpdated = UpdateWakeCurlGpu(rstate, features, totalTimeSeconds);
             }
             finally
             {
@@ -325,6 +355,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         {
             operation += " + wake history";
         }
+        if (wakeCurlUpdated)
+        {
+            operation += " + wake curl";
+        }
 
         LastDebug = new VolumetricNebulaResourceDebug(
             true,
@@ -343,7 +377,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             DisplacementCapsuleCount,
             DisplacementDebugSummary,
             WakeHistoryUpdatedThisFrame,
-            WakeHistoryDebugSummary);
+            WakeHistoryDebugSummary,
+            WakeCurlUpdatedThisFrame,
+            WakeCurlDebugSummary);
     }
 
     public bool DrawDebugView(RenderContext rstate, RenderDebugView debugView, int renderWidth, int renderHeight)
@@ -379,6 +415,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         {
             return false;
         }
+        if (debugView == RenderDebugView.VolumetricWakeVectors &&
+            WakeVectorField == null && ShipDisplacementHistoryPrevious == null && ShipDisplacement == null)
+        {
+            return false;
+        }
         var debugSource = debugView switch
         {
             RenderDebugView.VolumetricLightning => Lighting,
@@ -386,6 +427,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             RenderDebugView.VolumetricHistoryConfidence => HistoryConfidence,
             RenderDebugView.VolumetricDisplacement => ShipDisplacement,
             RenderDebugView.VolumetricDisplacementHistory => ShipDisplacementHistoryPrevious ?? ShipDisplacement,
+            RenderDebugView.VolumetricWakeVectors => WakeVectorField ?? ShipDisplacementHistoryPrevious ?? ShipDisplacement,
             RenderDebugView.VolumetricNearDensity => NearDensity,
             RenderDebugView.VolumetricNear => NearDensity,
             _ => Density
@@ -577,6 +619,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         rstate.SetStorageImage(5, null);
 
         DisplacementUpdatedThisFrame = capsuleCount > 0;
+        if (DisplacementUpdatedThisFrame)
+        {
+            lastWakeVelocity = frame.AverageVelocity;
+        }
         DisplacementDebugSummary = frame.HasCapsules ? frame.DebugSummary : "caps=0";
         return true;
     }
@@ -629,6 +675,53 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 
         WakeHistoryUpdatedThisFrame = true;
         WakeHistoryDebugSummary = historyProfile.DebugSummary;
+        return true;
+    }
+
+    private bool UpdateWakeCurlGpu(RenderContext rstate,
+        global::LibreLancer.Render.RenderFeatureSet features,
+        float totalTimeSeconds)
+    {
+        WakeCurlUpdatedThisFrame = false;
+        WakeCurlDebugSummary = "off";
+        if (!features.VolumetricWakeCurl || WakeVectorField == null)
+        {
+            return false;
+        }
+        var source = ShipDisplacementHistoryPrevious ?? ShipDisplacement;
+        if (!WakeHistoryUpdatedThisFrame || source == null)
+        {
+            WakeCurlDebugSummary = "waiting";
+            return false;
+        }
+        if (AllShaders.FroxelWakeCurl == null)
+        {
+            WakeCurlDebugSummary = "shader missing";
+            return false;
+        }
+
+        var profile = VolumetricWakeCurlProfile.ForQuality(features.VolumetricQuality, true, lastWakeVelocity);
+        var shader = AllShaders.FroxelWakeCurl.Get(0);
+        var uniforms = new FroxelWakeCurlParams
+        {
+            GridSize = new Vector4(WakeVectorField.Width, WakeVectorField.Height, WakeVectorField.Depth,
+                totalTimeSeconds),
+            CurlParams = profile.ShaderParams,
+            CurlParams2 = profile.ShaderParams2
+        };
+        shader.SetUniformBlock(3, ref uniforms);
+        rstate.Textures[0] = source;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.SetStorageImage(7, WakeVectorField);
+        rstate.Shader = shader;
+        rstate.DispatchCompute(GroupCount(WakeVectorField.Width), GroupCount(WakeVectorField.Height),
+            GroupCount(WakeVectorField.Depth));
+        rstate.BarrierComputeToCompute();
+        rstate.Textures[0] = null;
+        rstate.SetStorageImage(7, null);
+
+        WakeCurlUpdatedThisFrame = true;
+        WakeCurlDebugSummary = profile.DebugSummary;
         return true;
     }
 
@@ -737,7 +830,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         var shader = AllShaders.FroxelInject.Get(0);
         var jitterTexture = BindJitterTexture(rstate, features.VolumetricBlueNoise, out var jitterActive);
         DispatchInjectGrid(rstate, shader, mainDesc, Density!, profile, totalTimeSeconds, jitterTexture, jitterActive,
-            VolumetricNearDensityTuning.Disabled, null);
+            VolumetricNearDensityTuning.Disabled, null, null);
         if (NearAllocated)
         {
             var tuning = VolumetricNearDensityTuning.ForProfile(profile, features.VolumetricQuality,
@@ -745,13 +838,15 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             var displacementSource = WakeHistoryUpdatedThisFrame
                 ? ShipDisplacementHistoryPrevious
                 : DisplacementUpdatedThisFrame ? ShipDisplacement : null;
+            var wakeVectors = WakeCurlUpdatedThisFrame ? WakeVectorField : null;
             DispatchInjectGrid(rstate, shader, nearDesc, NearDensity!, profile, totalTimeSeconds, jitterTexture,
-                jitterActive, tuning, displacementSource);
+                jitterActive, tuning, displacementSource, wakeVectors);
             NearDetailTunedThisFrame = tuning.Enabled;
             NearDetailSummary = tuning.DebugSummary;
         }
         rstate.Textures[3] = null;
         rstate.Textures[4] = null;
+        rstate.Textures[5] = null;
         rstate.SetStorageImage(0, null);
         GpuDensityInjectedThisFrame = true;
         return true;
@@ -759,10 +854,27 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 
     private void DispatchInjectGrid(RenderContext rstate, Shader shader, FroxelGridDesc grid,
         Texture3D density, NebulaVolumeProfile profile, float totalTimeSeconds, Texture2D jitterTexture,
-        bool jitterActive, VolumetricNearDensityTuning nearTuning, Texture3D? displacement)
+        bool jitterActive, VolumetricNearDensityTuning nearTuning, Texture3D? displacement,
+        Texture3D? wakeVectors)
     {
         var displacementActive = displacement != null && grid.Kind == FroxelGridKind.Near;
         var displacementTexture = BindDisplacementTexture(rstate, displacement, out _);
+        var wakeVectorActive = wakeVectors != null && grid.Kind == FroxelGridKind.Near;
+        var wakeVectorTexture = BindDisplacementTexture(rstate, wakeVectors, out _);
+        var wakeWarp = Math.Clamp(grid.Quality, 0, 3) switch
+        {
+            0 => 0.08f,
+            1 => 0.11f,
+            3 => 0.17f,
+            _ => 0.14f
+        };
+        var wakeSoftening = Math.Clamp(grid.Quality, 0, 3) switch
+        {
+            0 => 0.035f,
+            1 => 0.05f,
+            3 => 0.085f,
+            _ => 0.065f
+        };
         var inject = new FroxelInjectParams
         {
             GridSize = new Vector4(grid.Width, grid.Height, grid.Depth,
@@ -791,13 +903,16 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             NearDetailParams = nearTuning.ShaderDetailParams,
             NearDustParams = nearTuning.ShaderDustParams,
             DisplacementParams = new Vector4(displacementActive ? 1f : 0f,
-                Math.Clamp(profile.DisplacementStrength, 0f, 2f), 1f, 0f)
+                Math.Clamp(profile.DisplacementStrength, 0f, 2f), 1f, 0f),
+            WakeVectorParams = new Vector4(wakeVectorActive ? 1f : 0f, wakeWarp, wakeSoftening, 0f)
         };
         shader.SetUniformBlock(3, ref inject);
         rstate.Textures[3] = jitterTexture;
         rstate.Samplers[3] = SamplerState.PointClamp;
         rstate.Textures[4] = displacementTexture;
         rstate.Samplers[4] = SamplerState.LinearClamp;
+        rstate.Textures[5] = wakeVectorTexture;
+        rstate.Samplers[5] = SamplerState.LinearClamp;
         rstate.SetStorageImage(0, density);
         rstate.Shader = shader;
         rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
@@ -996,6 +1111,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderDebugView.VolumetricHistoryConfidence => 7,
         RenderDebugView.VolumetricNearDensity => 8,
         RenderDebugView.VolumetricNear => 9,
+        RenderDebugView.VolumetricWakeVectors => 10,
         _ => 0
     };
 
@@ -1034,6 +1150,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         public Vector4 NearDetailParams;
         public Vector4 NearDustParams;
         public Vector4 DisplacementParams;
+        public Vector4 WakeVectorParams;
     }
 
     private struct FroxelDisplacementParams
@@ -1063,6 +1180,13 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         public Vector4 GridSize;
         public Vector4 HistoryParams;
         public Vector4 HistoryParams2;
+    }
+
+    private struct FroxelWakeCurlParams
+    {
+        public Vector4 GridSize;
+        public Vector4 CurlParams;
+        public Vector4 CurlParams2;
     }
 
     private struct FroxelLightParams
@@ -1153,6 +1277,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         ClearVolume(ShipDisplacement);
         ClearVolume(ShipDisplacementHistory);
         ClearVolume(ShipDisplacementHistoryPrevious);
+        ClearVolume(WakeVectorField);
     }
 
     private static void UploadIdentity(Texture3D? texture)
@@ -1252,6 +1377,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         ShipDisplacement?.Dispose();
         ShipDisplacementHistory?.Dispose();
         ShipDisplacementHistoryPrevious?.Dispose();
+        WakeVectorField?.Dispose();
         fallbackDepthTexture?.Dispose();
         blueNoise?.Dispose();
         fallbackJitterTexture?.Dispose();
@@ -1270,6 +1396,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         ShipDisplacement = null;
         ShipDisplacementHistory = null;
         ShipDisplacementHistoryPrevious = null;
+        WakeVectorField = null;
         fallbackDepthTexture = null;
         blueNoise = null;
         fallbackJitterTexture = null;
@@ -1299,12 +1426,15 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         DisplacementDebugSummary = string.Empty;
         WakeHistoryUpdatedThisFrame = false;
         WakeHistoryDebugSummary = string.Empty;
+        WakeCurlUpdatedThisFrame = false;
+        WakeCurlDebugSummary = string.Empty;
         LightningDebugSummary = string.Empty;
         BlueNoiseBoundThisFrame = false;
         BlueNoiseSourceName = "off";
         LastBlueNoiseSource = "off";
         temporalState.Reset();
         lastDisplacementHistoryTime = 0f;
+        lastWakeVelocity = Vector3.Zero;
         mainDesc = default;
         nearDesc = default;
     }
@@ -1347,13 +1477,15 @@ public readonly record struct VolumetricNebulaResourceDebug(
     int DisplacementCapsules,
     string DisplacementSummary,
     bool WakeHistoryUpdated,
-    string WakeHistorySummary)
+    string WakeHistorySummary,
+    bool WakeCurlUpdated,
+    string WakeCurlSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
         new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0, false, "",
-            false, 0, "", false, "");
+            false, 0, "", false, "", false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
         new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting",
-            VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "");
+            VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "");
 }

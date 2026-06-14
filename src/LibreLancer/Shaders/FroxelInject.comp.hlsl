@@ -9,6 +9,8 @@ Texture2D<float4> JitterNoise : register(t3, TEXTURE_SPACE);
 SamplerState JitterSampler : register(s3, TEXTURE_SPACE);
 Texture3D<float4> DisplacementVolume : register(t4, TEXTURE_SPACE);
 SamplerState DisplacementSampler : register(s4, TEXTURE_SPACE);
+Texture3D<float4> WakeVectorField : register(t5, TEXTURE_SPACE);
+SamplerState WakeVectorSampler : register(s5, TEXTURE_SPACE);
 
 cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
 {
@@ -23,6 +25,7 @@ cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
     float4 NearDetailParams;    // x: enabled, y: base freq mul, z: detail freq mul, w: erosion boost
     float4 NearDustParams;      // x: dust density, y: dust strength, z: contrast, w: warp boost
     float4 DisplacementParams;  // x: enabled, y: strength, z: near-only, w: unused
+    float4 WakeVectorParams;    // x: enabled, y: domain warp, z: softening, w: unused
 };
 
 float Hash13(float3 p)
@@ -135,6 +138,13 @@ void main(uint3 id : SV_DispatchThreadID)
     float detailMul = lerp(1.0, max(NearDetailParams.z, 0.1), nearDetail);
     float erosionMul = lerp(1.0, max(NearDetailParams.w, 0.1), nearDetail);
     float warpMul = lerp(1.0, max(NearDustParams.w, 0.1), nearDetail);
+    float curlSoftening = 0.0;
+    if (WakeVectorParams.x > 0.5 && GridSize.w > 0.5)
+    {
+        float4 wakeVector = WakeVectorField.SampleLevel(WakeVectorSampler, uvw, 0);
+        p += wakeVector.xyz * WakeVectorParams.y;
+        curlSoftening = saturate(wakeVector.a * WakeVectorParams.z);
+    }
     float warpStrength = (NoiseParams.y + EffectParams.w) * (GridSize.w > 0.5 ? 1.35 : 1.0) * warpMul;
     p = DomainWarp(p, warpStrength);
 
@@ -159,6 +169,7 @@ void main(uint3 id : SV_DispatchThreadID)
             normalizedDensity * wake);
         carved = max(carved, push);
     }
+    normalizedDensity = saturate(normalizedDensity * (1.0 - curlSoftening));
     float extinction = lerp(DensityParams.y, DensityParams.x, zoneFalloff);
     float physicalExtinction = extinction * normalizedDensity;
 

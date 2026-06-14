@@ -39,10 +39,15 @@ public class VolumetricNebulaLayoutTests
 
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.Allocate && x.DebugName == "vol_nebula_allocate");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.ClearIdentity && x.DebugName == "vol_nebula_clear");
+        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.WakeCurl && x.DebugName == "vol_nebula_wake_curl");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.TemporalReproject);
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.MaterialFogExport);
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.AtmosphereBridge);
+        Assert.True(IndexOf(VolumetricNebulaPassSlot.WakeCurl) < IndexOf(VolumetricNebulaPassSlot.InjectDensity));
         Assert.True(passes.Count(x => !x.StubInPr52) >= 2);
+
+        int IndexOf(VolumetricNebulaPassSlot slot) =>
+            passes.Select((x, i) => (x.Pass, i)).First(x => x.Pass == slot).i;
     }
 
     private static NebulaVolumeProfile MakeProfile() => new(

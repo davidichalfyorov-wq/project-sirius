@@ -833,6 +833,7 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricZones or
                                   RenderDebugView.VolumetricDisplacement or
                                   RenderDebugView.VolumetricDisplacementHistory or
+                                  RenderDebugView.VolumetricWakeVectors or
                                   RenderDebugView.VolumetricLightning or
                                   RenderDebugView.VolumetricHistory or
                                   RenderDebugView.VolumetricHistoryConfidence or

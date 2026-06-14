@@ -20,7 +20,8 @@ public enum RenderFeatureBits
     VolumetricBlueNoise = 1 << 11,
     VolumetricNearComposite = 1 << 12,
     VolumetricNearDetail = 1 << 13,
-    VolumetricWakeHistory = 1 << 14
+    VolumetricWakeHistory = 1 << 14,
+    VolumetricWakeCurl = 1 << 15
 }
 
 /// <summary>
@@ -43,6 +44,7 @@ public enum RenderDebugView
     VolumetricFroxels,
     VolumetricDisplacement,
     VolumetricDisplacementHistory,
+    VolumetricWakeVectors,
     VolumetricLightning,
     VolumetricHistory,
     VolumetricHistoryConfidence,
@@ -75,6 +77,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricNearComposite => Bits.HasFlag(RenderFeatureBits.VolumetricNearComposite);
     public bool VolumetricNearDetail => Bits.HasFlag(RenderFeatureBits.VolumetricNearDetail);
     public bool VolumetricWakeHistory => Bits.HasFlag(RenderFeatureBits.VolumetricWakeHistory);
+    public bool VolumetricWakeCurl => Bits.HasFlag(RenderFeatureBits.VolumetricWakeCurl);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
@@ -91,6 +94,9 @@ public readonly record struct RenderFeatureSet(
         if (OverrideBool(settings.SelectedVolumetricWakeHistory, "SIRIUS_VOLUMETRIC_WAKE_HISTORY",
                 "SIRIUS_VOLFOG_WAKE_HISTORY", "SIRIUS_VOLWAKE_HISTORY"))
             bits |= RenderFeatureBits.VolumetricWakeHistory;
+        if (OverrideBool(settings.SelectedVolumetricWakeCurl, "SIRIUS_VOLUMETRIC_WAKE_CURL",
+                "SIRIUS_VOLFOG_WAKE_CURL", "SIRIUS_VOLWAKE_CURL"))
+            bits |= RenderFeatureBits.VolumetricWakeCurl;
         if (OverrideBool(settings.SelectedVolumetricComposite, "SIRIUS_VOLFOG_COMPOSITE", "SIRIUS_VOLUMETRIC_COMPOSITE"))
             bits |= RenderFeatureBits.VolumetricComposite;
         if (OverrideBool(settings.SelectedVolumetricMaterialFog, "SIRIUS_VOLFOG_MATERIALS", "SIRIUS_VOLUMETRIC_MATERIAL_FOG"))
@@ -133,7 +139,8 @@ public readonly record struct RenderFeatureSet(
                       RenderFeatureBits.VolumetricBlueNoise |
                       RenderFeatureBits.VolumetricNearComposite |
                       RenderFeatureBits.VolumetricNearDetail |
-                      RenderFeatureBits.VolumetricWakeHistory);
+                      RenderFeatureBits.VolumetricWakeHistory |
+                      RenderFeatureBits.VolumetricWakeCurl);
         }
         if ((bits & RenderFeatureBits.VolumetricTemporal) == 0)
         {
@@ -152,6 +159,10 @@ public readonly record struct RenderFeatureSet(
             (RenderFeatureBits.VolumetricShipDisplacement | RenderFeatureBits.VolumetricNearCascade))
         {
             bits &= ~RenderFeatureBits.VolumetricWakeHistory;
+        }
+        if ((bits & RenderFeatureBits.VolumetricWakeHistory) == 0)
+        {
+            bits &= ~RenderFeatureBits.VolumetricWakeCurl;
         }
 
         var debugView = ParseDebugView(
@@ -197,6 +208,7 @@ public readonly record struct RenderFeatureSet(
             "vol_froxels" or "froxels" or "volfroxels" or "froxel" => RenderDebugView.VolumetricFroxels,
             "vol_displacement" or "voldisp" or "displacement" => RenderDebugView.VolumetricDisplacement,
             "vol_displacement_history" or "voldisphistory" or "vol_wake_history" or "wake_history" => RenderDebugView.VolumetricDisplacementHistory,
+            "vol_wake_vectors" or "wake_vectors" or "volwakevectors" or "vol_curl" or "wake_curl" => RenderDebugView.VolumetricWakeVectors,
             "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => RenderDebugView.VolumetricLightning,
             "vol_history" or "volhistory" or "history" or "volumetric_history" => RenderDebugView.VolumetricHistory,
             "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => RenderDebugView.VolumetricHistoryConfidence,

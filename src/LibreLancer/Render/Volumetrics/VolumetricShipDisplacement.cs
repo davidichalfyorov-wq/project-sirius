@@ -25,6 +25,7 @@ public sealed class VolumetricShipDisplacementState
         Span<VolumetricDisplacementCapsule> scratch = stackalloc VolumetricDisplacementCapsule[MaxCapsules];
         var count = 0;
         var bestStrength = 0f;
+        var velocitySum = Vector3.Zero;
 
         for (var i = 0; i < objects.Count && count < MaxCapsules; i++)
         {
@@ -80,6 +81,7 @@ public sealed class VolumetricShipDisplacementState
                 velocity,
                 HalfLifeSeconds,
                 swirl);
+            velocitySum += velocity;
             bestStrength = MathF.Max(bestStrength, strength);
         }
 
@@ -95,8 +97,9 @@ public sealed class VolumetricShipDisplacementState
 
         var capsules = new VolumetricDisplacementCapsule[count];
         scratch[..count].CopyTo(capsules);
+        var averageVelocity = count > 0 ? velocitySum / count : Vector3.Zero;
         return new VolumetricShipDisplacementFrame(capsules, bestStrength,
-            FormattableString.Invariant($"caps={count}, maxPush={bestStrength:0.00}"));
+            FormattableString.Invariant($"caps={count}, maxPush={bestStrength:0.00}"), averageVelocity);
     }
 
     private static float EstimateRadius(GameObject obj)
@@ -142,9 +145,10 @@ public readonly record struct VolumetricDisplacementCapsule(
 public readonly record struct VolumetricShipDisplacementFrame(
     VolumetricDisplacementCapsule[] Capsules,
     float MaxStrength,
-    string DebugSummary)
+    string DebugSummary,
+    Vector3 AverageVelocity)
 {
-    public static readonly VolumetricShipDisplacementFrame Empty = new([], 0f, "none");
+    public static readonly VolumetricShipDisplacementFrame Empty = new([], 0f, "none", Vector3.Zero);
     public int Count => Capsules?.Length ?? 0;
     public bool HasCapsules => Count > 0;
     public VolumetricDisplacementCapsule this[int index] => Capsules[index];

@@ -72,6 +72,9 @@ public interface IRendererSettings
     /// <summary>Persistent near-field wake trail history for ship fog displacement.</summary>
     bool SelectedVolumetricWakeHistory => false;
 
+    /// <summary>Velocity-aligned curl vector field for subtle wake turbulence.</summary>
+    bool SelectedVolumetricWakeCurl => false;
+
     /// <summary>First visible opt-in froxel composite. Default false; legacy nebula remains fallback.</summary>
     bool SelectedVolumetricComposite => false;
 
