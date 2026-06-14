@@ -519,6 +519,57 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsEngineVolumeDescriptorFromOpenVdbArtifactPlan()
+    {
+        var artifactPlan = MakeCacheArtifactPlan();
+
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(artifactPlan);
+
+        Assert.True(descriptor.Valid);
+        Assert.Equal(VolumetricEngineVolumeDescriptor.CurrentVersion, descriptor.Version);
+        Assert.Equal(VolumetricEngineVolumeFormat.DensityR16UNorm, descriptor.Format);
+        Assert.Equal(128, descriptor.Width);
+        Assert.Equal(96, descriptor.Height);
+        Assert.Equal(64, descriptor.Depth);
+        Assert.Equal(786432, descriptor.VoxelCount);
+        Assert.Equal(1572864, descriptor.PayloadBytes);
+        Assert.Equal(artifactPlan.EngineVolumePath, descriptor.EngineVolumePath);
+        Assert.DoesNotContain("artist_exports", descriptor.EngineVolumePath);
+
+        var lines = descriptor.BuildHeaderLines();
+        Assert.Contains("magic = SIRIUSVOL", lines);
+        Assert.Contains("version = 1", lines);
+        Assert.Contains("format = density_r16_unorm", lines);
+        Assert.Contains($"cache = {artifactPlan.EngineVolumePath}", lines);
+        Assert.Contains("dimensions = 128, 96, 64", lines);
+        Assert.Contains("payload_bytes = 1572864", lines);
+        Assert.Contains("density_normalize_scale = 0.5", lines);
+        Assert.Contains("density_normalize_bias = -0.1", lines);
+    }
+
+    [Fact]
+    public void RejectsEngineVolumeDescriptorForInvalidArtifactPlan()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(
+            VolumetricOpenVdbCacheArtifactPlan.Invalid("bad artifact"));
+
+        Assert.False(descriptor.Valid);
+        Assert.Contains("invalid OpenVDB cache artifact plan", descriptor.Error);
+        Assert.Empty(descriptor.BuildHeaderLines());
+    }
+
+    [Fact]
+    public void RejectsUnsupportedEngineVolumeDescriptorFormat()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(
+            MakeCacheArtifactPlan(),
+            (VolumetricEngineVolumeFormat)999);
+
+        Assert.False(descriptor.Valid);
+        Assert.Contains("unsupported engine volume format", descriptor.Error);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");

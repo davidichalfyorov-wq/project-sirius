@@ -63,6 +63,11 @@ Rules for the OpenVDB layer:
   The artifact plan should be validated immediately before writing or accepting
   files; engine path, sidecar path, and manifest lines must still match the
   verified import plan.
+- Generated engine volume payloads should also emit a descriptor/header contract
+  derived from the validated artifact plan. The descriptor records
+  `magic = SIRIUSVOL`, version, density format, dimensions, voxel count, payload
+  byte count, cache identity, canonical locks, density normalization, and
+  content hash so PR review can reason about the binary `.siriusvol` payload.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density
@@ -113,6 +118,7 @@ PR-OVDB-1:
 
 PR-OVDB-2:
   - engine volume asset/cache format
+  - engine volume descriptor/header contract
   - profile metadata bridge
   - debug preview/export reports
   - still no mandatory runtime dependency
