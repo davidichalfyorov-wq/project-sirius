@@ -326,6 +326,35 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsDeterministicCacheIdentityFromCanonicalMetadata()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = artist_exports/tmp/li01_badlands_density.vdb",
+            "grid = density.high",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "density_min = 0.2",
+            "density_max = 1.2",
+            "density_multiplier = 0.5",
+            "canonical_system = Li 01",
+            "canonical_nebula = Li01/Badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "preserve_zone_transform = true"
+        ], MakeProfile("Li01/Badlands"), Encoding.ASCII.GetBytes("abc"), "Li 01");
+
+        Assert.True(plan.Valid);
+        Assert.Equal("li_01_li01_badlands_density_high_128x96x64_ba7816bf8f01", plan.CacheKey);
+        Assert.Equal("volumes/openvdb/li_01_li01_badlands_density_high_128x96x64_ba7816bf8f01.siriusvol",
+            plan.CacheRelativePath);
+        Assert.DoesNotContain("artist_exports", plan.CacheRelativePath);
+        Assert.Contains("cache=volumes/openvdb/", plan.DebugSummary);
+    }
+
+    [Fact]
     public void RejectsVerifiedImportPlanWhenPayloadHashMismatches()
     {
         var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([

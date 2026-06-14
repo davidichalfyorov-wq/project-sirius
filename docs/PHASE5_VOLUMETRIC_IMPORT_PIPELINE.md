@@ -52,6 +52,10 @@ Rules for the OpenVDB layer:
   available: parse the manifest, enforce canonical locks, compute density
   normalization, and reject the import unless the payload hash matches before
   writing an engine volume/cache asset.
+- Engine volume/cache paths must be generated from the verified import plan,
+  not copied from artist-authored `data` paths. The cache identity is derived
+  from canonical system, canonical nebula, grid, dimensions, and content hash so
+  rebuilt Blender/Houdini/OpenVDB exports produce deterministic reviewed assets.
 - Runtime import plans require explicit canonical identity locks. A sidecar can
   be parsed for diagnostics without them, but it cannot be bound to an active
   `NebulaVolumeProfile` unless `canonical_nebula` is present, and

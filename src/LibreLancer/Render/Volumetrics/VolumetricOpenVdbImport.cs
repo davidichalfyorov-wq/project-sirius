@@ -461,6 +461,23 @@ public static class VolumetricOpenVdbImport
     private static bool IsSupportedContentHash(string value) =>
         TryParseContentHash(value, out _, out _, out _);
 
+    internal static string ContentHashBody(string value)
+    {
+        return TryParseContentHash(value, out _, out var hex, out _)
+            ? hex.ToLowerInvariant()
+            : "";
+    }
+
+    internal static string ContentHashPrefix(string value, int length)
+    {
+        var body = ContentHashBody(value);
+        if (body.Length == 0)
+        {
+            return "unknown";
+        }
+        return body.Length <= length ? body : body[..length];
+    }
+
     private static bool TryParseContentHash(
         string value,
         out string algorithm,
@@ -500,6 +517,35 @@ public static class VolumetricOpenVdbImport
             }
         }
         return true;
+    }
+
+    internal static string CacheSlug(string value)
+    {
+        var output = new char[Math.Max(value.Length, 1)];
+        var count = 0;
+        var previousSeparator = false;
+        foreach (var ch in value.Trim().ToLowerInvariant())
+        {
+            var safe = (ch >= 'a' && ch <= 'z') ||
+                       (ch >= '0' && ch <= '9');
+            if (safe)
+            {
+                output[count++] = ch;
+                previousSeparator = false;
+            }
+            else if (!previousSeparator && count > 0)
+            {
+                output[count++] = '_';
+                previousSeparator = true;
+            }
+        }
+
+        while (count > 0 && output[count - 1] == '_')
+        {
+            count--;
+        }
+
+        return count > 0 ? new string(output, 0, count) : "unknown";
     }
 
     private static bool IsSafeRelativeAssetPath(string value)
@@ -600,10 +646,19 @@ public readonly record struct VolumetricOpenVdbImportPlan(
     public float NormalizeDensity(float rawDensity) =>
         Math.Clamp(rawDensity * DensityNormalize.X + DensityNormalize.Y, 0f, Metadata.DensityMultiplier);
 
+    public string CacheKey => !Valid
+        ? ""
+        : FormattableString.Invariant(
+            $"{VolumetricOpenVdbImport.CacheSlug(Metadata.CanonicalSystem)}_{VolumetricOpenVdbImport.CacheSlug(Metadata.CanonicalNebula)}_{VolumetricOpenVdbImport.CacheSlug(Metadata.GridName)}_{Metadata.Width}x{Metadata.Height}x{Metadata.Depth}_{VolumetricOpenVdbImport.ContentHashPrefix(Metadata.ContentHash, 12)}");
+
+    public string CacheRelativePath => !Valid
+        ? ""
+        : $"volumes/openvdb/{CacheKey}.siriusvol";
+
     public string DebugSummary => !Valid
         ? $"invalid: {Error}"
         : FormattableString.Invariant(
-            $"{Metadata.ProfileNickname}: {Metadata.DebugSummary} normalize=({DensityNormalize.X:0.###},{DensityNormalize.Y:0.###})");
+            $"{Metadata.ProfileNickname}: {Metadata.DebugSummary} normalize=({DensityNormalize.X:0.###},{DensityNormalize.Y:0.###}) cache={CacheRelativePath}");
 
     public static VolumetricOpenVdbImportPlan Invalid(string error) =>
         new(false, default, VolumetricDensitySource.PerlinWorleyRuntime, Vector2.Zero, error);
