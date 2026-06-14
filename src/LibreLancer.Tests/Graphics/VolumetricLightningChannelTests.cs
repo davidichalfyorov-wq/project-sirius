@@ -102,6 +102,20 @@ public class VolumetricLightningChannelTests
     }
 
     [Fact]
+    public void GoldenDisableDoesNotSuppressLiveLightning()
+    {
+        var state = new VolumetricLightningChannelState();
+        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true,
+            goldenCapture: false, goldenDisable: true);
+
+        var frame = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
+
+        Assert.True(policy.Enabled);
+        Assert.True(frame.Active);
+        Assert.Contains("replay", frame.DebugSummary);
+    }
+
+    [Fact]
     public void ReplayTimeBuildsStableChannel()
     {
         var state = new VolumetricLightningChannelState();
@@ -132,11 +146,114 @@ public class VolumetricLightningChannelTests
         Assert.NotEqual(frameA.Point0, frameB.Point0);
     }
 
+    [Fact]
+    public void FeatureSetDropsLightningPolicyWithoutParentChannelFlag()
+    {
+        using var _ = new CleanLightningEnvironment();
+        var settings = new GameSettings
+        {
+            VolumetricNebula = true,
+            VolumetricLightningChannels = false,
+            VolumetricLightningDeterministic = true,
+            VolumetricLightningGoldenDisable = true,
+            VolumetricLightningReplayTime = 0.25f,
+            VolumetricLightningReplaySeed = 99
+        };
+
+        var features = RenderFeatureSet.FromSettings(settings);
+
+        Assert.False(features.VolumetricLightningChannels);
+        Assert.False(features.VolumetricLightningDeterministic);
+        Assert.False(features.VolumetricLightningGoldenDisable);
+        Assert.Equal(-1f, features.VolumetricLightningReplayTime);
+        Assert.Equal(0, features.VolumetricLightningReplaySeed);
+    }
+
+    [Fact]
+    public void EnvironmentReplayTimeCreatesDeterministicReplayPolicy()
+    {
+        using var _ = new CleanLightningEnvironment();
+        Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", "1");
+        Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING", "1");
+        Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", "0.25");
+        Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", "77");
+
+        var features = RenderFeatureSet.FromSettings(new GameSettings());
+        var policy = VolumetricLightningPolicy.FromFeatures(features, liveTimeSeconds: 9f);
+
+        Assert.True(features.VolumetricNebula);
+        Assert.True(features.VolumetricLightningChannels);
+        Assert.False(features.VolumetricLightningDeterministic);
+        Assert.Equal(0.25f, features.VolumetricLightningReplayTime);
+        Assert.Equal(77, features.VolumetricLightningReplaySeed);
+        Assert.True(policy.Deterministic);
+        Assert.Equal(0.25f, policy.TimeSeconds);
+        Assert.Equal("replay+seed", policy.HudMode);
+        Assert.Contains("replay t=0.250s seed=77", policy.DebugSummary);
+    }
+
     private static RenderFeatureSet MakeFeatures() => new(
         RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricLightningChannels,
         2,
         RenderDebugView.VolumetricLightning,
         null);
+
+    private sealed class CleanLightningEnvironment : IDisposable
+    {
+        private readonly string? volumetricNebula = Environment.GetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA");
+        private readonly string? volFog = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG");
+        private readonly string? lightning = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING");
+        private readonly string? lightningLong = Environment.GetEnvironmentVariable("SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS");
+        private readonly string? lightningShort = Environment.GetEnvironmentVariable("SIRIUS_VOLLIGHTNING");
+        private readonly string? deterministic = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DETERMINISTIC");
+        private readonly string? deterministicShort = Environment.GetEnvironmentVariable("SIRIUS_VOLLIGHTNING_DETERMINISTIC");
+        private readonly string? replay = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY");
+        private readonly string? goldenDisable = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_GOLDEN_DISABLE");
+        private readonly string? goldenDisableShort = Environment.GetEnvironmentVariable("SIRIUS_VOLLIGHTNING_GOLDEN_DISABLE");
+        private readonly string? disable = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DISABLE");
+        private readonly string? replayTime = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME");
+        private readonly string? replayTimeShort = Environment.GetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_TIME");
+        private readonly string? replaySeed = Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED");
+        private readonly string? replaySeedShort = Environment.GetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_SEED");
+
+        public CleanLightningEnvironment()
+        {
+            Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DETERMINISTIC", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_DETERMINISTIC", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_GOLDEN_DISABLE", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_GOLDEN_DISABLE", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DISABLE", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_TIME", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", null);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_SEED", null);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", volumetricNebula);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG", volFog);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING", lightning);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS", lightningLong);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING", lightningShort);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DETERMINISTIC", deterministic);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_DETERMINISTIC", deterministicShort);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY", replay);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_GOLDEN_DISABLE", goldenDisable);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_GOLDEN_DISABLE", goldenDisableShort);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_DISABLE", disable);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", replayTime);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_TIME", replayTimeShort);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", replaySeed);
+            Environment.SetEnvironmentVariable("SIRIUS_VOLLIGHTNING_REPLAY_SEED", replaySeedShort);
+        }
+    }
 
     private static NebulaVolumeProfile MakeProfile(bool hasLightning) => new(
         "zone_crow_test",
