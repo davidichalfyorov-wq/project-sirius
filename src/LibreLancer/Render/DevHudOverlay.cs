@@ -238,7 +238,8 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricHistoryConfidence or
                 RenderDebugView.VolumetricJitter or
                 RenderDebugView.VolumetricNear or
-                RenderDebugView.VolumetricNearDensity)
+                RenderDebugView.VolumetricNearDensity or
+                RenderDebugView.VolumetricOpenVdb)
             {
                 Line(froxels.Allocated ? "view data  allocated" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
             }

@@ -68,10 +68,27 @@ public class VolumetricOpenVdbSettingsTests
         Assert.Null(features.VolumetricOpenVdbManifest);
     }
 
+    [Fact]
+    public void DebugViewAliasSelectsOpenVdbDensityView()
+    {
+        using var _ = new CleanOpenVdbEnvironment();
+        Environment.SetEnvironmentVariable("SIRIUS_DEBUG_VIEW", "vol_imported_density");
+
+        var features = RenderFeatureSet.FromSettings(new GameSettings
+        {
+            VolumetricNebula = true
+        });
+
+        Assert.Equal(RenderDebugView.VolumetricOpenVdb, features.DebugView);
+        Assert.Equal("vol_openvdb", GameSettings.NormalizePhase5DebugView("openvdb"));
+    }
+
     private sealed class CleanOpenVdbEnvironment : IDisposable
     {
         private readonly string? volfogManifest =
             Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST");
+        private readonly string? debugView =
+            Environment.GetEnvironmentVariable("SIRIUS_DEBUG_VIEW");
         private readonly string? openVdbManifest =
             Environment.GetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST");
         private readonly string? volumetricNebula =
@@ -82,6 +99,7 @@ public class VolumetricOpenVdbSettingsTests
         public CleanOpenVdbEnvironment()
         {
             Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST", null);
+            Environment.SetEnvironmentVariable("SIRIUS_DEBUG_VIEW", null);
             Environment.SetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST", null);
             Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", null);
             Environment.SetEnvironmentVariable("SIRIUS_VOLFOG", null);
@@ -90,6 +108,7 @@ public class VolumetricOpenVdbSettingsTests
         public void Dispose()
         {
             Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST", volfogManifest);
+            Environment.SetEnvironmentVariable("SIRIUS_DEBUG_VIEW", debugView);
             Environment.SetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST", openVdbManifest);
             Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", volumetricNebula);
             Environment.SetEnvironmentVariable("SIRIUS_VOLFOG", volfog);

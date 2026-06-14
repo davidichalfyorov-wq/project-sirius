@@ -243,6 +243,7 @@ namespace LibreLancer
                 "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => "vol_history_confidence",
                 "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => "vol_jitter",
                 "vol_near_density" or "volneardensity" or "near_density" or "neardensity" => "vol_near_density",
+                "vol_openvdb" or "volopenvdb" or "openvdb" or "vol_imported_density" or "imported_density" => "vol_openvdb",
                 "atmosphere_luts" or "atmoluts" or "atmo_luts" => "atmosphere_luts",
                 "atmosphere_aerial" or "atmoaerial" or "atmo_aerial" or "aerial_perspective" => "atmosphere_aerial",
                 "atmosphere_cloud_shell" or "atmocloudshell" or "atmo_cloud_shell" or "cloud_shell" => "atmosphere_cloud_shell",

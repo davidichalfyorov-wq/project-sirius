@@ -1057,7 +1057,8 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricHistoryConfidence or
                                   RenderDebugView.VolumetricJitter or
                                   RenderDebugView.VolumetricNear or
-                                  RenderDebugView.VolumetricNearDensity))
+                                  RenderDebugView.VolumetricNearDensity or
+                                  RenderDebugView.VolumetricOpenVdb))
             {
                 return;
             }

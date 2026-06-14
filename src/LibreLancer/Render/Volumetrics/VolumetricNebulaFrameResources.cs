@@ -484,6 +484,19 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         {
             return false;
         }
+        Texture3D? importedDebugSource = null;
+        if (debugView == RenderDebugView.VolumetricOpenVdb)
+        {
+            if (!importedDensity.Valid)
+            {
+                return false;
+            }
+            importedDebugSource = BindImportedDensityTexture(rstate, out var importedActive);
+            if (!importedActive)
+            {
+                return false;
+            }
+        }
         var debugSource = debugView switch
         {
             RenderDebugView.VolumetricLightning => Lighting,
@@ -495,6 +508,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             RenderDebugView.VolumetricWakeVectors => WakeVectorField ?? ShipDisplacementHistoryPrevious ?? ShipDisplacement,
             RenderDebugView.VolumetricNearDensity => NearDensity,
             RenderDebugView.VolumetricNear => NearDensity,
+            RenderDebugView.VolumetricOpenVdb => importedDebugSource,
             _ => Density
         };
         var integratedSource = debugView == RenderDebugView.VolumetricNear && NearIntegrated != null
@@ -1213,6 +1227,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderDebugView.VolumetricNearDensity => 8,
         RenderDebugView.VolumetricNear => 9,
         RenderDebugView.VolumetricWakeVectors => 10,
+        RenderDebugView.VolumetricOpenVdb => 1,
         _ => 0
     };
 
