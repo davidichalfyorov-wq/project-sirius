@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace LibreLancer.Render;
 
@@ -29,10 +30,17 @@ public static class RenderDocCapture
     private static IntPtr startCapture;
     private static IntPtr isFrameCapturing;
     private static IntPtr endCapture;
+    private static IntPtr getNumCaptures;
+    private static IntPtr getCapture;
+    private static IntPtr setCaptureTitle;
     private static bool capturing;
     private static bool pending;
     private static IntPtr captureDevice;
     private static IntPtr captureWindow;
+    private static IntPtr activeCaptureDevice;
+    private static IntPtr activeCaptureWindow;
+    private static uint captureCountAtStart;
+    private static int triggerFallbackPolls;
 
     public static bool Available => available;
 
@@ -65,11 +73,14 @@ public static class RenderDocCapture
         // registered active window, so we drive Start/EndFrameCapture
         // (entries 19/21) with the backend device pointer and native
         // window handle when the platform exposes them.
+        getNumCaptures = Marshal.ReadIntPtr(api, 13 * IntPtr.Size);
+        getCapture = Marshal.ReadIntPtr(api, 14 * IntPtr.Size);
         triggerCapture = Marshal.ReadIntPtr(api, 15 * IntPtr.Size);
         setActiveWindow = Marshal.ReadIntPtr(api, 18 * IntPtr.Size);
         startCapture = Marshal.ReadIntPtr(api, 19 * IntPtr.Size);
         isFrameCapturing = Marshal.ReadIntPtr(api, 20 * IntPtr.Size);
         endCapture = Marshal.ReadIntPtr(api, 21 * IntPtr.Size);
+        setCaptureTitle = Marshal.ReadIntPtr(api, 26 * IntPtr.Size);
         available = startCapture != IntPtr.Zero && endCapture != IntPtr.Zero;
         if (available)
         {
@@ -134,22 +145,148 @@ public static class RenderDocCapture
             return;
         }
         frameCounter++;
+        if (triggerFallbackPolls > 0)
+        {
+            if (LogNewCapture("TriggerCapture fallback"))
+            {
+                triggerFallbackPolls = 0;
+            }
+            else if (--triggerFallbackPolls == 0)
+            {
+                FLLog.Warning("RenderDoc",
+                    $"TriggerCapture fallback did not report a new capture (before={captureCountAtStart}, current={GetCaptureCount()}, device=0x{captureDevice.ToInt64():X}, window=0x{captureWindow.ToInt64():X})");
+            }
+        }
         if (capturing)
         {
             capturing = false;
-            var ok = ((delegate* unmanaged[Cdecl]<IntPtr, IntPtr, uint>)endCapture)(captureDevice, captureWindow);
-            FLLog.Info("RenderDoc", $"Capture finished (result {ok})");
+            var ok = ((delegate* unmanaged[Cdecl]<IntPtr, IntPtr, uint>)endCapture)(activeCaptureDevice, activeCaptureWindow);
+            if (!LogNewCapture($"Capture finished (result {ok})"))
+            {
+                FLLog.Info("RenderDoc",
+                    $"Capture finished (result {ok}, before={captureCountAtStart}, current={GetCaptureCount()}, device=0x{activeCaptureDevice.ToInt64():X}, window=0x{activeCaptureWindow.ToInt64():X})");
+            }
             return;
         }
         if (pending || frameCounter == captureFrame)
         {
             pending = false;
+            captureCountAtStart = GetCaptureCount();
             ((delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void>)startCapture)(captureDevice, captureWindow);
-            capturing = true;
+            SetCaptureTitle(frameCounter);
             var active = isFrameCapturing != IntPtr.Zero
                 ? ((delegate* unmanaged[Cdecl]<uint>)isFrameCapturing)()
                 : 1;
-            FLLog.Info("RenderDoc", $"Capture started (frame {frameCounter}, active {active})");
+            if (active == 0 && (captureDevice != IntPtr.Zero || captureWindow != IntPtr.Zero))
+            {
+                FLLog.Warning("RenderDoc",
+                    $"StartFrameCapture did not match device/window; retrying wildcard capture (before={captureCountAtStart}, device=0x{captureDevice.ToInt64():X}, window=0x{captureWindow.ToInt64():X})");
+                ((delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void>)startCapture)(IntPtr.Zero, IntPtr.Zero);
+                SetCaptureTitle(frameCounter);
+                active = isFrameCapturing != IntPtr.Zero
+                    ? ((delegate* unmanaged[Cdecl]<uint>)isFrameCapturing)()
+                    : 1;
+                if (active != 0)
+                {
+                    activeCaptureDevice = IntPtr.Zero;
+                    activeCaptureWindow = IntPtr.Zero;
+                }
+            }
+            else
+            {
+                activeCaptureDevice = captureDevice;
+                activeCaptureWindow = captureWindow;
+            }
+
+            if (active != 0)
+            {
+                capturing = true;
+                FLLog.Info("RenderDoc",
+                    $"Capture started (frame {frameCounter}, active {active}, device=0x{activeCaptureDevice.ToInt64():X}, window=0x{activeCaptureWindow.ToInt64():X})");
+            }
+            else if (triggerCapture != IntPtr.Zero)
+            {
+                ((delegate* unmanaged[Cdecl]<void>)triggerCapture)();
+                triggerFallbackPolls = 4;
+                FLLog.Warning("RenderDoc",
+                    $"StartFrameCapture did not become active; requested TriggerCapture fallback (before={captureCountAtStart}, device=0x{captureDevice.ToInt64():X}, window=0x{captureWindow.ToInt64():X})");
+            }
+        }
+    }
+
+    private static unsafe uint GetCaptureCount()
+    {
+        return getNumCaptures == IntPtr.Zero
+            ? 0
+            : ((delegate* unmanaged[Cdecl]<uint>)getNumCaptures)();
+    }
+
+    private static unsafe bool LogNewCapture(string prefix)
+    {
+        var count = GetCaptureCount();
+        if (count <= captureCountAtStart)
+        {
+            return false;
+        }
+
+        var index = count - 1;
+        var path = GetCapturePath(index, out var timestamp);
+        FLLog.Info("RenderDoc",
+            string.IsNullOrWhiteSpace(path)
+                ? $"{prefix}: capture count {captureCountAtStart}->{count}, latest index {index}, timestamp {timestamp}"
+                : $"{prefix}: capture count {captureCountAtStart}->{count}, latest '{path}', timestamp {timestamp}");
+        captureCountAtStart = count;
+        return true;
+    }
+
+    private static unsafe string? GetCapturePath(uint index, out ulong timestamp)
+    {
+        timestamp = 0;
+        if (getCapture == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        uint length = 0;
+        ulong captureTimestamp = 0;
+        ((delegate* unmanaged[Cdecl]<uint, byte*, uint*, ulong*, uint>)getCapture)(
+            index, null, &length, &captureTimestamp);
+        if (length == 0)
+        {
+            return null;
+        }
+
+        var bytes = new byte[length];
+        fixed (byte* pBytes = bytes)
+        {
+            var ok = ((delegate* unmanaged[Cdecl]<uint, byte*, uint*, ulong*, uint>)getCapture)(
+                index, pBytes, &length, &captureTimestamp);
+            if (ok == 0 || length == 0)
+            {
+                return null;
+            }
+        }
+
+        timestamp = captureTimestamp;
+        var stringLength = (int)length;
+        if (stringLength > 0 && bytes[stringLength - 1] == 0)
+        {
+            stringLength--;
+        }
+        return Encoding.UTF8.GetString(bytes, 0, stringLength);
+    }
+
+    private static unsafe void SetCaptureTitle(int frame)
+    {
+        if (setCaptureTitle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var title = Encoding.UTF8.GetBytes($"Project Sirius frame {frame}\0");
+        fixed (byte* pTitle = title)
+        {
+            ((delegate* unmanaged[Cdecl]<byte*, void>)setCaptureTitle)(pTitle);
         }
     }
 }

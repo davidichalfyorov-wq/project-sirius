@@ -88,6 +88,12 @@ internal class SDL3Game : IGame
             var x11 = SDL3.SDL_GetNumberProperty(props, SDL3.SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
             if (x11 != 0)
                 return new IntPtr(x11);
+            var wayland = SDL3.SDL_GetPointerProperty(props, SDL3.SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, IntPtr.Zero);
+            if (wayland != IntPtr.Zero)
+                return wayland;
+            var waylandEgl = SDL3.SDL_GetPointerProperty(props, SDL3.SDL_PROP_WINDOW_WAYLAND_EGL_WINDOW_POINTER, IntPtr.Zero);
+            if (waylandEgl != IntPtr.Zero)
+                return waylandEgl;
             return IntPtr.Zero;
         }
     }
