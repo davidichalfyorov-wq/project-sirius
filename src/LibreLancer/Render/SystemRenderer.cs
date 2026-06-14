@@ -164,10 +164,19 @@ namespace LibreLancer.Render
             if (Settings.SelectedIbl)
             {
                 var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+                // Ф2.0: IBL intensity multiplier. SIRIUS_IBL_INTENSITY env
+                // (default 1 = bitwise-neutral fallback); >1 lifts the
+                // near-black space probe so PBR ship hulls are not pitch-black
+                // on the shadow side. INI key + low/med/high/ultra tier = Ф2.0.4.
+                var iblEnv = System.Environment.GetEnvironmentVariable("SIRIUS_IBL_INTENSITY");
+                var iblIntensity = !string.IsNullOrWhiteSpace(iblEnv)
+                    && float.TryParse(iblEnv, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var iblV) && iblV > 0f
+                    ? iblV : 1f;
                 SystemLighting.Ibl = EnvironmentProbe.Build(rstate, resman,
                     system.StarsNebulaCubemap ?? system.StarsComplexCubemap ?? system.StarsBasicCubemap,
-                    system.AmbientColor);
-                FLLog.Info("IBL", $"Environment probe for {system.Nickname} built in {loadTimer.ElapsedMilliseconds} ms");
+                    system.AmbientColor, iblIntensity);
+                FLLog.Info("IBL", $"Environment probe for {system.Nickname} built in {loadTimer.ElapsedMilliseconds} ms (intensity {iblIntensity:0.##})");
             }
 
             StarSphereModels = starSphereRenderData.ToArray();
