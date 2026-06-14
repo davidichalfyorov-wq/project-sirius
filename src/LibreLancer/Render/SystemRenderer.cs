@@ -930,7 +930,15 @@ namespace LibreLancer.Render
             }
 
             volumetricAtmosphereResources ??= new VolumetricAtmosphereFrameResources();
-            volumetricAtmosphereResources.Ensure(rstate, features, renderWidth, renderHeight);
+            rstate.BeginPassTimer("vol_atmosphere_bridge");
+            try
+            {
+                volumetricAtmosphereResources.Ensure(rstate, features, renderWidth, renderHeight);
+            }
+            finally
+            {
+                rstate.EndPassTimer();
+            }
         }
 
         private bool ShouldUseVolumetricCompositeThisFrame(RenderFeatureSet features, bool hasActiveProfile) =>
