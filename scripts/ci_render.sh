@@ -85,6 +85,34 @@ echo "build/v3 refreshed"
 
 # 2) Capture each pose into its own dir (golden autoplay rig: menu->launch->settle->shot).
 liveenv=""; [ "$LIVE" = "1" ] && liveenv="SIRIUS_VOLFOG_LIVE=1"
+VOLUMETRIC_INI="post_aa = off
+volumetric_nebula = true
+volumetric_nebulae = true
+volumetric_quality = 2
+volumetric_composite = true
+volumetric_temporal = true
+volumetric_reprojection = true
+volumetric_blue_noise = true
+volumetric_adaptive_quality = true
+volumetric_near_cascade = true
+volumetric_near_composite = true
+volumetric_near_detail = true
+volumetric_ship_displacement = true
+volumetric_wake_history = true
+volumetric_wake_curl = true
+volumetric_god_rays = true
+volumetric_material_fog = true
+volumetric_lightning_channels = true
+volumetric_lightning_deterministic = true
+volumetric_lightning_replay_time = 0.01
+volumetric_lightning_replay_seed = 0
+atmosphere_luts = true
+atmosphere_aerial = true
+atmosphere_cloud_shell = true
+rt_shadows = false
+rtao = false
+rt_reflections = false
+shadows = true"
 shots=()
 for entry in $POSES; do
     name="${entry%%:*}"; pose="${entry##*:}"
@@ -92,8 +120,7 @@ for entry in $POSES; do
     prof="$(mktemp -d)"; mkdir -p "$prof/.config"
     cp "$HOME/.config/librelancer.ini" "$prof/.config/" 2>/dev/null || {
         echo "ERROR: no ~/.config/librelancer.ini (need freelancer_path set)"; exit 3; }
-    printf 'post_aa = off\nvolumetric_nebulae = true\nrt_shadows = false\nrtao = false\nrt_reflections = false\nshadows = true\n' \
-        >> "$prof/.config/librelancer.ini"
+    printf '%s\n' "$VOLUMETRIC_INI" >> "$prof/.config/librelancer.ini"
     echo "== pose $name ($pose) =="
     env SIRIUS_AUTOPLAY=1 SIRIUS_GOLDEN_DIR="$out" SIRIUS_RENDERER="$RENDERER" \
         SIRIUS_PASS_TIMINGS=1 SIRIUS_WINDOW_SIZE=2560x1440 \

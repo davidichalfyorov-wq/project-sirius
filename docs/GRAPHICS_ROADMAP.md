@@ -1,10 +1,10 @@
 # Project Sirius — Graphics Roadmap
 
 **Файл:** `docs/GRAPHICS_ROADMAP.md`  
-**Дата:** 2026-06-09 (статусы сверены с кодом 2026-06-11)  
+**Дата:** 2026-06-09 (статусы сверены с кодом 2026-06-14)
 **Статус:** дизайн-документ для реализации  
 
-> **Прогресс (сверка с кодом, ветка ui-2.0, 2026-06-11):**
+> **Прогресс (сверка с кодом, `main`, 2026-06-14):**
 >
 > | Фаза | Статус | Подтверждение в коде |
 > |---|---|---|
@@ -13,8 +13,8 @@
 > | Phase 2 — свет и PBR | ✅ закрыта 2026-06-11 | 2.1 linear workflow (`includes/ColorSpace.hlsl`, CPU-декод INI-цветов) → 2.2 PBR-фикс затухания + `Render/Materials/MaterialNormalizer.cs` → 2.3 BRDF LUT → 2.4 IBL-пробы (`Render/EnvironmentProbe.cs`, t5/t6/t7) → 2.5 CSM 3 каскада (`Render/ShadowMapRenderer.cs`, атлас 3072×1024) → 2.6 локальные спот-тени (атлас 2×2 512²) → 2.7 UI-настройки PERFORMANCE. Гейты GL 1.0×3 / VK 0.999+ |
 > | Phase 3 — Vulkan backend | ✅ закрыта 2026-06-10 | `Backends/Vulkan/*`: device/swapchain/sync, дескриптор-кэш (persistent uniform-сеты + контентно-адресуемые текстурные), пул транзиент-буферов, PSO-кэш; SSIM-parity гейт пройден, **Vulkan — бэкенд по умолчанию**. Не делалось: async compute (6.10) |
 > | Phase 4 — RT/mesh/VRS tier | ✅ закрыта 2026-06-12 (mesh — experimental) | 7.1–7.4 RT-стек целиком: ray query (BLAS/TLAS `VKAccelerationStructures`, сборщик `RayTracedScene`), RT-тени солнца + RTAO + RT-отражения v1 (UI-тоглы, `rt_golden_gate.sh`, CSM-каскады скипаются при RT); 7.5 mesh shaders: тулчейн+рантайм+мешлетизатор сданы (смоук рисует), эмиссия кубов заблокирована внешним багом DXC 1.9×NVIDIA — фича experimental/off (сага в memory); 7.6 VRS pipeline-tier: 2×2 на старсфере (RenderDoc-доказано), attachment-tier — отказ (на 5090 выигрыш ниже шума), фича off-by-default |
-> | Phase 5 — volumetrics/GI/DLSS | ⬜ не начата | VolumetricFog/DDGI/Upscaler в коде отсутствуют |
-> | 9. Инструменты | ✅ закрыта 2026-06-12 | `SIRIUS_PASS_TIMINGS`, `SIRIUS_VK_STATS`, debug labels+object names (`VK_EXT_debug_utils`), Dev HUD F11 (`SIRIUS_DEV_HUD`), RenderDoc in-app capture (`SIRIUS_CAPTURE_SPACE/PATH` + headless qrenderdoc-аналитика), автоассерт валидации `vk_validate_run.sh`, debug-вью каналов (`SIRIUS_DEBUG_VIEW`), снапшоты F10 `SIRIUS_SNAPSHOT` |
+> | Phase 5 — volumetrics/GI/DLSS | 🔶 volumetrics foundation in progress | В коде уже есть feature-gated froxel volumetric nebula path: `NebulaVolumeProfile`, froxel resources, density/light/integrate/composite passes, depth-aware composite, material fog binding, temporal/reprojection scaffolds, blue-noise/STBN import scaffold, near cascade, ship displacement/wake/curl, god-ray attenuation, lightning channels/art profiles, atmosphere LUT/cloud-shell scaffolds and OpenVDB manifest bridge. Не закрыто: DDGI, upscaler/DLSS, motion vectors/reactive masks, refraction, audio RT, final visual/perf gates |
+> | 9. Инструменты | 🔶 mostly implemented | `SIRIUS_PASS_TIMINGS`, `SIRIUS_VK_STATS`, debug labels+object names (`VK_EXT_debug_utils`), Dev HUD (`SIRIUS_DEV_HUD`), validation gate `vk_validate_run.sh`, debug views (`SIRIUS_DEBUG_VIEW`), screenshots/snapshots. RenderDoc in-app hook now logs device/window/capture counts and fallback attempts, but local smoke on 2026-06-14 still does **not** emit `.rdc`; external RenderDoc/GFXReconstruct remain required for capture proof |
 > | 10. Тестирование | 🔶 частично | golden-гейт SSIM GL/VK (`scripts/golden_gate.sh`) + маски + герметичный UI-автотест (`SIRIUS_UI_AUTOTEST`) + мульти-разрешения (`SIRIUS_WINDOW_SIZE`); юнит-тесты точечные (MaterialNormalizer); полного CI-конвейера нет |
 
 **Целевая аудитория:** графические инженеры, engine/runtime инженеры, tools/QA, technical art  
@@ -1975,12 +1975,38 @@ Acceptance:
 
 ---
 
-# Phase 5 — Продвинутая графика ⬜ _(не начата)_
+# Phase 5 — Продвинутая графика 🔶 _(volumetrics foundation в работе)_
 
 **Срок:** месяц 13–18  
 **Главная цель:** high-end visual identity: volumetric space, GI, upscaling/Frame Generation, refraction, experimental audio RT.
 
 ## 8.1 Volumetric fog in nebulae
+
+### Current implementation status, 2026-06-14
+
+The Phase 5 nebula path is no longer just a roadmap item. Current `main`
+contains a feature-gated froxel stack:
+
+- Runtime `NebulaVolumeProfile` mapping from legacy Freelancer/Discovery
+  nebula zones without moving canonical zone placement.
+- Froxel allocation/clear, procedural profile density injection,
+  Beer-Lambert/dual-HG-oriented lighting and front-to-back integration.
+- Opt-in HDR composite with scene-depth sampling, material fog binding,
+  temporal history/reprojection scaffolds, generated/imported blue-noise/STBN
+  support and debug views.
+- Near cascade, high-frequency near detail, ship displacement capsules,
+  persistent wake history and velocity-aligned curl wake.
+- Volumetric god-ray/sun burnthrough attenuation and segmented lightning
+  channel injection with art profiles, flash count and afterglow.
+- Atmosphere LUT/cloud-shell resource scaffolds and OpenVDB import manifests
+  with canonical placement lock, source/license/source-file/hash metadata and
+  dense voxel budget checks.
+
+The default renderer remains fallback-safe: legacy nebula drawing is still used
+unless the explicit volumetric flags are enabled and the Vulkan/compute path is
+available. The remaining work is visual/performance convergence, stronger
+world-space sampling, real authored volume cache/import, golden captures, and
+the non-volumetric Phase 5 items below.
 
 ### Goal
 
@@ -2022,11 +2048,33 @@ flowchart LR
 Settings:
 
 ```ini
-volumetric_nebulae = true
-volumetric_quality = medium
-volumetric_steps = 48
-volumetric_history = 0.90
+volumetric_nebula = true
+volumetric_composite = true
+volumetric_temporal = true
+volumetric_reprojection = true
+volumetric_blue_noise = true
+volumetric_adaptive_quality = true
+volumetric_near_cascade = true
+volumetric_near_composite = true
+volumetric_near_detail = true
+volumetric_ship_displacement = true
+volumetric_wake_history = true
+volumetric_wake_curl = true
+volumetric_god_rays = true
+volumetric_material_fog = true
+volumetric_lightning_channels = true
+volumetric_lightning_deterministic = true
+volumetric_lightning_golden_disable = true
+atmosphere_luts = true
+atmosphere_aerial = true
+atmosphere_cloud_shell = true
+volumetric_quality = 0..3
 ```
+
+OpenVDB is intentionally not a shipping runtime toggle at this stage. It is the
+authoring/import path for dense nebula volumes: validated manifests lock the
+authored density to the canonical Freelancer zone transform and then feed the
+same froxel runtime pipeline.
 
 Acceptance:
 
@@ -2212,8 +2260,14 @@ Acceptance:
 
 ## 8.6 Phase 5 exit checklist
 
-- [ ] Volumetric nebula renderer implemented.
-- [ ] Temporal reprojection for volumetrics.
+- [x] Volumetric nebula renderer foundation implemented behind feature flags.
+- [x] Temporal/reprojection resource and shader scaffolds for volumetrics.
+- [x] Near-field cascade, ship displacement, persistent wake and wake curl scaffolds.
+- [x] Volumetric god-ray attenuation and lightning-channel injection scaffolds.
+- [x] Atmosphere LUT/cloud-shell resource scaffolds.
+- [x] OpenVDB import metadata bridge with canonical placement lock.
+- [ ] Final art-tuned, performance-budgeted volumetric nebula renderer.
+- [ ] Authored volume cache/import path wired to runtime density sampling.
 - [ ] DDGI/RTXGI-style probe volume prototype.
 - [ ] Upscaler abstraction implemented.
 - [ ] DLSS Streamline path implemented where SDK/license allows.
@@ -2221,7 +2275,7 @@ Acceptance:
 - [ ] Reactive masks for particles/shields.
 - [ ] Shield/cockpit refraction pass implemented.
 - [ ] Experimental audio RT prototype behind feature flag.
-- [ ] Presets updated and documented.
+- [ ] Presets updated and documented for shipping defaults.
 
 ---
 
@@ -2947,4 +3001,3 @@ flowchart TD
 - [ ] Every feature has screenshot baseline or visual QA case.
 - [ ] Vulkan validation clean if Vulkan code touched.
 - [ ] No required changes to Freelancer asset files.
-
