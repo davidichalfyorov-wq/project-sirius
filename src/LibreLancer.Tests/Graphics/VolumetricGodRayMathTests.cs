@@ -14,6 +14,7 @@ public class VolumetricGodRayMathTests
 
         Assert.False(result.Enabled);
         Assert.Equal(1f, result.SunTransmittance);
+        Assert.Equal(1f, result.RayMaskTransmittance);
         Assert.Equal("off", result.DebugSummary);
     }
 
@@ -26,8 +27,11 @@ public class VolumetricGodRayMathTests
         Assert.True(result.Enabled);
         Assert.True(result.SunTransmittance < 0.55f);
         Assert.True(result.SunTransmittance >= result.BurnthroughFloor);
+        Assert.True(result.RayMaskTransmittance >= result.SunTransmittance);
+        Assert.True(result.RayMaskTransmittance <= 1f);
         Assert.InRange(result.RayDensity, 0.65f, 1.18f);
-        Assert.Contains("T=", result.DebugSummary);
+        Assert.Contains("sunT=", result.DebugSummary);
+        Assert.Contains("rayT=", result.DebugSummary);
         Assert.Contains("q3", result.DebugSummary);
     }
 
@@ -41,6 +45,7 @@ public class VolumetricGodRayMathTests
 
         Assert.True(far.OpticalDepth > near.OpticalDepth);
         Assert.True(far.SunTransmittance < near.SunTransmittance);
+        Assert.True(far.RayMaskTransmittance < near.RayMaskTransmittance);
     }
 
     [Fact]

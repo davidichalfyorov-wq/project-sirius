@@ -1002,7 +1002,7 @@ namespace LibreLancer.Render
             var godRays = VolumetricGodRayMath.ForProfile(activeProfile, sunDistance,
                 effectiveQuality, Settings.SelectedGodRaysIntensity, enabled: true);
             volumetricSunTransmittance = godRays.SunTransmittance;
-            hdrPipeline.GodRaysSunTransmittance = godRays.SunTransmittance;
+            hdrPipeline.GodRaysSunTransmittance = godRays.RayMaskTransmittance;
             hdrPipeline.GodRaysIntensity = godRays.PostIntensity;
             hdrPipeline.GodRaysDensity = godRays.RayDensity;
             hdrPipeline.GodRaysDecay = godRays.RayDecay;

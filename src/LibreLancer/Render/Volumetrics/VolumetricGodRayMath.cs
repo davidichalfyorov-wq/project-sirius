@@ -39,14 +39,19 @@ public static class VolumetricGodRayMath
         // sun burnthrough as an art cue, and fully blacking it out reads worse
         // than a dim, colourable glow through the medium.
         var floor = Math.Clamp(0.055f + strength * 0.16f + q * 0.012f, 0.055f, 0.32f);
-        var transmittance = Math.Clamp(beer + floor * (1f - beer), 0.015f, 1f);
+        var sunTransmittance = Math.Clamp(beer + floor * (1f - beer), 0.015f, 1f);
+        var rayMaskTransmittance = Math.Clamp(
+            Lerp(sunTransmittance, MathF.Sqrt(sunTransmittance), 0.42f + strength * 0.10f),
+            sunTransmittance,
+            1f);
         var postIntensity = Math.Clamp(userGodRayIntensity, 0f, 2f);
         var density = Math.Clamp(0.72f + strength * 0.24f + opticalDepth * 0.012f, 0.65f, 1.18f);
         var decay = Math.Clamp(0.955f + strength * 0.012f - opticalDepth * 0.006f, 0.88f, 0.975f);
 
         return new VolumetricGodRayProfile(
             true,
-            transmittance,
+            sunTransmittance,
+            rayMaskTransmittance,
             density,
             decay,
             pathLength,
@@ -54,13 +59,16 @@ public static class VolumetricGodRayMath
             floor,
             postIntensity,
             FormattableString.Invariant(
-                $"q{q} T={transmittance:0.00} od={opticalDepth:0.00} path={pathLength / 1000f:0}km dens={density:0.00} I={postIntensity:0.00}"));
+                $"q{q} sunT={sunTransmittance:0.00} rayT={rayMaskTransmittance:0.00} od={opticalDepth:0.00} path={pathLength / 1000f:0}km dens={density:0.00} I={postIntensity:0.00}"));
     }
+
+    private static float Lerp(float a, float b, float t) => a + (b - a) * Math.Clamp(t, 0f, 1f);
 }
 
 public readonly record struct VolumetricGodRayProfile(
     bool Enabled,
     float SunTransmittance,
+    float RayMaskTransmittance,
     float RayDensity,
     float RayDecay,
     float PathLengthMeters,
@@ -70,5 +78,5 @@ public readonly record struct VolumetricGodRayProfile(
     string DebugSummary)
 {
     public static VolumetricGodRayProfile Disabled { get; } = new(
-        false, 1f, 0.9f, 0.95f, 0f, 0f, 1f, 0f, "off");
+        false, 1f, 1f, 0.9f, 0.95f, 0f, 0f, 1f, 0f, "off");
 }
