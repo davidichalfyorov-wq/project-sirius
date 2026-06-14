@@ -22,6 +22,8 @@ internal static class VKFormats
         SurfaceFormat.HdrBlendable => 97, // R16G16B16A16_SFLOAT
         SurfaceFormat.HalfVector4 => 97,
         SurfaceFormat.Vector4 => 109,     // R32G32B32A32_SFLOAT
+        SurfaceFormat.Single => 100,      // R32_SFLOAT  (G-buffer viewZ)
+        SurfaceFormat.HalfVector2 => 83,  // R16G16_SFLOAT (G-buffer motion)
         SurfaceFormat.Depth => 126,       // D32_SFLOAT
         // Legacy 16-bit formats are expanded to BGRA8 on the CPU at upload
         // (spotty driver support; they triggered native crashes on NVIDIA).
