@@ -892,6 +892,125 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void RuntimeDecodesReviewedEngineVolumeArtifact()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
+            packed.Artifact,
+            MakeProfile("li01_badlands"),
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.True(decoded.Valid);
+        Assert.True(decoded.Binding.Valid);
+        Assert.Equal(VolumetricDensitySource.OpenVdbImported, decoded.DensitySource);
+        Assert.Equal(packed.Descriptor, decoded.Descriptor);
+        Assert.Equal(3, decoded.UnitDensitySamples.Length);
+        Assert.Equal(0f, decoded.UnitDensitySamples[0]);
+        Assert.Equal(128f / 255f, decoded.UnitDensitySamples[1], 6);
+        Assert.Equal(1f, decoded.UnitDensitySamples[2]);
+    }
+
+    [Fact]
+    public void RuntimeDecodesHalfFloatEngineVolumeArtifact()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.333f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR16Float);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
+            packed.Artifact,
+            MakeProfile("li01_badlands"),
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.True(decoded.Valid);
+        Assert.Equal(0f, decoded.UnitDensitySamples[0]);
+        Assert.InRange(decoded.UnitDensitySamples[1], 0.332f, 0.334f);
+        Assert.Equal(1f, decoded.UnitDensitySamples[2]);
+    }
+
+    [Fact]
+    public void RuntimeRejectsEngineVolumeForWrongNebulaProfile()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
+            packed.Artifact,
+            MakeProfile("li01_wrong_nebula"),
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.False(decoded.Valid);
+        Assert.Equal(VolumetricDensitySource.PerlinWorleyRuntime, decoded.DensitySource);
+        Assert.Contains("canonical nebula", decoded.Error);
+        Assert.Empty(decoded.UnitDensitySamples);
+    }
+
+    [Fact]
+    public void RuntimeRejectsEngineVolumeForWrongSystem()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
+            packed.Artifact,
+            MakeProfile("li01_badlands"),
+            "Rh01");
+
+        Assert.True(packed.Valid);
+        Assert.False(decoded.Valid);
+        Assert.Contains("canonical system", decoded.Error);
+    }
+
+    [Fact]
+    public void RuntimeAllowsCanonicalNebulaToMatchProfileSourceFile()
+    {
+        var profile = MakeProfile("different_runtime_name") with
+        {
+            SourceFile = "data/universe/systems/li01/li01_badlands.ini"
+        };
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
+            packed.Artifact,
+            profile,
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.True(decoded.Valid);
+        Assert.True(decoded.Binding.Valid);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
