@@ -813,6 +813,13 @@ internal sealed class HdrFramePipeline : IDisposable
             _ => 0
         };
 
+    // View-Z debug ramp scale (negative flips sign for -Z-forward views).
+    private static readonly float gbufferViewZScale =
+        float.TryParse(Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_VIEWZ_SCALE"),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var vzs)
+            ? vzs : -0.02f;
+
     /// <summary>Fullscreen G-buffer debug over the final image via the proven
     /// Renderer2D path (the raw RGBA16F-&gt;LDR vkCmdBlitImage produced display
     /// garbage). Mode 1 = RT1 world-normal; mode 2 = RT2 linear view-Z as a
@@ -826,10 +833,11 @@ internal sealed class HdrFramePipeline : IDisposable
         var list = rstate.Renderer2D.CreateDrawList();
         if (debugGBuffer == 2 && targets.GBufferViewZ != null)
         {
-            // Linear view-Z scaled to a visible ramp. The view looks down -Z
-            // (in-front Z is negative), so the scale is negative to map depth
-            // into [0,1]; background (cleared 0) stays black.
-            const float s = -1.0f / 4000.0f;
+            // Linear view-Z scaled to a visible ramp; background (cleared 0)
+            // stays black. The scale (and sign - the view-Z sign follows the
+            // view matrix handedness) is tunable without a rebuild via
+            // SIRIUS_GBUFFER_VIEWZ_SCALE for arbitrary scene depth ranges.
+            var s = gbufferViewZScale;
             list.DrawImageStretched(targets.GBufferViewZ.Texture,
                 new Rectangle(0, 0, targets.Width, targets.Height),
                 new Color4(s, s, s, 1f), mode: BlendMode.Opaque);
