@@ -33,8 +33,9 @@ public readonly record struct VolumetricNebulaQualityProfile(
         var q = performance.EffectiveQuality;
         var main = FroxelGridDesc.MainForViewport(renderWidth, renderHeight, q);
         var near = FroxelGridDesc.NearForViewport(renderWidth, renderHeight, q);
-        performance = performance.WithGridBudgets(main.VoxelCount, near.VoxelCount,
-            main.BytesPerVolume() * 6 + near.BytesPerVolume() * 5);
+        var wantsNear = features.VolumetricNearCascade;
+        performance = performance.WithGridBudgets(main.VoxelCount, wantsNear ? near.VoxelCount : 0,
+            VolumetricNebulaPerformanceProfile.EstimateFrameBytes(main, near, wantsNear));
         return q switch
         {
             0 => Make("low", q, main, near, profile, features, performance, historyWeight: 0.88f, densityOctaves: 3, detailOctaves: 1,
@@ -161,6 +162,10 @@ public readonly record struct VolumetricNebulaPerformanceProfile(
         var extent = MathF.Max(profile.BoundsRadius, MathF.Max(profile.FogRange.X, profile.FogRange.Y));
         var megapixels = MathF.Max(1f, renderWidth * renderHeight / 1_000_000f);
         var reason = "native";
+        var estimatedBytes = EstimateFrameBytes(
+            FroxelGridDesc.MainForViewport(renderWidth, renderHeight, effective),
+            FroxelGridDesc.NearForViewport(renderWidth, renderHeight, effective),
+            features.VolumetricNearCascade);
         if (features.VolumetricAdaptiveQuality)
         {
             if (extent >= 360_000f)
@@ -184,6 +189,21 @@ public readonly record struct VolumetricNebulaPerformanceProfile(
                 effective--;
                 reason = reason == "native" ? "4k-budget" : $"{reason}+4k";
             }
+
+            var memoryBudget = MemoryBudgetBytes(requested);
+            estimatedBytes = EstimateFrameBytes(
+                FroxelGridDesc.MainForViewport(renderWidth, renderHeight, effective),
+                FroxelGridDesc.NearForViewport(renderWidth, renderHeight, effective),
+                features.VolumetricNearCascade);
+            while (effective > 0 && estimatedBytes > memoryBudget)
+            {
+                effective--;
+                reason = reason == "native" ? "memory-budget" : $"{reason}+memory";
+                estimatedBytes = EstimateFrameBytes(
+                    FroxelGridDesc.MainForViewport(renderWidth, renderHeight, effective),
+                    FroxelGridDesc.NearForViewport(renderWidth, renderHeight, effective),
+                    features.VolumetricNearCascade);
+            }
         }
 
         return new VolumetricNebulaPerformanceProfile(
@@ -195,7 +215,7 @@ public readonly record struct VolumetricNebulaPerformanceProfile(
             megapixels,
             0,
             0,
-            0,
+            estimatedBytes,
             reason);
     }
 
@@ -206,6 +226,22 @@ public readonly record struct VolumetricNebulaPerformanceProfile(
             NearVoxels = nearVoxels,
             EstimatedBytes = estimatedBytes
         };
+
+    public static long EstimateFrameBytes(FroxelGridDesc main, FroxelGridDesc near, bool includeNear) =>
+        checked(main.BytesPerVolume() * 6 + (includeNear ? near.BytesPerVolume() * 5 : 0));
+
+    private static long MemoryBudgetBytes(int requestedQuality)
+    {
+        var q = Math.Clamp(requestedQuality, 0, 3);
+        var mebibytes = q switch
+        {
+            0 => 512,
+            1 => 768,
+            3 => 1792,
+            _ => 1280
+        };
+        return mebibytes * 1024L * 1024L;
+    }
 }
 
 public readonly record struct VolumetricTemporalProfile(

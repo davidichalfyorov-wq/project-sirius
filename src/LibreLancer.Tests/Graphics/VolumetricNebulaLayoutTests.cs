@@ -77,6 +77,44 @@ public class VolumetricNebulaLayoutTests
     }
 
     [Fact]
+    public void AdaptiveQualityDownshiftsNearCascadeWhenMemoryBudgetIsHigh()
+    {
+        var features = new RenderFeatureSet(
+            RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricNearCascade |
+            RenderFeatureBits.VolumetricAdaptiveQuality,
+            2,
+            RenderDebugView.VolumetricFroxels,
+            null);
+
+        var profile = VolumetricNebulaQualityProfile.Create(1920, 1080, features, MakeProfile());
+
+        Assert.True(profile.Performance.AdaptiveApplied);
+        Assert.Equal(2, profile.Performance.RequestedQuality);
+        Assert.True(profile.Performance.EffectiveQuality < profile.Performance.RequestedQuality);
+        Assert.Contains("memory", profile.Performance.Reason);
+        Assert.True(profile.Performance.NearVoxels > 0);
+        Assert.True(profile.Performance.EstimatedBytes < 1280L * 1024L * 1024L);
+    }
+
+    [Fact]
+    public void AdaptiveQualityDoesNotChargeNearCascadeWhenItIsDisabled()
+    {
+        var features = new RenderFeatureSet(
+            RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricAdaptiveQuality,
+            2,
+            RenderDebugView.VolumetricFroxels,
+            null);
+
+        var profile = VolumetricNebulaQualityProfile.Create(1920, 1080, features, MakeProfile());
+
+        Assert.False(profile.Performance.AdaptiveApplied);
+        Assert.Equal(2, profile.Performance.EffectiveQuality);
+        Assert.Equal(0, profile.Performance.NearVoxels);
+        Assert.DoesNotContain("memory", profile.Performance.Reason);
+        Assert.True(profile.Performance.EstimatedBytes < 1280L * 1024L * 1024L);
+    }
+
+    [Fact]
     public void CanonicalPassOrderKeepsFutureSlotsNamedForRenderDoc()
     {
         var passes = VolumetricNebulaPassDeclaration.CanonicalOrder;
