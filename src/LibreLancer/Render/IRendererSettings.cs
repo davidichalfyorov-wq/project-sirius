@@ -105,6 +105,9 @@ public interface IRendererSettings
     /// <summary>Blue-noise/STBN jitter source for density and temporal passes.</summary>
     bool SelectedVolumetricBlueNoise => false;
 
+    /// <summary>Allow huge nebula zones and expensive viewports to downshift froxel quality automatically.</summary>
+    bool SelectedVolumetricAdaptiveQuality => false;
+
     /// <summary>Atmosphere LUT pipeline for planets with atmospheres. Stubbed until B1.</summary>
     bool SelectedAtmosphereLuts => false;
 

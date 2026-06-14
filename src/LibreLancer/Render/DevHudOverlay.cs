@@ -101,6 +101,10 @@ public class DevHudOverlay
             Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
             Line(FormattableString.Invariant($"froxels    {froxels.Dimensions}"), froxels.Allocated ? Color4.LightGreen : Color4.Orange);
             Line(FormattableString.Invariant($"froxel q   {froxels.Quality}"), froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            if (!string.IsNullOrWhiteSpace(froxels.PerformanceSummary))
+            {
+                Line($"vol perf   {froxels.PerformanceSummary}", froxels.Allocated ? Color4.LightGreen : Color4.LightBlue);
+            }
             if (!string.IsNullOrWhiteSpace(froxels.ActiveProfile))
             {
                 Line($"vol profile {froxels.ActiveProfile}", Color4.LightGreen);

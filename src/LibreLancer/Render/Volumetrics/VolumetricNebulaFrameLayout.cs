@@ -20,7 +20,8 @@ public readonly record struct VolumetricNebulaQualityProfile(
     VolumetricLightingProfile Lighting,
     VolumetricDisplacementProfile Displacement,
     VolumetricMaterialFogProfile MaterialFog,
-    VolumetricAtmosphereBridgeProfile Atmosphere)
+    VolumetricAtmosphereBridgeProfile Atmosphere,
+    VolumetricNebulaPerformanceProfile Performance)
 {
     public static VolumetricNebulaQualityProfile Create(
         int renderWidth,
@@ -28,18 +29,21 @@ public readonly record struct VolumetricNebulaQualityProfile(
         global::LibreLancer.Render.RenderFeatureSet features,
         NebulaVolumeProfile profile)
     {
-        var q = Math.Clamp(features.VolumetricQuality, 0, 3);
+        var performance = VolumetricNebulaPerformanceProfile.Evaluate(renderWidth, renderHeight, features, profile);
+        var q = performance.EffectiveQuality;
         var main = FroxelGridDesc.MainForViewport(renderWidth, renderHeight, q);
         var near = FroxelGridDesc.NearForViewport(renderWidth, renderHeight, q);
+        performance = performance.WithGridBudgets(main.VoxelCount, near.VoxelCount,
+            main.BytesPerVolume() * 6 + near.BytesPerVolume() * 5);
         return q switch
         {
-            0 => Make("low", q, main, near, profile, historyWeight: 0.88f, densityOctaves: 3, detailOctaves: 1,
+            0 => Make("low", q, main, near, profile, performance, historyWeight: 0.88f, densityOctaves: 3, detailOctaves: 1,
                 selfShadowSteps: 3, localLightBudget: 2, lightningBudget: 1, blueNoiseFrameModulo: 8),
-            1 => Make("medium", q, main, near, profile, historyWeight: 0.90f, densityOctaves: 4, detailOctaves: 2,
+            1 => Make("medium", q, main, near, profile, performance, historyWeight: 0.90f, densityOctaves: 4, detailOctaves: 2,
                 selfShadowSteps: 4, localLightBudget: 4, lightningBudget: 2, blueNoiseFrameModulo: 16),
-            3 => Make("ultra", q, main, near, profile, historyWeight: 0.94f, densityOctaves: 6, detailOctaves: 4,
+            3 => Make("ultra", q, main, near, profile, performance, historyWeight: 0.94f, densityOctaves: 6, detailOctaves: 4,
                 selfShadowSteps: 8, localLightBudget: 12, lightningBudget: 6, blueNoiseFrameModulo: 32),
-            _ => Make("high", q, main, near, profile, historyWeight: 0.92f, densityOctaves: 5, detailOctaves: 3,
+            _ => Make("high", q, main, near, profile, performance, historyWeight: 0.92f, densityOctaves: 5, detailOctaves: 3,
                 selfShadowSteps: 6, localLightBudget: 8, lightningBudget: 4, blueNoiseFrameModulo: 16)
         };
     }
@@ -50,6 +54,7 @@ public readonly record struct VolumetricNebulaQualityProfile(
         FroxelGridDesc main,
         FroxelGridDesc near,
         NebulaVolumeProfile profile,
+        VolumetricNebulaPerformanceProfile performance,
         float historyWeight,
         int densityOctaves,
         int detailOctaves,
@@ -117,9 +122,89 @@ public readonly record struct VolumetricNebulaQualityProfile(
             SkyViewLut: true,
             AerialPerspectiveVolume: true,
             CloudShell: quality >= 2);
+        var profileName = performance.AdaptiveApplied ? $"{name}-adaptive" : name;
         return new VolumetricNebulaQualityProfile(
-            quality, name, main, near, temporal, jitter, density, lighting, displacement, materialFog, atmosphere);
+            quality, profileName, main, near, temporal, jitter, density, lighting, displacement, materialFog,
+            atmosphere, performance);
     }
+}
+
+public readonly record struct VolumetricNebulaPerformanceProfile(
+    bool AdaptiveEnabled,
+    bool AdaptiveApplied,
+    int RequestedQuality,
+    int EffectiveQuality,
+    float ZoneExtentMeters,
+    float ViewMegapixels,
+    int MainVoxels,
+    int NearVoxels,
+    long EstimatedBytes,
+    string Reason)
+{
+    public string DebugSummary => !AdaptiveEnabled
+        ? FormattableString.Invariant($"fixed q{RequestedQuality} extent={ZoneExtentMeters / 1000f:0}km")
+        : AdaptiveApplied
+            ? FormattableString.Invariant(
+                $"adaptive q{RequestedQuality}->q{EffectiveQuality} {Reason} extent={ZoneExtentMeters / 1000f:0}km mem={EstimatedBytes / (1024.0 * 1024.0):0.0}MB")
+            : FormattableString.Invariant(
+                $"adaptive q{RequestedQuality} native extent={ZoneExtentMeters / 1000f:0}km mem={EstimatedBytes / (1024.0 * 1024.0):0.0}MB");
+
+    public static VolumetricNebulaPerformanceProfile Evaluate(
+        int renderWidth,
+        int renderHeight,
+        global::LibreLancer.Render.RenderFeatureSet features,
+        NebulaVolumeProfile profile)
+    {
+        var requested = Math.Clamp(features.VolumetricQuality, 0, 3);
+        var effective = requested;
+        var extent = MathF.Max(profile.BoundsRadius, MathF.Max(profile.FogRange.X, profile.FogRange.Y));
+        var megapixels = MathF.Max(1f, renderWidth * renderHeight / 1_000_000f);
+        var reason = "native";
+        if (features.VolumetricAdaptiveQuality)
+        {
+            if (extent >= 360_000f)
+            {
+                effective = Math.Min(effective, 0);
+                reason = "giant-zone";
+            }
+            else if (extent >= 220_000f)
+            {
+                effective = Math.Max(0, effective - 2);
+                reason = "huge-zone";
+            }
+            else if (extent >= 120_000f)
+            {
+                effective = Math.Max(0, effective - 1);
+                reason = "large-zone";
+            }
+
+            if (megapixels >= 7.5f && extent >= 90_000f && effective > 0)
+            {
+                effective--;
+                reason = reason == "native" ? "4k-budget" : $"{reason}+4k";
+            }
+        }
+
+        return new VolumetricNebulaPerformanceProfile(
+            features.VolumetricAdaptiveQuality,
+            effective < requested,
+            requested,
+            effective,
+            extent,
+            megapixels,
+            0,
+            0,
+            0,
+            reason);
+    }
+
+    public VolumetricNebulaPerformanceProfile WithGridBudgets(int mainVoxels, int nearVoxels, long estimatedBytes) =>
+        this with
+        {
+            MainVoxels = mainVoxels,
+            NearVoxels = nearVoxels,
+            EstimatedBytes = estimatedBytes
+        };
 }
 
 public readonly record struct VolumetricTemporalProfile(

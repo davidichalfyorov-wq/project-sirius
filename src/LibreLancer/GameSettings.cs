@@ -137,6 +137,8 @@ namespace LibreLancer
         public bool VolumetricReprojection = false;
         [Entry("volumetric_blue_noise")]
         public bool VolumetricBlueNoise = false;
+        [Entry("volumetric_adaptive_quality")]
+        public bool VolumetricAdaptiveQuality = true;
         [Entry("atmosphere_luts")]
         public bool AtmosphereLuts = false;
         // 0 low, 1 medium, 2 high, 3 ultra. High matches the P5 baseline.
@@ -189,6 +191,8 @@ namespace LibreLancer
         public bool Phase5ReprojectionEnabled => Phase5TemporalEnabled && VolumetricReprojection;
 
         public bool Phase5BlueNoiseEnabled => VolumetricNebulaRequested && VolumetricBlueNoise;
+
+        public bool Phase5AdaptiveQualityEnabled => VolumetricNebulaRequested && VolumetricAdaptiveQuality;
 
         public string Phase5DebugView => NormalizePhase5DebugView(DebugView);
 
@@ -270,6 +274,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricTemporal => VolumetricNebulaRequested && VolumetricTemporal;
         bool IRendererSettings.SelectedVolumetricReprojection => Phase5ReprojectionEnabled;
         bool IRendererSettings.SelectedVolumetricBlueNoise => Phase5BlueNoiseEnabled;
+        bool IRendererSettings.SelectedVolumetricAdaptiveQuality => Phase5AdaptiveQualityEnabled;
         bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
         int IRendererSettings.SelectedVolumetricQuality => VolumetricQuality;
         string IRendererSettings.SelectedDebugView => DebugView;
@@ -347,6 +352,7 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_temporal = {(VolumetricTemporal ? "true" : "false")}");
             writer.WriteLine($"volumetric_reprojection = {(VolumetricReprojection ? "true" : "false")}");
             writer.WriteLine($"volumetric_blue_noise = {(VolumetricBlueNoise ? "true" : "false")}");
+            writer.WriteLine($"volumetric_adaptive_quality = {(VolumetricAdaptiveQuality ? "true" : "false")}");
             writer.WriteLine($"atmosphere_luts = {(AtmosphereLuts ? "true" : "false")}");
             writer.WriteLine($"volumetric_quality = {VolumetricQuality}");
             writer.WriteLine($"debug_view = {DebugView}");
@@ -419,6 +425,7 @@ namespace LibreLancer
                 VolumetricTemporal = VolumetricTemporal,
                 VolumetricReprojection = VolumetricReprojection,
                 VolumetricBlueNoise = VolumetricBlueNoise,
+                VolumetricAdaptiveQuality = VolumetricAdaptiveQuality,
                 AtmosphereLuts = AtmosphereLuts,
                 VolumetricQuality = VolumetricQuality,
                 DebugView = DebugView,

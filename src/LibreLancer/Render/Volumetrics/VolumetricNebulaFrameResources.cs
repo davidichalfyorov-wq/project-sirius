@@ -366,6 +366,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             nearDesc.Dimensions,
             qualityProfile.Name,
             mainDesc.Quality,
+            qualityProfile.Performance.DebugSummary,
             activeProfile,
             EstimatedBytes,
             operation,
@@ -1471,6 +1472,7 @@ public readonly record struct VolumetricNebulaResourceDebug(
     string NearDimensions,
     string QualityName,
     int Quality,
+    string PerformanceSummary,
     string ActiveProfile,
     long EstimatedBytes,
     string LastOperation,
@@ -1489,11 +1491,11 @@ public readonly record struct VolumetricNebulaResourceDebug(
     string LightningSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
-        new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0, false, "",
+        new(false, "not allocated", "not allocated", "off", -1, "", "", 0, reason, "vol_nebula.none", 0, false, "",
             false, 0, "", false, "", false, "", false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
-        new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting",
+        new(false, "waiting", "waiting", "waiting", -1, "", "", 0, reason, "vol_nebula.waiting",
             VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "",
             false, "");
 }

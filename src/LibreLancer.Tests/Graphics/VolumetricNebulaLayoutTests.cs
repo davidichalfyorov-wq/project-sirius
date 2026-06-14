@@ -21,6 +21,7 @@ public class VolumetricNebulaLayoutTests
         var profile = VolumetricNebulaQualityProfile.Create(1920, 1080, features, MakeProfile());
 
         Assert.Equal("high", profile.Name);
+        Assert.Equal(2, profile.Performance.EffectiveQuality);
         Assert.True(profile.MainGrid.IsValid);
         Assert.True(profile.NearGrid.IsValid);
         Assert.True(profile.Temporal.Enabled);
@@ -30,6 +31,49 @@ public class VolumetricNebulaLayoutTests
         Assert.True(profile.Displacement.SdfCapsuleFields);
         Assert.True(profile.MaterialFog.Ships);
         Assert.True(profile.Atmosphere.AerialPerspectiveVolume);
+        Assert.True(profile.Density.SupportsOpenVdbImport);
+    }
+
+    [Fact]
+    public void AdaptiveHugeZoneDownshiftsExpensiveProfiles()
+    {
+        var features = new RenderFeatureSet(
+            RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricNearCascade |
+            RenderFeatureBits.VolumetricAdaptiveQuality,
+            3,
+            RenderDebugView.VolumetricFroxels,
+            null);
+
+        var profile = VolumetricNebulaQualityProfile.Create(3840, 2160, features,
+            MakeProfile(size: 520_000f, fogFar: 260_000f));
+
+        Assert.True(profile.Performance.AdaptiveApplied);
+        Assert.Equal(3, profile.Performance.RequestedQuality);
+        Assert.True(profile.Performance.EffectiveQuality < profile.Performance.RequestedQuality);
+        Assert.Equal(profile.Performance.EffectiveQuality, profile.MainGrid.Quality);
+        Assert.Contains("adaptive", profile.Name);
+        Assert.True(profile.Performance.EstimatedBytes > 0);
+        Assert.Contains("q3->q", profile.Performance.DebugSummary);
+        Assert.True(profile.Density.SupportsOpenVdbImport);
+    }
+
+    [Fact]
+    public void AdaptiveQualityCanBePinnedOffForProfiling()
+    {
+        var features = new RenderFeatureSet(
+            RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricNearCascade,
+            3,
+            RenderDebugView.VolumetricFroxels,
+            null);
+
+        var profile = VolumetricNebulaQualityProfile.Create(3840, 2160, features,
+            MakeProfile(size: 520_000f, fogFar: 260_000f));
+
+        Assert.False(profile.Performance.AdaptiveEnabled);
+        Assert.False(profile.Performance.AdaptiveApplied);
+        Assert.Equal(3, profile.Performance.EffectiveQuality);
+        Assert.Equal("ultra", profile.Name);
+        Assert.Equal(3, profile.MainGrid.Quality);
     }
 
     [Fact]
@@ -51,16 +95,16 @@ public class VolumetricNebulaLayoutTests
             passes.Select((x, i) => (x.Pass, i)).First(x => x.Pass == slot).i;
     }
 
-    private static NebulaVolumeProfile MakeProfile() => new(
+    private static NebulaVolumeProfile MakeProfile(float size = 12000f, float fogFar = 8000f) => new(
         "zone_test_badlands",
         "test.ini",
         "badlands",
         ShapeKind.Sphere,
         Vector3.Zero,
         Matrix4x4.Identity,
-        new Vector3(12000f),
+        new Vector3(size),
         0.2f,
-        new Vector2(1000f, 8000f),
+        new Vector2(1000f, fogFar),
         new Color4(0.2f, 0.24f, 0.28f, 1f),
         new Color4(0.42f, 0.45f, 0.48f, 1f),
         new Color4(0.03f, 0.03f, 0.035f, 1f),

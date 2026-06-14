@@ -24,7 +24,8 @@ public enum RenderFeatureBits
     VolumetricWakeHistory = 1 << 14,
     VolumetricWakeCurl = 1 << 15,
     VolumetricLightningDeterministic = 1 << 16,
-    VolumetricLightningGoldenDisable = 1 << 17
+    VolumetricLightningGoldenDisable = 1 << 17,
+    VolumetricAdaptiveQuality = 1 << 18
 }
 
 /// <summary>
@@ -86,6 +87,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricNearDetail => Bits.HasFlag(RenderFeatureBits.VolumetricNearDetail);
     public bool VolumetricWakeHistory => Bits.HasFlag(RenderFeatureBits.VolumetricWakeHistory);
     public bool VolumetricWakeCurl => Bits.HasFlag(RenderFeatureBits.VolumetricWakeCurl);
+    public bool VolumetricAdaptiveQuality => Bits.HasFlag(RenderFeatureBits.VolumetricAdaptiveQuality);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
@@ -128,6 +130,9 @@ public readonly record struct RenderFeatureSet(
         if (OverrideBool(settings.SelectedVolumetricBlueNoise, "SIRIUS_VOLFOG_BLUE_NOISE",
                 "SIRIUS_VOLFOG_STBN", "SIRIUS_VOLUMETRIC_BLUE_NOISE"))
             bits |= RenderFeatureBits.VolumetricBlueNoise;
+        if (OverrideBool(settings.SelectedVolumetricAdaptiveQuality, "SIRIUS_VOLFOG_ADAPTIVE",
+                "SIRIUS_VOLUMETRIC_ADAPTIVE_QUALITY"))
+            bits |= RenderFeatureBits.VolumetricAdaptiveQuality;
         if (OverrideBool(settings.SelectedVolumetricNearComposite, "SIRIUS_VOLFOG_NEAR_COMPOSITE",
                 "SIRIUS_VOLNEAR_COMPOSITE", "SIRIUS_VOLUMETRIC_NEAR_COMPOSITE"))
             bits |= RenderFeatureBits.VolumetricNearComposite;
@@ -158,7 +163,8 @@ public readonly record struct RenderFeatureSet(
                       RenderFeatureBits.VolumetricWakeHistory |
                       RenderFeatureBits.VolumetricWakeCurl |
                       RenderFeatureBits.VolumetricLightningDeterministic |
-                      RenderFeatureBits.VolumetricLightningGoldenDisable);
+                      RenderFeatureBits.VolumetricLightningGoldenDisable |
+                      RenderFeatureBits.VolumetricAdaptiveQuality);
         }
         if ((bits & RenderFeatureBits.VolumetricLightningChannels) == 0)
         {
