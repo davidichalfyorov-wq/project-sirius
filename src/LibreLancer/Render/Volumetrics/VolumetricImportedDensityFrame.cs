@@ -99,7 +99,7 @@ public readonly record struct VolumetricImportedDensityFrame(
         var mean = (float)(sum / unitDensitySamples.Length);
         var coverage = covered / (float)unitDensitySamples.Length;
         var summary = FormattableString.Invariant(
-            $"openvdb {descriptor.Width}x{descriptor.Height}x{descriptor.Depth} mean={mean:0.000} cov={coverage:0.000} hash={VolumetricOpenVdbImport.ContentHashPrefix(descriptor.ContentHash, 12)}");
+            $"openvdb {descriptor.Width}x{descriptor.Height}x{descriptor.Depth} system={descriptor.CanonicalSystem} nebula={descriptor.CanonicalNebula} grid={descriptor.GridName} mean={mean:0.000} cov={coverage:0.000} hash={VolumetricOpenVdbImport.ContentHashPrefix(descriptor.ContentHash, 12)}");
         return new VolumetricImportedDensityFrame(
             true,
             descriptor,

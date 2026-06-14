@@ -29,6 +29,9 @@ public class VolumetricImportedDensityFrameTests
         Assert.Equal(0.5f, frame.Coverage);
         Assert.Equal([0f, 3f / 255f, 128f / 255f, 1f], frame.UnitDensitySamples);
         Assert.Contains("openvdb 4x1x1", frame.DebugSummary);
+        Assert.Contains("system=Li01", frame.DebugSummary);
+        Assert.Contains("nebula=li01_badlands", frame.DebugSummary);
+        Assert.Contains("grid=density", frame.DebugSummary);
         Assert.Contains("hash=ba7816bf8f01", frame.DebugSummary);
     }
 
@@ -102,6 +105,8 @@ public class VolumetricImportedDensityFrameTests
         Assert.Equal(4, frame.SampleCount);
         Assert.Equal((0f + 64f / 255f + 128f / 255f + 1f) / 4f, frame.MeanDensity, 6);
         Assert.Contains("openvdb 4x1x1", frame.DebugSummary);
+        Assert.Contains("system=Li01", frame.DebugSummary);
+        Assert.Contains("nebula=li01_badlands", frame.DebugSummary);
     }
 
     [Fact]
