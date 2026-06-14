@@ -105,6 +105,26 @@ public readonly record struct VolumetricAtmosphereLutBudget(
             $"q{Quality} trans={TransmittanceWidth}x{TransmittanceHeight} sky={SkyViewWidth}x{SkyViewHeight} aerial={AerialWidth}x{AerialHeight}x{AerialDepth} mem={EstimatedBytes / (1024.0 * 1024.0):0.0}MB")
         : Reason;
 
+    public long TransmittanceBytes => Enabled
+        ? (long)TransmittanceWidth * TransmittanceHeight * Rgba16fBytes
+        : 0;
+
+    public long MultiScatteringBytes => Enabled
+        ? (long)MultiScatteringSize * MultiScatteringSize * Rgba16fBytes
+        : 0;
+
+    public long SkyViewBytes => Enabled
+        ? (long)SkyViewWidth * SkyViewHeight * Rgba16fBytes
+        : 0;
+
+    public long AerialPerspectiveBytes => Enabled
+        ? (long)AerialWidth * AerialHeight * AerialDepth * Rgba16fBytes
+        : 0;
+
+    public long CloudShellBytes => Enabled && CloudShell
+        ? 64L * 64L * 32L * Rgba16fBytes
+        : 0;
+
     private static VolumetricAtmosphereLutBudget Disabled(int quality, string reason) =>
         new(false, quality, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, reason);
 }

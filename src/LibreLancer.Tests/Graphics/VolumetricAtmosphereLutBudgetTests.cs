@@ -59,6 +59,45 @@ public class VolumetricAtmosphereLutBudgetTests
     }
 
     [Fact]
+    public void EstimatedBytesMatchIndividualResources()
+    {
+        var budget = VolumetricAtmosphereLutBudget.Create(
+            requested: true,
+            computeSupported: true,
+            quality: 2,
+            renderWidth: 1920,
+            renderHeight: 1080,
+            cloudShellRequested: true);
+
+        var expected = budget.TransmittanceBytes +
+                       budget.MultiScatteringBytes +
+                       budget.SkyViewBytes +
+                       budget.AerialPerspectiveBytes +
+                       budget.CloudShellBytes;
+
+        Assert.True(budget.SkyViewBytes > 0);
+        Assert.Equal(expected, budget.EstimatedBytes);
+    }
+
+    [Fact]
+    public void DisabledBudgetHasNoResourceBytes()
+    {
+        var budget = VolumetricAtmosphereLutBudget.Create(
+            requested: false,
+            computeSupported: true,
+            quality: 2,
+            renderWidth: 1920,
+            renderHeight: 1080,
+            cloudShellRequested: true);
+
+        Assert.Equal(0, budget.TransmittanceBytes);
+        Assert.Equal(0, budget.MultiScatteringBytes);
+        Assert.Equal(0, budget.SkyViewBytes);
+        Assert.Equal(0, budget.AerialPerspectiveBytes);
+        Assert.Equal(0, budget.CloudShellBytes);
+    }
+
+    [Fact]
     public void HighQualityDoesNotReserveCloudShellUnlessRequested()
     {
         var budget = VolumetricAtmosphereLutBudget.Create(

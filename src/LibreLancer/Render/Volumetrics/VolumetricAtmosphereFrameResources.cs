@@ -23,11 +23,13 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
 
     public Texture3D? Transmittance { get; private set; }
     public Texture3D? MultiScattering { get; private set; }
+    public Texture3D? SkyView { get; private set; }
     public Texture3D? AerialPerspective { get; private set; }
     public Texture3D? CloudShell { get; private set; }
 
     public bool Allocated => Transmittance is { IsDisposed: false } &&
                              MultiScattering is { IsDisposed: false } &&
+                             SkyView is { IsDisposed: false } &&
                              AerialPerspective is { IsDisposed: false };
 
     public static VolumetricAtmosphereResourceDebug LastDebug { get; private set; } =
@@ -85,6 +87,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             $"{budget.DebugSummary} aerial={(features.AtmosphereAerialPerspective ? "profile" : "identity")}",
             $"{budget.TransmittanceWidth}x{budget.TransmittanceHeight}x1 / " +
             $"{budget.MultiScatteringSize}x{budget.MultiScatteringSize}x1 / " +
+            $"{budget.SkyViewWidth}x{budget.SkyViewHeight}x1 / " +
             $"{budget.AerialWidth}x{budget.AerialHeight}x{budget.AerialDepth}" +
             (budget.CloudShell ? " / cloud=64x64x32" : ""),
             budget.EstimatedBytes,
@@ -173,10 +176,13 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             SurfaceFormat.HdrBlendable, storage: true);
         MultiScattering = new Texture3D(rstate, budget.MultiScatteringSize, budget.MultiScatteringSize, 1,
             SurfaceFormat.HdrBlendable, storage: true);
+        SkyView = new Texture3D(rstate, budget.SkyViewWidth, budget.SkyViewHeight, 1,
+            SurfaceFormat.HdrBlendable, storage: true);
         AerialPerspective = new Texture3D(rstate, budget.AerialWidth, budget.AerialHeight, budget.AerialDepth,
             SurfaceFormat.HdrBlendable, storage: true);
         FillTransmittanceIdentity(Transmittance);
         FillZero(MultiScattering);
+        FillSkyViewIdentity(SkyView);
         if (aerialPerspective)
         {
             FillAerialPerspective(AerialPerspective, budget.Quality);
@@ -213,6 +219,16 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
     }
 
     private static void FillAerialIdentity(Texture3D texture)
+    {
+        var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
+        for (var i = 3; i < data.Length; i += 4)
+        {
+            data[i] = HalfOne;
+        }
+        texture.SetData(data);
+    }
+
+    private static void FillSkyViewIdentity(Texture3D texture)
     {
         var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
         for (var i = 3; i < data.Length; i += 4)
@@ -289,10 +305,12 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
     {
         Transmittance?.Dispose();
         MultiScattering?.Dispose();
+        SkyView?.Dispose();
         AerialPerspective?.Dispose();
         CloudShell?.Dispose();
         Transmittance = null;
         MultiScattering = null;
+        SkyView = null;
         AerialPerspective = null;
         CloudShell = null;
         allocatedBudget = default;
