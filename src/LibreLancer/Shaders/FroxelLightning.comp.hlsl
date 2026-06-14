@@ -70,7 +70,7 @@ void main(uint3 id : SV_DispatchThreadID)
         return;
 
     float3 dims = max(GridSize.xyz, 1.0);
-    float3 uvw = (id + 0.5) / dims;
+    float3 uvw = (float3(id) + 0.5) / dims;
     float3 p = uvw * 2.0 - 1.0;
 
     float4 density = Density.SampleLevel(DensitySampler, uvw, 0);

@@ -379,7 +379,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             WakeHistoryUpdatedThisFrame,
             WakeHistoryDebugSummary,
             WakeCurlUpdatedThisFrame,
-            WakeCurlDebugSummary);
+            WakeCurlDebugSummary,
+            GpuLightningInjectedThisFrame,
+            LightningDebugSummary);
     }
 
     public bool DrawDebugView(RenderContext rstate, RenderDebugView debugView, int renderWidth, int renderHeight)
@@ -1479,13 +1481,16 @@ public readonly record struct VolumetricNebulaResourceDebug(
     bool WakeHistoryUpdated,
     string WakeHistorySummary,
     bool WakeCurlUpdated,
-    string WakeCurlSummary)
+    string WakeCurlSummary,
+    bool LightningUpdated,
+    string LightningSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
         new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0, false, "",
-            false, 0, "", false, "", false, "");
+            false, 0, "", false, "", false, "", false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
         new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting",
-            VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "");
+            VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "",
+            false, "");
 }

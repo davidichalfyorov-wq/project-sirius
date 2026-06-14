@@ -135,6 +135,13 @@ public class DevHudOverlay
                 Line($"vol curl   {froxels.WakeCurlSummary}",
                     froxels.WakeCurlUpdated ? Color4.LightGreen : Color4.LightBlue);
             }
+            if (froxels.LightningUpdated || !string.IsNullOrWhiteSpace(froxels.LightningSummary))
+            {
+                Line($"vol bolt   {(froxels.LightningUpdated ? "chan" : "off")}",
+                    froxels.LightningUpdated ? Color4.LightGreen : Color4.LightBlue);
+                Line($"vol bolt   {froxels.LightningSummary}",
+                    froxels.LightningUpdated ? Color4.LightGreen : Color4.LightBlue);
+            }
             Line($"vol comp   {(froxels.Allocated ? (froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "hdr" : "off") : "off")}",
                 froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
             Line($"vol depth  {(froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "copy" : "no")}",

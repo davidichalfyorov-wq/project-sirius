@@ -39,6 +39,7 @@ public class VolumetricNebulaLayoutTests
 
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.Allocate && x.DebugName == "vol_nebula_allocate");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.ClearIdentity && x.DebugName == "vol_nebula_clear");
+        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.InjectLightningChannels && x.DebugName == "vol_nebula_lightning_channels");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.WakeCurl && x.DebugName == "vol_nebula_wake_curl");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.TemporalReproject);
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.MaterialFogExport);
