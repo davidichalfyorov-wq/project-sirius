@@ -56,6 +56,10 @@ Rules for the OpenVDB layer:
   not copied from artist-authored `data` paths. The cache identity is derived
   from canonical system, canonical nebula, grid, dimensions, and content hash so
   rebuilt Blender/Houdini/OpenVDB exports produce deterministic reviewed assets.
+- Offline conversion scripts should create a cache artifact plan from the
+  verified import plan and payload bytes before writing files. The plan returns
+  the engine `.siriusvol` path, sidecar manifest path, and manifest lines as a
+  single contract so tools do not hand-roll cache naming or skip validation.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density

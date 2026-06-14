@@ -194,6 +194,34 @@ public static class VolumetricOpenVdbImport
         return plan;
     }
 
+    public static VolumetricOpenVdbCacheArtifactPlan CreateCacheArtifactPlan(
+        IEnumerable<string> lines,
+        NebulaVolumeProfile profile,
+        ReadOnlySpan<byte> payload,
+        string canonicalSystem = "")
+    {
+        var plan = CreateVerifiedImportPlan(lines, profile, payload, canonicalSystem);
+        if (!plan.Valid)
+        {
+            return VolumetricOpenVdbCacheArtifactPlan.Invalid(plan.Error);
+        }
+
+        var manifestLines = plan.BuildCacheManifestLines();
+        var validation = ValidateCacheManifest(manifestLines, plan);
+        if (!validation.Valid)
+        {
+            return VolumetricOpenVdbCacheArtifactPlan.Invalid(validation.Error);
+        }
+
+        return new VolumetricOpenVdbCacheArtifactPlan(
+            true,
+            plan,
+            plan.CacheRelativePath,
+            plan.CacheManifestRelativePath,
+            manifestLines,
+            "");
+    }
+
     public static VolumetricOpenVdbCacheManifestValidation ValidateCacheManifest(
         IEnumerable<string> lines,
         VolumetricOpenVdbImportPlan plan)
@@ -746,6 +774,20 @@ public readonly record struct VolumetricOpenVdbCacheManifestValidation(
 
     public static VolumetricOpenVdbCacheManifestValidation Invalid(string error) =>
         new(false, error);
+}
+
+public readonly record struct VolumetricOpenVdbCacheArtifactPlan(
+    bool Valid,
+    VolumetricOpenVdbImportPlan ImportPlan,
+    string EngineVolumePath,
+    string CacheManifestPath,
+    string[] CacheManifestLines,
+    string Error)
+{
+    public string CacheKey => ImportPlan.CacheKey;
+
+    public static VolumetricOpenVdbCacheArtifactPlan Invalid(string error) =>
+        new(false, default, "", "", [], error);
 }
 
 public readonly record struct VolumetricOpenVdbImportPlan(

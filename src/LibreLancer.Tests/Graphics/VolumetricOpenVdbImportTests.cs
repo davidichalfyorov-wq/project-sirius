@@ -446,6 +446,43 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsCacheArtifactPlanForOfflineOpenVdbTooling()
+    {
+        var artifactPlan = VolumetricOpenVdbImport.CreateCacheArtifactPlan(
+            MakeVerifiedManifestLines(),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            "Li01");
+
+        Assert.True(artifactPlan.Valid);
+        Assert.Equal("volumes/openvdb/li01_li01_badlands_density_128x96x64_ba7816bf8f01.siriusvol",
+            artifactPlan.EngineVolumePath);
+        Assert.Equal($"{artifactPlan.EngineVolumePath}.manifest", artifactPlan.CacheManifestPath);
+        Assert.Equal(artifactPlan.ImportPlan.CacheKey, artifactPlan.CacheKey);
+        Assert.DoesNotContain("artist_exports", artifactPlan.EngineVolumePath);
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheManifest(
+            artifactPlan.CacheManifestLines,
+            artifactPlan.ImportPlan);
+        Assert.True(validation.Valid);
+    }
+
+    [Fact]
+    public void RejectsCacheArtifactPlanWhenPayloadHashMismatches()
+    {
+        var artifactPlan = VolumetricOpenVdbImport.CreateCacheArtifactPlan(
+            MakeVerifiedManifestLines(),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("not the reviewed vdb bytes"),
+            "Li01");
+
+        Assert.False(artifactPlan.Valid);
+        Assert.Contains("hash mismatch", artifactPlan.Error);
+        Assert.Equal("", artifactPlan.EngineVolumePath);
+        Assert.Empty(artifactPlan.CacheManifestLines);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
@@ -770,7 +807,14 @@ public class VolumetricOpenVdbImportTests
             ExclusionCount: 0);
 
     private static VolumetricOpenVdbImportPlan MakeVerifiedImportPlan() =>
-        VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+        VolumetricOpenVdbImport.CreateVerifiedImportPlan(
+            MakeVerifiedManifestLines(),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            "Li01");
+
+    private static string[] MakeVerifiedManifestLines() =>
+    [
             "data = artist_exports/tmp/li01_badlands_density.vdb",
             "grid = density",
             "width = 128",
@@ -786,7 +830,7 @@ public class VolumetricOpenVdbImportTests
             "license = project-owned",
             "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             "preserve_zone_transform = true"
-        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+    ];
 
     private static string[] ReplaceLine(string[] lines, string prefix, string replacement)
     {
