@@ -904,7 +904,7 @@ namespace LibreLancer.Render
         {
             triedPaths = VolumetricAssetPathResolver.BuildVfsCandidates(
                 relativePath,
-                game.GameData?.Items?.Ini?.Freelancer?.DataPath);
+                (game as FreelancerGame)?.GameData?.Items?.Ini?.Freelancer?.DataPath);
             foreach (var candidate in triedPaths)
             {
                 if (!resman.ResourceExists(candidate))
