@@ -303,14 +303,25 @@ float4 main(Input input) : SV_Target0
         irradiance *= rtao;
         prefiltered *= rtao;
 #endif
-        // Sirius: floor the IBL diffuse ambient with the system AmbientColor so ships
-        // are not pitch-black on their unlit side in the (near-black) space probe.
-        // In a bright environment irradiance dominates; in empty space AmbientColor fills.
-        color += (irradiance + AmbientColor.xyz) * diffuseColor;
-        color += prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
+        // Single-scattering split-sum specular coefficient (F0*f_a + f_b).
+        float3 FssEss = specularEnvironmentR0 * lutSample.x + lutSample.y;
+        // Multiple-scattering energy compensation (Fdez-Aguera 2019). Single-
+        // scatter GGX loses energy at high roughness, leaving rough metals and
+        // dielectrics too dim / undersaturated. This recovers it by REUSING the
+        // existing split-sum LUT (f_a/f_b) -- no new textures, near-zero cost.
+        float Ess = lutSample.x + lutSample.y;          // single-scatter directional albedo
+        float Ems = 1.0 - Ess;                          // energy lost to multiple scattering
+        float3 Favg = specularEnvironmentR0 + (1.0 - specularEnvironmentR0) / 21.0;
+        float3 FmsEms = Ems * FssEss * Favg / (1.0 - Favg * Ems);
+        float3 kD = diffuseColor * (1.0 - FssEss - FmsEms);  // energy-conserving diffuse weight
+        // Specular IBL (single scatter) + diffuse IBL (energy-conserving) +
+        // multiple-scattering bounce, all driven by the same probe.
+        color += FssEss * prefiltered;
+        // AmbientColor floors the unlit side in the near-black space probe so
+        // ships are not pitch-black; irradiance dominates in bright environments.
+        color += (FmsEms + kD) * irradiance + AmbientColor.xyz * diffuseColor;
 #ifdef DEBUG_VIEW
-        debugIbl = irradiance * diffuseColor +
-            prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
+        debugIbl = FssEss * prefiltered + (FmsEms + kD) * irradiance;
 #endif
     }
 #else

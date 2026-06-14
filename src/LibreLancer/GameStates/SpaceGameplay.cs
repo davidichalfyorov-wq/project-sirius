@@ -1204,6 +1204,10 @@ World Time: {12:F2}
 
         private ICamera GetCurrentCamera()
         {
+            if (goldenPoseCamera != null)
+            {
+                return goldenPoseCamera;
+            }
             if (recorder != null)
             {
                 return recorder.Camera;
@@ -1266,10 +1270,78 @@ World Time: {12:F2}
         private int autoplayProbeStage;
         private double autoplayProbeTimer;
         private double autoplayCaptureBase;
+        private SiriusRecorderCamera? goldenPoseCamera;
+        private int goldenPoseFrames;
         private int autoplaySettledFrames;
         private double autoplayStillTime;
         private bool goldenWaypointLogged;
         private readonly SiriusUiAutotest? uiProber = SiriusUiAutotest.CreateSpaceProber();
+
+        // SIRIUS_GOLDEN_POSE: deterministic PBR beauty shot. Reuses the
+        // server + client pose pin (ship lands at DirectorPose by value),
+        // then removes the three sources of run-to-run jitter that make the
+        // normal autoplay space shot unmeasurable: it mounts a FIXED camera
+        // (no chase smoothdamp), stops physics (paused => world.Update(0)),
+        // and freezes animators (RenderClock). One settled frame is captured,
+        // so the same build yields a pixel-identical pbr.png (self-FLIP ~ 0).
+        private void UpdateGoldenPose(double dt)
+        {
+            if (autoplayProbeStage >= 4)
+                return;
+            autoplayProbeTimer += dt;
+            // Pin the predicted hull once the server pin engages (mirror of
+            // the golden path): kill throttle, snap transform, zero velocity.
+            if (autoplayProbeTimer >= 8.0)
+            {
+                shipInput.Throttle = 0;
+                shipInput.AutopilotThrottle = 0;
+                player.SetLocalTransform(SiriusAutoplay.DirectorPose());
+                if (player.PhysicsComponent?.Body != null)
+                {
+                    player.PhysicsComponent.Body.LinearVelocity = Vector3.Zero;
+                    player.PhysicsComponent.Body.AngularVelocity = Vector3.Zero;
+                }
+            }
+            if (autoplayProbeStage == 0 && autoplayProbeTimer >= 9.0)
+            {
+                var directorPose = SiriusAutoplay.DirectorPose();
+                var settled = Vector3.Distance(
+                    player.WorldTransform.Position, directorPose.Position) < 25f;
+                autoplaySettledFrames = settled ? autoplaySettledFrames + 1 : 0;
+                if (autoplaySettledFrames >= 30 || autoplayProbeTimer >= 40.0)
+                {
+                    if (autoplayProbeTimer >= 40.0)
+                        FLLog.Warning("Autoplay",
+                            "golden-pose: never settled, capturing anyway");
+                    paused = true;                  // physics -> world.Update(0)
+                    RenderClock.Freeze(100.0);      // animators -> fixed phase
+                    var (offset, fov) = SiriusAutoplay.GoldenPoseCamera();
+                    var camPos = directorPose.Position + offset;
+                    goldenPoseCamera = new SiriusRecorderCamera();
+                    goldenPoseCamera.SetFrame(camPos, directorPose.Position,
+                        fov, 0f, Game.RenderContext.CurrentViewport.AspectRatio);
+                    ui.Visible = false;             // clean material shot, no HUD
+                    autoplayProbeStage = 1;
+                    goldenPoseFrames = 0;
+                    FLLog.Info("Autoplay",
+                        $"golden-pose: frozen cam={camPos} -> ship={directorPose.Position}");
+                }
+            }
+            else if (autoplayProbeStage == 1)
+            {
+                // Scene is static now; let async texture/IBL uploads and any
+                // temporal accumulation converge for a fixed frame count,
+                // then capture once.
+                paused = true;                      // re-assert each frame
+                if (++goldenPoseFrames >= 30)
+                {
+                    Game.Screenshot(System.IO.Path.Combine(
+                        SiriusAutoplay.GoldenDir!, "pbr.png"));
+                    FLLog.Info("Autoplay", "golden-pose: pbr.png");
+                    autoplayProbeStage = 4;
+                }
+            }
+        }
 
         // SIRIUS_AUTOPLAY diagnostics. Golden mode: wait for the undock
         // animation to finish and the ship to physically settle, then take
@@ -1278,6 +1350,11 @@ World Time: {12:F2}
         // screenshot again to detect skies tracking the camera.
         private void UpdateAutoplayProbe(double dt)
         {
+            if (SiriusAutoplay.GoldenPose && SiriusAutoplay.GoldenDir != null)
+            {
+                UpdateGoldenPose(dt);
+                return;
+            }
             // Golden mode uses stages 0..4 (incl. the no-UI twin shot);
             // probe mode finishes at stage 3.
             var doneStage = SiriusAutoplay.GoldenDir != null ? 4 : 3;
