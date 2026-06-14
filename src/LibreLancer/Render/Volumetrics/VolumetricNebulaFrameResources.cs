@@ -626,8 +626,17 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             rstate.SetStorageImage(4, History);
             rstate.SetStorageImage(5, HistoryConfidence);
             rstate.Shader = shader;
-            rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height), GroupCount(mainDesc.Depth));
-            rstate.BarrierComputeToGraphics();
+            rstate.BeginPassTimer("vol_nebula_history_clamp");
+            try
+            {
+                rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height),
+                    GroupCount(mainDesc.Depth));
+                rstate.BarrierComputeToGraphics();
+            }
+            finally
+            {
+                rstate.EndPassTimer();
+            }
             rstate.Textures[0] = null;
             rstate.Textures[1] = null;
             rstate.Textures[2] = null;
