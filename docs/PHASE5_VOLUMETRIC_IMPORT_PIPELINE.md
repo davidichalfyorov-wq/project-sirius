@@ -119,7 +119,7 @@ Initial OpenVDB PR scope should be importer-only:
 
 ```text
 PR-OVDB-1:
-  - CLI/import tool skeleton
+  - CLI/import tool skeleton (`src/LibreLancer.Tools.OpenVdb`)
   - manifest parser
   - bounds/scale validation
   - density min/max normalization
@@ -176,3 +176,19 @@ zone transform instead of carrying its own world transform. `density_min` and
 `density_max` define the authored scalar range; the runtime bridge computes a
 normalized density scale/bias from those values and keeps procedural density as
 the fallback when the imported asset is unavailable.
+
+The initial packer command expects a reviewed sidecar, the original source
+payload for hash verification, and raw little-endian float32 density samples in
+x-major order:
+
+```bash
+dotnet run --project src/LibreLancer.Tools.OpenVdb -- \
+  --manifest artist_exports/li01_badlands_density.manifest \
+  --source-payload artist_exports/li01_badlands_density.vdb \
+  --samples artist_exports/li01_badlands_density_f32.raw \
+  --output-root generated_assets \
+  --format r16_unorm
+```
+
+The output is `generated_assets/volumes/openvdb/<cache>.siriusvol` plus the
+matching `.siriusvol.manifest` review sidecar.
