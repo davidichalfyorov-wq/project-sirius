@@ -121,7 +121,7 @@ public readonly record struct VolumetricNebulaQualityProfile(
             MultiScatteringLut: true,
             SkyViewLut: true,
             AerialPerspectiveVolume: true,
-            CloudShell: quality >= 2);
+            CloudShell: features.AtmosphereCloudShell && quality >= 2);
         var profileName = performance.AdaptiveApplied ? $"{name}-adaptive" : name;
         return new VolumetricNebulaQualityProfile(
             quality, profileName, main, near, temporal, jitter, density, lighting, displacement, materialFog,

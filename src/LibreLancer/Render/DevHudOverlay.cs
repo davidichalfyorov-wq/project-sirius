@@ -200,6 +200,8 @@ public class DevHudOverlay
             Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"atmo aer   {(features.AtmosphereLuts ? (features.AtmosphereAerialPerspective ? "profile" : "identity") : "off")}",
                 Color4.LightSkyBlue);
+            Line($"atmo cloud {(features.AtmosphereLuts ? (features.AtmosphereCloudShell ? "budget" : "off") : "off")}",
+                Color4.LightSkyBlue);
             if (features.AtmosphereLuts)
             {
                 var viewport = game.RenderContext.CurrentViewport;
@@ -209,7 +211,7 @@ public class DevHudOverlay
                     features.VolumetricQuality,
                     viewport.Width,
                     viewport.Height,
-                    cloudShellRequested: features.VolumetricQuality >= 2);
+                    cloudShellRequested: features.AtmosphereCloudShell);
                 Line($"atmo plan  {budget.DebugSummary}",
                     budget.Enabled ? Color4.LightYellow : Color4.Orange);
                 var atmo = VolumetricAtmosphereFrameResources.LastDebug;

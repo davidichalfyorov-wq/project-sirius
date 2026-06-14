@@ -67,6 +67,9 @@ public class VolumetricAtmosphereAerialProfileTests
         private readonly string? atmosphereAerial = Environment.GetEnvironmentVariable("SIRIUS_ATMOSPHERE_AERIAL");
         private readonly string? atmoAerial = Environment.GetEnvironmentVariable("SIRIUS_ATMO_AERIAL");
         private readonly string? aerialPerspective = Environment.GetEnvironmentVariable("SIRIUS_AERIAL_PERSPECTIVE");
+        private readonly string? atmosphereCloudShell = Environment.GetEnvironmentVariable("SIRIUS_ATMOSPHERE_CLOUD_SHELL");
+        private readonly string? atmoCloudShell = Environment.GetEnvironmentVariable("SIRIUS_ATMO_CLOUD_SHELL");
+        private readonly string? cloudShell = Environment.GetEnvironmentVariable("SIRIUS_CLOUD_SHELL");
 
         public CleanAerialEnvironment()
         {
@@ -75,6 +78,9 @@ public class VolumetricAtmosphereAerialProfileTests
             Environment.SetEnvironmentVariable("SIRIUS_ATMOSPHERE_AERIAL", null);
             Environment.SetEnvironmentVariable("SIRIUS_ATMO_AERIAL", null);
             Environment.SetEnvironmentVariable("SIRIUS_AERIAL_PERSPECTIVE", null);
+            Environment.SetEnvironmentVariable("SIRIUS_ATMOSPHERE_CLOUD_SHELL", null);
+            Environment.SetEnvironmentVariable("SIRIUS_ATMO_CLOUD_SHELL", null);
+            Environment.SetEnvironmentVariable("SIRIUS_CLOUD_SHELL", null);
         }
 
         public void Dispose()
@@ -84,6 +90,9 @@ public class VolumetricAtmosphereAerialProfileTests
             Environment.SetEnvironmentVariable("SIRIUS_ATMOSPHERE_AERIAL", atmosphereAerial);
             Environment.SetEnvironmentVariable("SIRIUS_ATMO_AERIAL", atmoAerial);
             Environment.SetEnvironmentVariable("SIRIUS_AERIAL_PERSPECTIVE", aerialPerspective);
+            Environment.SetEnvironmentVariable("SIRIUS_ATMOSPHERE_CLOUD_SHELL", atmosphereCloudShell);
+            Environment.SetEnvironmentVariable("SIRIUS_ATMO_CLOUD_SHELL", atmoCloudShell);
+            Environment.SetEnvironmentVariable("SIRIUS_CLOUD_SHELL", cloudShell);
         }
     }
 }

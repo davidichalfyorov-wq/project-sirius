@@ -59,6 +59,21 @@ public class VolumetricAtmosphereLutBudgetTests
     }
 
     [Fact]
+    public void HighQualityDoesNotReserveCloudShellUnlessRequested()
+    {
+        var budget = VolumetricAtmosphereLutBudget.Create(
+            requested: true,
+            computeSupported: true,
+            quality: 2,
+            renderWidth: 1920,
+            renderHeight: 1080,
+            cloudShellRequested: false);
+
+        Assert.True(budget.Enabled);
+        Assert.False(budget.CloudShell);
+    }
+
+    [Fact]
     public void LowQualitySuppressesCloudShell()
     {
         var budget = VolumetricAtmosphereLutBudget.Create(

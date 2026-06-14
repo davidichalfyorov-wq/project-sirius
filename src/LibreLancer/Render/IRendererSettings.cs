@@ -117,6 +117,9 @@ public interface IRendererSettings
     /// <summary>Opt-in aerial perspective sampling from the atmosphere LUT bridge.</summary>
     bool SelectedAtmosphereAerialPerspective => false;
 
+    /// <summary>Opt-in cloud-shell budget for the future atmosphere bridge.</summary>
+    bool SelectedAtmosphereCloudShell => false;
+
     /// <summary>Renderer debug view selector, e.g. off, voldensity, voltransmittance, froxels.</summary>
     string SelectedDebugView => "off";
 

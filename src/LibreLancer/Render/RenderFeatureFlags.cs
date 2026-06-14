@@ -27,7 +27,8 @@ public enum RenderFeatureBits
     VolumetricLightningGoldenDisable = 1 << 17,
     VolumetricAdaptiveQuality = 1 << 18,
     VolumetricGodRays = 1 << 19,
-    AtmosphereAerialPerspective = 1 << 20
+    AtmosphereAerialPerspective = 1 << 20,
+    AtmosphereCloudShell = 1 << 21
 }
 
 /// <summary>
@@ -94,6 +95,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricAdaptiveQuality => Bits.HasFlag(RenderFeatureBits.VolumetricAdaptiveQuality);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
     public bool AtmosphereAerialPerspective => Bits.HasFlag(RenderFeatureBits.AtmosphereAerialPerspective);
+    public bool AtmosphereCloudShell => Bits.HasFlag(RenderFeatureBits.AtmosphereCloudShell);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
 
@@ -152,6 +154,9 @@ public readonly record struct RenderFeatureSet(
         if (OverrideBool(settings.SelectedAtmosphereAerialPerspective, "SIRIUS_ATMOSPHERE_AERIAL",
                 "SIRIUS_ATMO_AERIAL", "SIRIUS_AERIAL_PERSPECTIVE"))
             bits |= RenderFeatureBits.AtmosphereAerialPerspective;
+        if (OverrideBool(settings.SelectedAtmosphereCloudShell, "SIRIUS_ATMOSPHERE_CLOUD_SHELL",
+                "SIRIUS_ATMO_CLOUD_SHELL", "SIRIUS_CLOUD_SHELL"))
+            bits |= RenderFeatureBits.AtmosphereCloudShell;
         if (OverrideBool(settings.SelectedRenderDebugMarkers, "SIRIUS_RENDER_DEBUG_MARKERS", "SIRIUS_DEBUG_MARKERS"))
             bits |= RenderFeatureBits.DebugMarkers;
         if (OverrideBool(settings.SelectedRenderCaptureStartup || settings.SelectedRenderCaptureNextFrame,
@@ -207,7 +212,8 @@ public readonly record struct RenderFeatureSet(
         }
         if ((bits & RenderFeatureBits.AtmosphereLuts) == 0)
         {
-            bits &= ~RenderFeatureBits.AtmosphereAerialPerspective;
+            bits &= ~(RenderFeatureBits.AtmosphereAerialPerspective |
+                      RenderFeatureBits.AtmosphereCloudShell);
         }
 
         var debugView = ParseDebugView(

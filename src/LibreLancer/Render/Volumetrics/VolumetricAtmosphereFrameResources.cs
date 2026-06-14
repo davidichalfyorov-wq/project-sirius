@@ -50,7 +50,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             features.VolumetricQuality,
             renderWidth,
             renderHeight,
-            cloudShellRequested: features.VolumetricQuality >= 2);
+            cloudShellRequested: features.AtmosphereCloudShell);
         if (!budget.Enabled)
         {
             DisposeTextures();
