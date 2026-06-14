@@ -130,12 +130,17 @@ public class VolumetricNebulaLayoutTests
 
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.Allocate && x.DebugName == "vol_nebula_allocate");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.ClearIdentity && x.DebugName == "vol_nebula_clear");
+        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.DepthCopy && x.DebugName == "vol_nebula_depth_copy");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.InjectLightningChannels && x.DebugName == "vol_nebula_lightning_channels");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.WakeCurl && x.DebugName == "vol_nebula_wake_curl");
+        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.DebugView && x.DebugName == "vol_nebula_debug_view");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.TemporalReproject);
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.MaterialFogExport);
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.AtmosphereBridge);
         Assert.True(IndexOf(VolumetricNebulaPassSlot.WakeCurl) < IndexOf(VolumetricNebulaPassSlot.InjectDensity));
+        Assert.True(IndexOf(VolumetricNebulaPassSlot.Integrate) < IndexOf(VolumetricNebulaPassSlot.DepthCopy));
+        Assert.True(IndexOf(VolumetricNebulaPassSlot.DepthCopy) < IndexOf(VolumetricNebulaPassSlot.TemporalReproject));
+        Assert.True(IndexOf(VolumetricNebulaPassSlot.DepthCopy) < IndexOf(VolumetricNebulaPassSlot.Composite));
         Assert.True(passes.Count(x => !x.StubInPr52) >= 2);
 
         int IndexOf(VolumetricNebulaPassSlot slot) =>
