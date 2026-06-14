@@ -238,6 +238,7 @@ public class DevHudOverlay
                 Line(froxels.Allocated ? "view data  allocated/stub" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
             }
             if (features.DebugView is RenderDebugView.AtmosphereLuts or
+                RenderDebugView.AtmosphereSkyView or
                 RenderDebugView.AtmosphereAerial or
                 RenderDebugView.AtmosphereCloudShell)
             {

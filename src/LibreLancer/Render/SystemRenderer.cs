@@ -870,6 +870,7 @@ namespace LibreLancer.Render
         private void DrawVolumetricNebulaDebugView(int renderWidth, int renderHeight, RenderDebugView debugView)
         {
             if (debugView is RenderDebugView.AtmosphereLuts or
+                RenderDebugView.AtmosphereSkyView or
                 RenderDebugView.AtmosphereAerial or
                 RenderDebugView.AtmosphereCloudShell)
             {

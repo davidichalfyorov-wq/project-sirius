@@ -61,6 +61,7 @@ public enum RenderDebugView
     VolumetricNear,
     VolumetricNearDensity,
     AtmosphereLuts,
+    AtmosphereSkyView,
     AtmosphereAerial,
     AtmosphereCloudShell
 }
@@ -311,6 +312,7 @@ public readonly record struct RenderFeatureSet(
             "vol_near" or "volnear" or "near" or "near_froxels" or "volumetric_near" => RenderDebugView.VolumetricNear,
             "vol_near_density" or "volneardensity" or "near_density" or "neardensity" => RenderDebugView.VolumetricNearDensity,
             "atmoluts" or "atmosphere_luts" or "atmo_luts" => RenderDebugView.AtmosphereLuts,
+            "atmo_sky" or "atmo_sky_view" or "atmosphere_sky_view" or "sky_view" => RenderDebugView.AtmosphereSkyView,
             "atmo_aerial" or "atmoaerial" or "aerial" => RenderDebugView.AtmosphereAerial,
             "atmo_cloud" or "atmo_cloud_shell" or "atmocloudshell" or "cloud_shell" or "atmosphere_cloud_shell" => RenderDebugView.AtmosphereCloudShell,
             _ => RenderDebugView.Off

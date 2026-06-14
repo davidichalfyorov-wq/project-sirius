@@ -95,6 +95,12 @@ float4 main(Input input) : SV_Target0
         color = lerp(float3(0.015, 0.025, 0.045), float3(0.72, 0.82, 0.95), coverage);
         color += light.xxx * float3(0.16, 0.18, 0.20);
     }
+    else if (mode == 15)
+    {
+        float3 sky = saturate(density.rgb * gain);
+        float luma = dot(sky, float3(0.2126, 0.7152, 0.0722));
+        color = sky + luma.xxx * float3(0.04, 0.05, 0.08);
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);

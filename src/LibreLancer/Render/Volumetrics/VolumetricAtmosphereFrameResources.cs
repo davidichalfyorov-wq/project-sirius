@@ -7,13 +7,12 @@ namespace LibreLancer.Render.Volumetrics;
 
 /// <summary>
 /// Resource owner for the Phase 5/B1 atmosphere LUT path. The textures are
-/// identity-filled until compute generation lands, so enabling atmosphere_luts
-/// gives RenderDoc/HUD-visible resources without changing the current
-/// Atmosphere 2.0 visual path.
+/// CPU-filled with conservative fallback profiles until compute generation
+/// lands, so enabling atmosphere_luts gives RenderDoc/HUD-visible resources
+/// without changing the current Atmosphere 2.0 visual path.
 /// </summary>
 public sealed class VolumetricAtmosphereFrameResources : IDisposable
 {
-    private const ushort HalfZero = 0x0000;
     private const ushort HalfOne = 0x3C00;
 
     private bool disposed;
@@ -99,6 +98,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         int renderWidth, int renderHeight)
     {
         if (debugView is not (global::LibreLancer.Render.RenderDebugView.AtmosphereLuts or
+                              global::LibreLancer.Render.RenderDebugView.AtmosphereSkyView or
                               global::LibreLancer.Render.RenderDebugView.AtmosphereAerial or
                               global::LibreLancer.Render.RenderDebugView.AtmosphereCloudShell) ||
             !Allocated ||
@@ -109,12 +109,14 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
 
         var source = debugView switch
         {
+            global::LibreLancer.Render.RenderDebugView.AtmosphereSkyView => SkyView,
             global::LibreLancer.Render.RenderDebugView.AtmosphereAerial => AerialPerspective,
             global::LibreLancer.Render.RenderDebugView.AtmosphereCloudShell => CloudShell,
             _ => Transmittance
         };
         var paired = debugView switch
         {
+            global::LibreLancer.Render.RenderDebugView.AtmosphereSkyView => SkyView,
             global::LibreLancer.Render.RenderDebugView.AtmosphereAerial => AerialPerspective,
             global::LibreLancer.Render.RenderDebugView.AtmosphereCloudShell => CloudShell,
             _ => MultiScattering
@@ -136,6 +138,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
                 debugView == global::LibreLancer.Render.RenderDebugView.AtmosphereCloudShell ? 2.2f : 1f,
                 debugView switch
                 {
+                    global::LibreLancer.Render.RenderDebugView.AtmosphereSkyView => 15f,
                     global::LibreLancer.Render.RenderDebugView.AtmosphereAerial => 13f,
                     global::LibreLancer.Render.RenderDebugView.AtmosphereCloudShell => 14f,
                     _ => 12f
@@ -180,9 +183,9 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             SurfaceFormat.HdrBlendable, storage: true);
         AerialPerspective = new Texture3D(rstate, budget.AerialWidth, budget.AerialHeight, budget.AerialDepth,
             SurfaceFormat.HdrBlendable, storage: true);
-        FillTransmittanceIdentity(Transmittance);
-        FillZero(MultiScattering);
-        FillSkyViewIdentity(SkyView);
+        FillTransmittanceProfile(Transmittance, budget.Quality);
+        FillMultiScatteringProfile(MultiScattering, budget.Quality);
+        FillSkyViewProfile(SkyView, budget.Quality);
         if (aerialPerspective)
         {
             FillAerialPerspective(AerialPerspective, budget.Quality);
@@ -211,10 +214,25 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         a.AerialDepth == b.AerialDepth &&
         a.CloudShell == b.CloudShell;
 
-    private static void FillTransmittanceIdentity(Texture3D texture)
+    private static void FillTransmittanceProfile(Texture3D texture, int quality)
     {
         var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
-        Array.Fill(data, HalfOne);
+        var index = 0;
+        var invW = texture.Width > 1 ? 1f / (texture.Width - 1) : 0f;
+        var invH = texture.Height > 1 ? 1f / (texture.Height - 1) : 0f;
+        for (var y = 0; y < texture.Height; y++)
+        {
+            var altitudeT = y * invH;
+            for (var x = 0; x < texture.Width; x++)
+            {
+                var sunZenithT = x * invW;
+                var sample = VolumetricAtmosphereLutProfile.EvaluateTransmittance(sunZenithT, altitudeT, quality);
+                data[index++] = FloatToHalfBits(sample.X);
+                data[index++] = FloatToHalfBits(sample.Y);
+                data[index++] = FloatToHalfBits(sample.Z);
+                data[index++] = FloatToHalfBits(sample.W);
+            }
+        }
         texture.SetData(data);
     }
 
@@ -228,12 +246,24 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         texture.SetData(data);
     }
 
-    private static void FillSkyViewIdentity(Texture3D texture)
+    private static void FillMultiScatteringProfile(Texture3D texture, int quality)
     {
         var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
-        for (var i = 3; i < data.Length; i += 4)
+        var index = 0;
+        var invW = texture.Width > 1 ? 1f / (texture.Width - 1) : 0f;
+        var invH = texture.Height > 1 ? 1f / (texture.Height - 1) : 0f;
+        for (var y = 0; y < texture.Height; y++)
         {
-            data[i] = HalfOne;
+            var altitudeT = y * invH;
+            for (var x = 0; x < texture.Width; x++)
+            {
+                var sunZenithT = x * invW;
+                var sample = VolumetricAtmosphereLutProfile.EvaluateMultiScattering(sunZenithT, altitudeT, quality);
+                data[index++] = FloatToHalfBits(sample.X);
+                data[index++] = FloatToHalfBits(sample.Y);
+                data[index++] = FloatToHalfBits(sample.Z);
+                data[index++] = FloatToHalfBits(sample.W);
+            }
         }
         texture.SetData(data);
     }
@@ -265,9 +295,25 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         texture.SetData(data);
     }
 
-    private static void FillZero(Texture3D texture)
+    private static void FillSkyViewProfile(Texture3D texture, int quality)
     {
         var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
+        var index = 0;
+        var invW = texture.Width > 1 ? 1f / (texture.Width - 1) : 0f;
+        var invH = texture.Height > 1 ? 1f / (texture.Height - 1) : 0f;
+        for (var y = 0; y < texture.Height; y++)
+        {
+            var sunZenithT = y * invH;
+            for (var x = 0; x < texture.Width; x++)
+            {
+                var viewZenithT = x * invW;
+                var sample = VolumetricAtmosphereLutProfile.EvaluateSkyView(viewZenithT, sunZenithT, quality);
+                data[index++] = FloatToHalfBits(sample.X);
+                data[index++] = FloatToHalfBits(sample.Y);
+                data[index++] = FloatToHalfBits(sample.Z);
+                data[index++] = FloatToHalfBits(sample.W);
+            }
+        }
         texture.SetData(data);
     }
 
