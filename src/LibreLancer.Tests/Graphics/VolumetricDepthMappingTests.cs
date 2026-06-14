@@ -27,6 +27,26 @@ public class VolumetricDepthMappingTests
     }
 
     [Fact]
+    public void TextureSliceSamplesFroxelCenters()
+    {
+        var grid = FroxelGridDesc.MainForViewport(1920, 1080, 2);
+
+        var near = VolumetricDepthMapping.DistanceToTextureSlice(grid.NearPlane, grid);
+        var far = VolumetricDepthMapping.DistanceToTextureSlice(grid.FarPlane, grid);
+
+        Assert.Equal(0.5f / grid.Depth, near, 6);
+        Assert.Equal((grid.Depth - 0.5f) / grid.Depth, far, 6);
+    }
+
+    [Fact]
+    public void InvalidGridMapsToFirstTextureSlice()
+    {
+        var invalid = default(FroxelGridDesc);
+
+        Assert.Equal(0f, VolumetricDepthMapping.DistanceToTextureSlice(1000f, invalid));
+    }
+
+    [Fact]
     public void MaterialFogSettingsExposeNearFarDepthAndExtinction()
     {
         var grid = FroxelGridDesc.MainForViewport(1280, 720, 1);

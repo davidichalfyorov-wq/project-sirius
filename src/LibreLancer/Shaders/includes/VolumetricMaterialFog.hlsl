@@ -16,9 +16,11 @@ SamplerState VolFogSampler : register(s15, TEXTURE_SPACE);
 Texture3D<float4> AtmoAerial : register(t14, TEXTURE_SPACE);
 SamplerState AtmoAerialSampler : register(s14, TEXTURE_SPACE);
 
-float VolFogDistanceToSlice(float dist, float numSlices, float nearPlane, float farPlane)
+float VolFogDistanceToTextureSlice(float dist, float numSlices, float nearPlane, float farPlane)
 {
-    return sqrt(saturate((dist - nearPlane) / max(farPlane - nearPlane, 1e-4))) * numSlices;
+    float normalized = sqrt(saturate((dist - nearPlane) / max(farPlane - nearPlane, 1e-4)));
+    float depth = max(numSlices, 1.0);
+    return saturate((normalized * max(depth - 1.0, 0.0) + 0.5) / depth);
 }
 
 float4 SampleVolumetricFog(float3 worldPos, float viewDist)
@@ -36,9 +38,9 @@ float4 SampleVolumetricFog(float3 worldPos, float viewDist)
 
     float2 uv = clip.xy / clip.w * 0.5 + 0.5;
     float froxelDist = min(viewDist, VolFogParams.z);
-    float slice = VolFogDistanceToSlice(froxelDist, VolFogParams.w, VolFogParams.y, VolFogParams.z);
+    float slice = VolFogDistanceToTextureSlice(froxelDist, VolFogParams.w, VolFogParams.y, VolFogParams.z);
     float4 fog = VolFogIntegrated.SampleLevel(VolFogSampler,
-        float3(saturate(uv), saturate(slice / VolFogParams.w)), 0);
+        float3(saturate(uv), slice), 0);
 
     if (viewDist > VolFogParams.z)
     {

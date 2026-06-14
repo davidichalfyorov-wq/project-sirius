@@ -19,6 +19,18 @@ public static class VolumetricDepthMapping
         return MathF.Sqrt(normalized);
     }
 
+    public static float DistanceToTextureSlice(float viewDistance, FroxelGridDesc grid)
+    {
+        if (!grid.IsValid)
+        {
+            return 0f;
+        }
+        var normalized = DistanceToNormalizedSlice(viewDistance, grid);
+        var depth = Math.Max(grid.Depth, 1);
+        var centeredSlice = normalized * Math.Max(depth - 1, 0) + 0.5f;
+        return Math.Clamp(centeredSlice / depth, 0f, 1f);
+    }
+
     public static Vector4 DepthParams(FroxelGridDesc grid, bool enabled)
     {
         var range = Math.Max(grid.FarPlane - grid.NearPlane, 1e-4f);

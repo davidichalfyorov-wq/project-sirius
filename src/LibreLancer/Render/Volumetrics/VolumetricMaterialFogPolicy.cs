@@ -28,17 +28,20 @@ public static class VolumetricMaterialFogPolicy
 
         if (!compositeApplied)
         {
-            return VolumetricMaterialFogBinding.Waiting("waiting for composite");
+            return VolumetricMaterialFogBinding.Waiting("waiting for composite",
+                compositeApplied, integratedAvailable);
         }
 
         if (!integratedAvailable)
         {
-            return VolumetricMaterialFogBinding.Waiting("waiting for integrated volume");
+            return VolumetricMaterialFogBinding.Waiting("waiting for integrated volume",
+                compositeApplied, integratedAvailable);
         }
 
         if (!grid.IsValid)
         {
-            return VolumetricMaterialFogBinding.Waiting("invalid froxel grid");
+            return VolumetricMaterialFogBinding.Waiting("invalid froxel grid",
+                compositeApplied, integratedAvailable);
         }
 
         var settings = VolumetricDepthMapping.MaterialFogSettings(grid, meanExtinction);
@@ -71,6 +74,8 @@ public readonly record struct VolumetricMaterialFogBinding(
     public static VolumetricMaterialFogBinding Off(string summary) =>
         new(false, false, false, false, false, Vector4.Zero, "off", summary);
 
-    public static VolumetricMaterialFogBinding Waiting(string summary) =>
-        new(false, true, false, false, false, Vector4.Zero, "wait", summary);
+    public static VolumetricMaterialFogBinding Waiting(string summary,
+        bool compositeApplied = false,
+        bool integratedAvailable = false) =>
+        new(false, true, compositeApplied, integratedAvailable, false, Vector4.Zero, "wait", summary);
 }

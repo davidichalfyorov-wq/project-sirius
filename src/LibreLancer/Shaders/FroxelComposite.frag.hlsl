@@ -25,17 +25,22 @@ cbuffer FroxelCompositeParams : register(b3, UNIFORM_SPACE)
     float4x4 InverseProjection;
 };
 
+float FroxelTextureSliceFromNormalized(float normalized, float depth)
+{
+    return saturate((saturate(normalized) * max(depth - 1.0, 0.0) + 0.5) / max(depth, 1.0));
+}
+
 float FroxelSliceFromDepth(float2 uv, float fallbackSlice)
 {
     if (DepthParams.x < 0.5)
     {
-        return fallbackSlice;
+        return FroxelTextureSliceFromNormalized(fallbackSlice, GridParams.z);
     }
 
     float deviceDepth = SceneDepth.SampleLevel(DepthSampler, uv, 0);
     if (deviceDepth >= 0.999999)
     {
-        return fallbackSlice;
+        return FroxelTextureSliceFromNormalized(fallbackSlice, GridParams.z);
     }
 
     float2 ndc = uv * 2.0 - 1.0;
@@ -43,7 +48,7 @@ float FroxelSliceFromDepth(float2 uv, float fallbackSlice)
     view.xyz /= max(abs(view.w), 1e-6);
     float viewDistance = length(view.xyz);
     float normalized = saturate((viewDistance - DepthParams.y) * DepthParams.z);
-    return sqrt(normalized);
+    return FroxelTextureSliceFromNormalized(sqrt(normalized), GridParams.z);
 }
 
 float ViewDistanceFromDepth(float2 uv)

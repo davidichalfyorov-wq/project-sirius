@@ -39,7 +39,29 @@ public class VolumetricMaterialFogPolicyTests
 
         Assert.False(binding.CanBind);
         Assert.Equal("wait", binding.Status);
+        Assert.False(binding.CompositeApplied);
+        Assert.True(binding.IntegratedAvailable);
         Assert.Contains("composite", binding.DebugSummary);
+    }
+
+    [Fact]
+    public void RequestedFogWaitsForIntegratedVolumeAfterComposite()
+    {
+        var grid = FroxelGridDesc.MainForViewport(1280, 720, 2);
+
+        var binding = VolumetricMaterialFogPolicy.Evaluate(
+            requested: true,
+            compositeApplied: true,
+            integratedAvailable: false,
+            temporalApplied: false,
+            historyAvailable: false,
+            grid,
+            meanExtinction: 0.02f);
+
+        Assert.False(binding.CanBind);
+        Assert.True(binding.CompositeApplied);
+        Assert.False(binding.IntegratedAvailable);
+        Assert.Contains("integrated", binding.DebugSummary);
     }
 
     [Fact]
