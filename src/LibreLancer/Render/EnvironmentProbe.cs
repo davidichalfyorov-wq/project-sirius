@@ -57,7 +57,7 @@ public sealed class EnvironmentProbe : IDisposable
 
     /// <summary>Builds the probe; null only on unexpected read errors.</summary>
     public static EnvironmentProbe Build(RenderContext rstate, ResourceManager resources,
-        string? cubemapPath, Color3f ambientFallback, float intensity = 1f)
+        string? cubemapPath, Color3f ambientFallback)
     {
         Vector3[][] faces;
         if (!string.IsNullOrWhiteSpace(cubemapPath) && resources.ResourceExists(cubemapPath))
@@ -84,7 +84,7 @@ public sealed class EnvironmentProbe : IDisposable
         {
             for (var face = 0; face < 6; face++)
             {
-                specular.SetData((CubeMapFace)face, mip, null, EncodeFace(level[face], size, intensity), 0, size * size);
+                specular.SetData((CubeMapFace)face, mip, null, EncodeFace(level[face], size), 0, size * size);
             }
             if (mip < SpecularMips - 1)
             {
@@ -98,7 +98,7 @@ public sealed class EnvironmentProbe : IDisposable
         for (var face = 0; face < 6; face++)
         {
             irradiance.SetData((CubeMapFace)face, 0, null,
-                EncodeFace(irradianceFaces[face], IrradianceSize, intensity), 0, IrradianceSize * IrradianceSize);
+                EncodeFace(irradianceFaces[face], IrradianceSize), 0, IrradianceSize * IrradianceSize);
         }
 
         return new EnvironmentProbe(specular, irradiance);
@@ -239,18 +239,12 @@ public sealed class EnvironmentProbe : IDisposable
         return result;
     }
 
-    private static Bgra8[] EncodeFace(Vector3[] linear, int size, float intensity = 1f)
+    private static Bgra8[] EncodeFace(Vector3[] linear, int size)
     {
         var pixels = new Bgra8[size * size];
         for (var i = 0; i < size * size; i++)
         {
-            // IBL intensity (Ф2.0): scale the probe radiance in linear before
-            // the sRGB encode. intensity == 1 is bitwise identity (neutral
-            // fallback); >1 lifts the near-black space probe to reveal its real
-            // directional gradient on ship hulls. The sRGB 8-bit store clamps
-            // the brightest texels at 1.0 (acceptable for the dim space probe).
-            var c = linear[i] * intensity;
-            pixels[i] = new Bgra8(EncodeSrgb(c.X), EncodeSrgb(c.Y), EncodeSrgb(c.Z), 255);
+            pixels[i] = new Bgra8(EncodeSrgb(linear[i].X), EncodeSrgb(linear[i].Y), EncodeSrgb(linear[i].Z), 255);
         }
         return pixels;
     }

@@ -244,6 +244,8 @@ namespace LibreLancer.Render.Materials
             public float Roughness;
             public float Metallic;
             public float DebugMode;
+            public float IblIntensity;  // Ф2.0.2: IBL boost (1 = neutral)
+            public Vector3 _iblPad;     // pad cbuffer row to 16B (matches HLSL b3 size)
         }
 
 
@@ -337,7 +339,8 @@ namespace LibreLancer.Render.Materials
                     Metallic = MaterialNormalizer.Metallic(Metallic, !string.IsNullOrEmpty(MtSampler)),
                     Roughness = MaterialNormalizer.Roughness(Roughness, !string.IsNullOrEmpty(RtSampler)),
                     Oc = Oc * OpacityMultiplier,
-                    DebugMode = DebugViewMode
+                    DebugMode = DebugViewMode,
+                    IblIntensity = RenderMaterial.IblIntensity
                 };
                 shader.SetUniformBlock(3, ref param);
 

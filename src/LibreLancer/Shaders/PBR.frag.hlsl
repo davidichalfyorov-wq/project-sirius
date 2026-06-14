@@ -56,6 +56,10 @@ cbuffer PBRParameters : register(b3, UNIFORM_SPACE)
     float Roughness;
     float Metallic;
     float DebugMode;
+    // Ф2.0.2: IBL intensity multiplier (1 = neutral). Lifts the near-black
+    // space probe in linear, post-sample, so the sRGB-8bit probe store does
+    // not clamp the boost (the probe-build exposure path topped out ~1.8x).
+    float IblIntensity;
 };
 
 cbuffer TexCoordSelectors : register(b5, UNIFORM_SPACE)
@@ -300,10 +304,10 @@ float4 ShadePBR(Input input, out float3 gbufferNormal, out float gbufferRoughnes
     // + split-sum LUT for specular. Probe faces store sRGB bytes.
     {
         float NdotVa = clamp(abs(dot(n, v)), 1e-3, 1.0);
-        float3 irradiance = SRGBtoLinear(IrradianceMap.Sample(IrradianceSampler, n)).rgb;
+        float3 irradiance = SRGBtoLinear(IrradianceMap.Sample(IrradianceSampler, n)).rgb * IblIntensity;
         float3 reflected = reflect(-v, n);
         float specMip = perceptualRoughness * 4.0; // SpecularMips - 1
-        float3 prefiltered = SRGBtoLinear(PrefilteredMap.SampleLevel(PrefilteredSampler, reflected, specMip)).rgb;
+        float3 prefiltered = SRGBtoLinear(PrefilteredMap.SampleLevel(PrefilteredSampler, reflected, specMip)).rgb * IblIntensity;
         float2 lutSample = BrdfLutMap.Sample(BrdfLutSampler, float2(NdotVa, perceptualRoughness)).rg;
 #ifdef RTAO
         irradiance *= rtao;
