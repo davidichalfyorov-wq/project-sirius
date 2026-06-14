@@ -27,6 +27,16 @@ public interface IRendererSettings
     bool SelectedHdr { get; }
     TonemapMode SelectedTonemapper { get; }
     float SelectedExposure { get; }
+
+    /// <summary>Auto-exposure / eye adaptation (Slice 1). Default off -> fixed SelectedExposure.</summary>
+    bool SelectedAutoExposure => false;
+
+    /// <summary>>= 0 freezes auto-exposure at this exposure multiplier (deterministic captures).</summary>
+    float SelectedAutoExposurePin => -1f;
+
+    /// <summary>EV-style auto-exposure bias in stops.</summary>
+    float SelectedAutoExposureCompensation => 0f;
+
     bool SelectedBloom { get; }
     float SelectedBloomThreshold { get; }
     float SelectedBloomIntensity { get; }

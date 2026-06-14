@@ -219,8 +219,12 @@ namespace LibreLancer.Render
             LoadZones(system.AsteroidFields, system.Nebulae);
         }
 
+        // Last frame delta, forwarded to auto-exposure adaptation in Draw().
+        private float lastFrameSeconds = 1f / 60f;
+
         public void Update(double elapsed)
         {
+            lastFrameSeconds = (float)elapsed;
             foreach (var model in StarSphereModels)
             {
                 model.Update(RenderClock.Get(game.TotalTime));
@@ -390,6 +394,10 @@ namespace LibreLancer.Render
             hdrPipeline ??= new HdrFramePipeline(rstate);
             hdrPipeline.Tonemapper = Settings.SelectedTonemapper;
             hdrPipeline.Exposure = Settings.SelectedExposure;
+            hdrPipeline.AutoExposureEnabled = Settings.SelectedAutoExposure;
+            hdrPipeline.AutoExpPin = Settings.SelectedAutoExposurePin;
+            hdrPipeline.AutoExpCompensation = Settings.SelectedAutoExposureCompensation;
+            hdrPipeline.DeltaSeconds = lastFrameSeconds;
             hdrPipeline.BloomEnabled = Settings.SelectedBloom;
             hdrPipeline.BloomThreshold = Settings.SelectedBloomThreshold;
             hdrPipeline.BloomIntensity = Settings.SelectedBloomIntensity;

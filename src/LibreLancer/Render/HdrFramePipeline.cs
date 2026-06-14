@@ -22,6 +22,26 @@ internal sealed class HdrFramePipeline : IDisposable
     public TonemapMode Tonemapper = TonemapMode.Off;
     public float Exposure = 1f;
 
+    // Auto-exposure / eye adaptation (graphics roadmap, "Slice 1"). Opt-in:
+    // when enabled, the average scene luminance drives Exposure each frame
+    // instead of the fixed value, so dark space and bright sun-side both read
+    // well. v1 reads back a downsampled copy of the HDR scene on the CPU and
+    // computes a log-average; the Tonemap shader is untouched (it keeps using
+    // Exposure). Default OFF -> exact current behaviour. AutoExpPin >= 0 freezes
+    // the value (golden/deterministic captures).
+    public bool AutoExposureEnabled;
+    public float AutoExpKey = 0.18f;          // middle-grey target
+    public float AutoExpMinExposure = 0.05f;  // exposure multiplier clamp
+    public float AutoExpMaxExposure = 8f;
+    public float AutoExpSpeedUp = 3f;         // adaptation rate towards brighter
+    public float AutoExpSpeedDown = 1f;       // adaptation rate towards darker
+    public float AutoExpCompensation = 0f;    // EV-style bias, in stops
+    public float AutoExpPin = -1f;            // >= 0 freezes exposure (determinism)
+    public float DeltaSeconds = 1f / 60f;     // set per frame by SystemRenderer
+    private float adaptedLuminance = 0.18f;   // temporal adaptation state
+    private byte[]? exposureReadback;
+    private bool exposureReadbackUnavailable;
+
     public bool BloomEnabled;
     public float BloomThreshold = 1.2f;
     public float BloomIntensity = 0.18f;
@@ -82,6 +102,11 @@ internal sealed class HdrFramePipeline : IDisposable
         public readonly List<Texture2D> BloomTextures = new();
         public int BloomChainMips;
 
+        // Tiny non-thresholded downsample chain for CPU auto-exposure: the
+        // smallest level (~<=32px) is read back each frame for a log-average.
+        public readonly List<RenderTarget2D> ExposureChain = new();
+        public readonly List<Texture2D> ExposureTextures = new();
+
         public RenderTarget2D? RayMaskTarget;
         public RenderTarget2D? RayBlurTarget;
         public Texture2D? RayMaskTexture;
@@ -126,6 +151,12 @@ internal sealed class HdrFramePipeline : IDisposable
         {
             Scene.Dispose();
             DisposeBloomChain();
+            foreach (var target in ExposureChain)
+            {
+                target.Dispose();
+            }
+            ExposureChain.Clear();
+            ExposureTextures.Clear();
             RayMaskTarget?.Dispose();
             RayBlurTarget?.Dispose();
             LdrTarget?.Dispose();
@@ -360,6 +391,22 @@ internal sealed class HdrFramePipeline : IDisposable
                 rstate.EndPassTimer();
             }
 
+            // Auto-exposure (Slice 1): derive Exposure from the scene before the
+            // tonemap consumes it. Pin short-circuits for determinism.
+            if (AutoExposureEnabled)
+            {
+                if (AutoExpPin >= 0f)
+                {
+                    Exposure = AutoExpPin;
+                }
+                else
+                {
+                    rstate.BeginPassTimer("post.auto_exposure");
+                    ComputeAutoExposure(targets);
+                    rstate.EndPassTimer();
+                }
+            }
+
             // Roadmap 4.7 frame order: HDR -> bloom/rays -> tonemap ->
             // post-AA -> UI. With AA on, the tonemap resolves into an LDR
             // buffer and the AA pass produces the real output.
@@ -478,6 +525,116 @@ internal sealed class HdrFramePipeline : IDisposable
         rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
         rstate.PopScissor();
         rstate.PopViewport();
+    }
+
+    private void EnsureExposureChain(SizedTargets targets)
+    {
+        if (targets.ExposureChain.Count > 0)
+        {
+            return;
+        }
+        var w = Math.Max(targets.Width / 2, 1);
+        var h = Math.Max(targets.Height / 2, 1);
+        // Halve until the largest dimension is small enough for a cheap readback.
+        for (var guard = 0; guard < 16; guard++)
+        {
+            var tex = new Texture2D(rstate, w, h, false, SurfaceFormat.HdrBlendable);
+            targets.ExposureTextures.Add(tex);
+            targets.ExposureChain.Add(new RenderTarget2D(rstate, tex));
+            if (Math.Max(w, h) <= 32)
+            {
+                break;
+            }
+            w = Math.Max(w / 2, 1);
+            h = Math.Max(h / 2, 1);
+        }
+    }
+
+    /// <summary>
+    /// "Slice 1" auto-exposure: progressively box-downsample the HDR scene
+    /// (reusing the non-thresholded bloom downsample shader) into a tiny target,
+    /// read it back, take a log-average luminance, adapt over time, and set
+    /// Exposure. v1 uses a synchronous CPU readback - opt-in and default off.
+    /// </summary>
+    private void ComputeAutoExposure(SizedTargets targets)
+    {
+        if (exposureReadbackUnavailable)
+        {
+            return;
+        }
+        EnsureExposureChain(targets);
+        if (targets.ExposureChain.Count == 0)
+        {
+            return;
+        }
+        downsampleShader ??= AllShaders.BloomDownsample.Get(0);
+        rstate.BlendMode = BlendMode.Opaque;
+
+        var src = targets.Scene.Texture;
+        for (var i = 0; i < targets.ExposureChain.Count; i++)
+        {
+            rstate.RenderTarget = targets.ExposureChain[i];
+            var dst = targets.ExposureTextures[i];
+            var rect = new Rectangle(0, 0, dst.Width, dst.Height);
+            rstate.PushViewport(rect);
+            rstate.PushScissor(rect, false);
+            var p = new Vector4(1f / src.Width, 1f / src.Height, 0f, 0f);
+            downsampleShader.SetUniformBlock(3, ref p);
+            rstate.Textures[0] = src;
+            rstate.Samplers[0] = SamplerState.LinearClamp;
+            rstate.Shader = downsampleShader;
+            rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+            rstate.PopScissor();
+            rstate.PopViewport();
+            src = dst;
+        }
+
+        var small = targets.ExposureTextures[^1];
+        var n = small.Width * small.Height;
+        var byteCount = n * 8; // RGBA16F = 8 bytes/texel
+        if (exposureReadback == null || exposureReadback.Length != byteCount)
+        {
+            exposureReadback = new byte[byteCount];
+        }
+        try
+        {
+            small.GetData(exposureReadback);
+        }
+        catch (Exception e)
+        {
+            exposureReadbackUnavailable = true;
+            FLLog.Warning("AutoExposure", $"readback unavailable, using fixed exposure: {e.Message}");
+            return;
+        }
+
+        double logSum = 0;
+        var count = 0;
+        for (var i = 0; i < n; i++)
+        {
+            var o = i * 8;
+            float r = (float)BitConverter.ToHalf(exposureReadback, o);
+            float g = (float)BitConverter.ToHalf(exposureReadback, o + 2);
+            float b = (float)BitConverter.ToHalf(exposureReadback, o + 4);
+            var lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            if (!float.IsFinite(lum) || lum < 0f)
+            {
+                lum = 0f;
+            }
+            logSum += Math.Log(Math.Max(lum, 1e-4f));
+            count++;
+        }
+        var avgLum = count > 0 ? (float)Math.Exp(logSum / count) : 0.18f;
+
+        if (!float.IsFinite(adaptedLuminance) || adaptedLuminance <= 0f)
+        {
+            adaptedLuminance = avgLum;
+        }
+        var speed = avgLum > adaptedLuminance ? AutoExpSpeedUp : AutoExpSpeedDown;
+        var t = 1f - MathF.Exp(-MathF.Max(DeltaSeconds, 0f) * MathF.Max(speed, 0f));
+        adaptedLuminance += (avgLum - adaptedLuminance) * Math.Clamp(t, 0f, 1f);
+
+        var exp = AutoExpKey * MathF.Pow(2f, AutoExpCompensation) / MathF.Max(adaptedLuminance, 1e-4f);
+        Exposure = Math.Clamp(exp, AutoExpMinExposure, AutoExpMaxExposure);
     }
 
     private struct GodRaysUniforms

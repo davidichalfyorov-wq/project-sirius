@@ -56,6 +56,16 @@ namespace LibreLancer
         public string Tonemapper = "filmic";
         [Entry("exposure")]
         public float Exposure = 1.0f;
+        // Auto-exposure / eye adaptation (Slice 1). Opt-in; when on, the average
+        // scene luminance drives exposure each frame instead of the fixed value.
+        [Entry("auto_exposure")]
+        public bool AutoExposure = false;
+        // >= 0 freezes auto-exposure at this multiplier (deterministic captures).
+        [Entry("auto_exposure_pin")]
+        public float AutoExposurePin = -1.0f;
+        // EV-style bias in stops applied on top of auto-exposure.
+        [Entry("auto_exposure_compensation")]
+        public float AutoExposureCompensation = 0.0f;
         [Entry("bloom")]
         public bool Bloom = true;
         // Linear-light threshold (phase 2): display 0.7 sits around 0.45
@@ -257,6 +267,9 @@ namespace LibreLancer
                     _ => TonemapMode.Filmic
                 };
         float IRendererSettings.SelectedExposure => Exposure;
+        bool IRendererSettings.SelectedAutoExposure => Hdr && AutoExposure;
+        float IRendererSettings.SelectedAutoExposurePin => AutoExposurePin;
+        float IRendererSettings.SelectedAutoExposureCompensation => AutoExposureCompensation;
         bool IRendererSettings.SelectedBloom => Hdr && Bloom;
         float IRendererSettings.SelectedBloomThreshold => BloomThreshold;
         float IRendererSettings.SelectedBloomIntensity => BloomIntensity;
@@ -341,6 +354,9 @@ namespace LibreLancer
             writer.WriteLine($"hdr = {(Hdr ? "true" : "false")}");
             writer.WriteLine($"tonemapper = {Tonemapper}");
             writer.WriteLine($"exposure = {Fmt(Exposure)}");
+            writer.WriteLine($"auto_exposure = {(AutoExposure ? "true" : "false")}");
+            writer.WriteLine($"auto_exposure_pin = {Fmt(AutoExposurePin)}");
+            writer.WriteLine($"auto_exposure_compensation = {Fmt(AutoExposureCompensation)}");
             writer.WriteLine($"bloom = {(Bloom ? "true" : "false")}");
             writer.WriteLine($"bloom_threshold = {Fmt(BloomThreshold)}");
             writer.WriteLine($"bloom_intensity = {Fmt(BloomIntensity)}");
@@ -420,6 +436,9 @@ namespace LibreLancer
                 Hdr = Hdr,
                 Tonemapper = Tonemapper,
                 Exposure = Exposure,
+                AutoExposure = AutoExposure,
+                AutoExposurePin = AutoExposurePin,
+                AutoExposureCompensation = AutoExposureCompensation,
                 Bloom = Bloom,
                 BloomThreshold = BloomThreshold,
                 BloomIntensity = BloomIntensity,
@@ -493,6 +512,15 @@ namespace LibreLancer
                 Tonemapper = "filmic";
             }
             Exposure = System.Math.Clamp(Exposure, 0.25f, 4.0f);
+            if (float.IsNaN(AutoExposurePin) || float.IsInfinity(AutoExposurePin) || AutoExposurePin < 0f)
+            {
+                AutoExposurePin = -1f;
+            }
+            else
+            {
+                AutoExposurePin = System.Math.Clamp(AutoExposurePin, 0.05f, 8.0f);
+            }
+            AutoExposureCompensation = System.Math.Clamp(AutoExposureCompensation, -4.0f, 4.0f);
             BloomThreshold = System.Math.Clamp(BloomThreshold, 0.0f, 4.0f);
             BloomIntensity = System.Math.Clamp(BloomIntensity, 0.0f, 2.0f);
             BloomRadius = System.Math.Clamp(BloomRadius, 0.0f, 1.5f);
