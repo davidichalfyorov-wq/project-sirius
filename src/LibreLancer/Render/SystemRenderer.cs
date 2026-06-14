@@ -292,6 +292,7 @@ namespace LibreLancer.Render
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
         private VolumetricNebulaFrameResources? volumetricNebulaResources;
+        private readonly VolumetricShipDisplacementState volumetricShipDisplacement = new();
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
         private bool rtShadowsWasActive;
@@ -770,8 +771,11 @@ namespace LibreLancer.Render
             }
 
             volumetricNebulaResources ??= new VolumetricNebulaFrameResources();
+            var displacementFrame = features.VolumetricShipDisplacement
+                ? volumetricShipDisplacement.BuildFrame(World.Objects, camera.Position, (float)game.TotalTime)
+                : VolumetricShipDisplacementFrame.Empty;
             volumetricNebulaResources.Ensure(rstate, renderWidth, renderHeight, features, profile,
-                (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position));
+                (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position), displacementFrame);
         }
 
         private bool ShouldUseVolumetricCompositeThisFrame(RenderFeatureSet features, bool hasActiveProfile) =>
@@ -832,7 +836,8 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricHistory or
                                   RenderDebugView.VolumetricHistoryConfidence or
                                   RenderDebugView.VolumetricJitter or
-                                  RenderDebugView.VolumetricNear))
+                                  RenderDebugView.VolumetricNear or
+                                  RenderDebugView.VolumetricNearDensity))
             {
                 return;
             }

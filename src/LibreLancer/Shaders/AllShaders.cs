@@ -35,6 +35,7 @@ public static class AllShaders
     public static ShaderBundle? FroxelDebugSlice;
     public static ShaderBundle? FroxelInject;
     public static ShaderBundle? FroxelLight;
+    public static ShaderBundle? FroxelDisplacement;
     public static ShaderBundle? FroxelLightning;
     public static ShaderBundle? FroxelIntegrate;
     public static ShaderBundle? FroxelTemporal;
@@ -113,6 +114,7 @@ public static class AllShaders
             FroxelDebugSlice ??= Compile(context, "FroxelDebugSlice");
             FroxelInject ??= Compile(context, "FroxelInject");
             FroxelLight ??= Compile(context, "FroxelLight");
+            FroxelDisplacement ??= Compile(context, "FroxelDisplacement");
             FroxelLightning ??= Compile(context, "FroxelLightning");
             FroxelIntegrate ??= Compile(context, "FroxelIntegrate");
             FroxelTemporal ??= Compile(context, "FroxelTemporal");

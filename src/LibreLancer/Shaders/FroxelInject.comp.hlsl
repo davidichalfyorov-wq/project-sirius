@@ -7,6 +7,8 @@ RWTexture3D<float4> Density : register(u0, TEXTURE_SPACE);
 
 Texture2D<float4> JitterNoise : register(t3, TEXTURE_SPACE);
 SamplerState JitterSampler : register(s3, TEXTURE_SPACE);
+Texture3D<float4> DisplacementVolume : register(t4, TEXTURE_SPACE);
+SamplerState DisplacementSampler : register(s4, TEXTURE_SPACE);
 
 cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
 {
@@ -20,6 +22,7 @@ cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
     float4 JitterParams;        // x: enabled, y: tile size, z: frame index, w: reserved
     float4 NearDetailParams;    // x: enabled, y: base freq mul, z: detail freq mul, w: erosion boost
     float4 NearDustParams;      // x: dust density, y: dust strength, z: contrast, w: warp boost
+    float4 DisplacementParams;  // x: enabled, y: strength, z: near-only, w: unused
 };
 
 float Hash13(float3 p)
@@ -147,6 +150,15 @@ void main(uint3 id : SV_DispatchThreadID)
     float dustGate = smoothstep(1.0 - saturate(NearDustParams.x), 1.0, nearDustNoise);
     float dust = dustGate * saturate(NearDustParams.y) * zoneFalloff * nearDetail;
     normalizedDensity = saturate(normalizedDensity * lerp(1.0, max(NearDustParams.z, 0.1), nearDetail) + dust);
+    if (DisplacementParams.x > 0.5 && GridSize.w > 0.5)
+    {
+        float4 disp = DisplacementVolume.SampleLevel(DisplacementSampler, uvw, 0);
+        float push = saturate(disp.r * max(DisplacementParams.y, 0.0));
+        float wake = saturate(disp.b) * 0.10;
+        normalizedDensity = saturate(normalizedDensity * (1.0 - push * 0.72) +
+            normalizedDensity * wake);
+        carved = max(carved, push);
+    }
     float extinction = lerp(DensityParams.y, DensityParams.x, zoneFalloff);
     float physicalExtinction = extinction * normalizedDensity;
 

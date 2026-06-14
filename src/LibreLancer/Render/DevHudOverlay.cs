@@ -114,6 +114,13 @@ public class DevHudOverlay
             {
                 Line($"vol near detail {froxels.NearDetailSummary}", Color4.LightGreen);
             }
+            if (froxels.DisplacementCapsules > 0 || !string.IsNullOrWhiteSpace(froxels.DisplacementSummary))
+            {
+                Line(FormattableString.Invariant($"vol disp   {froxels.DisplacementCapsules} capsules"),
+                    froxels.DisplacementUpdated ? Color4.LightGreen : Color4.LightBlue);
+                Line($"vol wake   {froxels.DisplacementSummary}",
+                    froxels.DisplacementUpdated ? Color4.LightGreen : Color4.LightBlue);
+            }
             Line($"vol comp   {(froxels.Allocated ? (froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "hdr" : "off") : "off")}",
                 froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
             Line($"vol depth  {(froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "copy" : "no")}",

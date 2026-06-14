@@ -45,7 +45,7 @@ float4 main(Input input) : SV_Target0
     }
     else if (mode == 4)
     {
-        color = density.rgb * gain;
+        color = saturate(density.rgb);
     }
     else if (mode == 5)
     {
