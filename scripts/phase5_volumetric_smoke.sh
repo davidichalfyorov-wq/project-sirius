@@ -15,6 +15,7 @@
 #   SIRIUS_PHASE5_DEBUG_VIEW=off|vol_transmittance|vol_near_density|vol_wake_vectors
 #   SIRIUS_PHASE5_DEV_HUD=0|1
 #   SIRIUS_PHASE5_PASS_TIMINGS=0|1
+#   SIRIUS_PHASE5_ASSERT_PASSES=0|1
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +26,8 @@ QUALITY="${SIRIUS_PHASE5_QUALITY:-2}"
 DEBUG_VIEW="${SIRIUS_PHASE5_DEBUG_VIEW:-off}"
 DEV_HUD="${SIRIUS_PHASE5_DEV_HUD:-0}"
 PASS_TIMINGS_FLAG="${SIRIUS_PHASE5_PASS_TIMINGS:-0}"
+ASSERT_PASSES="${SIRIUS_PHASE5_ASSERT_PASSES:-1}"
+VALIDATION_PASS_TIMINGS="${SIRIUS_PHASE5_VALIDATION_PASS_TIMINGS:-1}"
 
 mkdir -p "$OUT"
 
@@ -63,6 +66,7 @@ echo "== Phase 5 volumetric smoke =="
 echo "ROOT=$ROOT"
 echo "OUT=$OUT"
 echo "POSE=$POSE QUALITY=$QUALITY DEBUG_VIEW=$DEBUG_VIEW DEV_HUD=$DEV_HUD PASS_TIMINGS=$PASS_TIMINGS_FLAG"
+echo "ASSERT_PASSES=$ASSERT_PASSES VALIDATION_PASS_TIMINGS=$VALIDATION_PASS_TIMINGS"
 
 echo "-- capture"
 PASS_TIMINGS="$PASS_TIMINGS_FLAG" EXTRA_ENV="$PHASE5_ENV" EXTRA_INI="$PHASE5_INI" \
@@ -74,9 +78,34 @@ if [ ! -f "$OUT/capture/space_noui.png" ]; then
 fi
 
 echo "-- validation"
-PASS_TIMINGS="$PASS_TIMINGS_FLAG" EXTRA_ENV="$PHASE5_ENV" EXTRA_INI="$PHASE5_INI" \
+PASS_TIMINGS="$VALIDATION_PASS_TIMINGS" EXTRA_ENV="$PHASE5_ENV" EXTRA_INI="$PHASE5_INI" \
     "$ROOT/scripts/vk_validate_run.sh" "$OUT/validation" \
     "$ROOT/scripts/rt_space_test.sh" "$OUT/validation" | tee "$OUT/validation.txt"
+
+if [ "$ASSERT_PASSES" = "1" ]; then
+    LOG="$OUT/validation/run.log"
+    required_passes=(
+        "vol_nebula_clear"
+        "vol_nebula_displacement"
+        "vol_nebula_displacement_history"
+        "vol_nebula_wake_curl"
+        "vol_nebula_density"
+        "vol_nebula_light"
+        "vol_nebula_lightning_channels"
+        "vol_nebula_integrate"
+        "vol_nebula_depth_copy"
+        "vol_nebula_reproject"
+        "vol_nebula_composite"
+        "post.godrays"
+    )
+    for pass in "${required_passes[@]}"; do
+        if ! grep -Fq "$pass" "$LOG"; then
+            echo "FAIL: expected volumetric pass marker '$pass' in $LOG"
+            exit 3
+        fi
+    done
+    echo "PASS: required volumetric pass markers found"
+fi
 
 cat > "$OUT/summary.txt" <<EOF
 Phase 5 volumetric smoke PASS
@@ -84,7 +113,9 @@ pose=$POSE
 quality=$QUALITY
 debug_view=$DEBUG_VIEW
 dev_hud=$DEV_HUD
-pass_timings=$PASS_TIMINGS_FLAG
+capture_pass_timings=$PASS_TIMINGS_FLAG
+validation_pass_timings=$VALIDATION_PASS_TIMINGS
+assert_passes=$ASSERT_PASSES
 screenshot=$OUT/capture/space_noui.png
 validation_log=$OUT/validation/run.log
 EOF
