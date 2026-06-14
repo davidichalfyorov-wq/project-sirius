@@ -1,4 +1,5 @@
 using LibreLancer.Graphics;
+using LibreLancer.Render.Volumetrics;
 
 namespace LibreLancer.Render;
 
@@ -33,12 +34,31 @@ public readonly record struct VolumetricNebulaFrameDebug(
             return new VolumetricNebulaFrameDebug(
                 true, false, true, "backend has no compute feature", "", quality, false, false, false, atmosphereLuts, debugView);
         }
+
+        var resources = VolumetricNebulaFrameResources.LastDebug;
+        if (resources.Allocated)
+        {
+            var compositeActive = resources.LastOperation.Contains("composite", System.StringComparison.OrdinalIgnoreCase);
+            return new VolumetricNebulaFrameDebug(
+                true,
+                compositeActive,
+                !compositeActive,
+                resources.LastOperation,
+                resources.ActiveProfile,
+                resources.Quality,
+                rendererSettings.SelectedVolumetricNearCascade,
+                rendererSettings.SelectedVolumetricNearDetail,
+                rendererSettings.SelectedVolumetricShipDisplacement,
+                atmosphereLuts,
+                debugView);
+        }
+
         return new VolumetricNebulaFrameDebug(
             true,
             false,
             true,
-            "froxel resources are scheduled for PR-5.2",
-            "",
+            resources.LastOperation,
+            resources.ActiveProfile,
             quality,
             rendererSettings.SelectedVolumetricNearCascade,
             rendererSettings.SelectedVolumetricNearDetail,

@@ -176,7 +176,7 @@ public class DevHudOverlay
         {
             var features = RenderFeatureSet.FromSettings(rendererSettings);
             Line(FormattableString.Invariant($"debug view {features.DebugView}"), Color4.LightSkyBlue);
-            Line($"vol nebula {(features.VolumetricNebula ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"vol nebula {(features.VolumetricNebula ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol comp   {(features.VolumetricComposite ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol nearc  {(features.VolumetricNearComposite ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol nearD  {(features.VolumetricNearDetail ? "req" : "off")}", Color4.LightSkyBlue);
@@ -195,9 +195,9 @@ public class DevHudOverlay
             Line($"vol reproj {(features.VolumetricReprojection ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol noise  {(features.VolumetricBlueNoise ? VolumetricNebulaFrameResources.LastBlueNoiseSource : "off")}",
                 features.VolumetricBlueNoise ? Color4.LightYellow : Color4.LightSkyBlue);
-            Line($"vol near   {(features.VolumetricNearCascade ? "on/stub" : "off")}", Color4.LightSkyBlue);
-            Line($"vol ship   {(features.VolumetricShipDisplacement ? "on/stub" : "off")}", Color4.LightSkyBlue);
-            Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"vol near   {(features.VolumetricNearCascade ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol ship   {(features.VolumetricShipDisplacement ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"atmo luts  {(features.AtmosphereLuts ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"atmo aer   {(features.AtmosphereLuts ? (features.AtmosphereAerialPerspective ? "profile" : "identity") : "off")}",
                 Color4.LightSkyBlue);
             Line($"atmo cloud {(features.AtmosphereLuts ? (features.AtmosphereCloudShell ? "budget" : "off") : "off")}",
@@ -235,7 +235,7 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricNear or
                 RenderDebugView.VolumetricNearDensity)
             {
-                Line(froxels.Allocated ? "view data  allocated/stub" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+                Line(froxels.Allocated ? "view data  allocated" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
             }
             if (features.DebugView is RenderDebugView.AtmosphereLuts or
                 RenderDebugView.AtmosphereSkyView or

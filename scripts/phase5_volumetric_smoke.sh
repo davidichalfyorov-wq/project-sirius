@@ -16,6 +16,8 @@
 #   SIRIUS_PHASE5_DEV_HUD=0|1
 #   SIRIUS_PHASE5_PASS_TIMINGS=0|1
 #   SIRIUS_PHASE5_ASSERT_PASSES=0|1
+#   SIRIUS_PHASE5_BUILD=0|1
+#   SIRIUS_PHASE5_BUILD_CONFIG=Debug|Release
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +30,8 @@ DEV_HUD="${SIRIUS_PHASE5_DEV_HUD:-0}"
 PASS_TIMINGS_FLAG="${SIRIUS_PHASE5_PASS_TIMINGS:-0}"
 ASSERT_PASSES="${SIRIUS_PHASE5_ASSERT_PASSES:-1}"
 VALIDATION_PASS_TIMINGS="${SIRIUS_PHASE5_VALIDATION_PASS_TIMINGS:-1}"
+BUILD_FIRST="${SIRIUS_PHASE5_BUILD:-1}"
+BUILD_CONFIG="${SIRIUS_PHASE5_BUILD_CONFIG:-Release}"
 
 mkdir -p "$OUT"
 
@@ -67,6 +71,29 @@ echo "ROOT=$ROOT"
 echo "OUT=$OUT"
 echo "POSE=$POSE QUALITY=$QUALITY DEBUG_VIEW=$DEBUG_VIEW DEV_HUD=$DEV_HUD PASS_TIMINGS=$PASS_TIMINGS_FLAG"
 echo "ASSERT_PASSES=$ASSERT_PASSES VALIDATION_PASS_TIMINGS=$VALIDATION_PASS_TIMINGS"
+echo "BUILD_FIRST=$BUILD_FIRST BUILD_CONFIG=$BUILD_CONFIG"
+
+if [ "$BUILD_FIRST" = "1" ]; then
+    echo "-- build/sync build/v3"
+    dotnet build "$ROOT/src/lancer/lancer.csproj" -c "$BUILD_CONFIG" -v minimal
+    SRCOUT="$ROOT/src/lancer/bin/$BUILD_CONFIG/net10.0"
+    if [ ! -f "$SRCOUT/lancer.dll" ]; then
+        echo "FAIL: build output missing at $SRCOUT/lancer.dll"
+        exit 2
+    fi
+    mkdir -p "$ROOT/build/v3"
+    cp -r "$SRCOUT/." "$ROOT/build/v3/"
+
+    NATIVE_REF="${SIRIUS_NATIVE_REF:-/run/media/ddavidich/Disk1/Project Sirius}"
+    if [ -d "$NATIVE_REF/build/v3" ] &&
+       [ "$(readlink -f "$NATIVE_REF/build/v3")" != "$(readlink -f "$ROOT/build/v3")" ]; then
+        for so in "$NATIVE_REF/build/v3"/*.so "$NATIVE_REF/build/v3"/*.so.*; do
+            [ -e "$so" ] || continue
+            b="$(basename "$so")"
+            [ -e "$ROOT/build/v3/$b" ] || cp "$so" "$ROOT/build/v3/$b"
+        done
+    fi
+fi
 
 echo "-- capture"
 PASS_TIMINGS="$PASS_TIMINGS_FLAG" EXTRA_ENV="$PHASE5_ENV" EXTRA_INI="$PHASE5_INI" \

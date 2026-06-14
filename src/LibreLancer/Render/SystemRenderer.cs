@@ -434,9 +434,9 @@ namespace LibreLancer.Render
 
             rstate.SetCamera(camera);
             Commands.Camera = camera;
-            // Volumetric nebulae and atmosphere 3.0 were removed (quarantined
-            // in Output/Quarantine): the legacy NebulaRenderer and atmosphere
-            // 2.0 are the active path again. The material fog stays off.
+            // Reset material fog before the frame's transparent pass. The
+            // Phase 5 volumetric path binds it again only after integrated
+            // froxel data and the opt-in composite/material flags are ready.
             RenderMaterial.VolumetricFogActive = false;
             RenderMaterial.VolumetricFogMaterialActive = false;
             RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);

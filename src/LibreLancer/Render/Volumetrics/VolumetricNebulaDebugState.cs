@@ -3,8 +3,8 @@ using System.Collections.Generic;
 namespace LibreLancer.Render.Volumetrics;
 
 /// <summary>
-/// Lightweight HUD/debug snapshot for PR-5.0. The resource-backed views are
-/// stubs until PR-5.2 allocates froxel/density/transmittance textures.
+/// Lightweight HUD/debug snapshot for Phase 5 volumetric tooling.
+/// Current frame resource status is reported by VolumetricNebulaFrameResources.
 /// </summary>
 public sealed class VolumetricNebulaDebugState
 {
@@ -47,7 +47,8 @@ public sealed class VolumetricNebulaDebugState
             }
         }
 
-        // PR-5.0/5.1 metadata only. PR-5.2 flips these when resources exist.
+        // This metadata-only snapshot intentionally does not own GPU resources.
+        // The live frame debug state is exposed by VolumetricNebulaFrameResources.
         FroxelResourcesAllocated = false;
         DensityViewReady = false;
         TransmittanceViewReady = false;
