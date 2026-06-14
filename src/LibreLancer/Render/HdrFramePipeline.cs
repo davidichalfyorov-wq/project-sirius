@@ -148,7 +148,7 @@ internal sealed class HdrFramePipeline : IDisposable
                 GBufferNormal = new RenderTarget2D(rstate,
                     new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
                 GBufferViewZ = new RenderTarget2D(rstate,
-                    new Texture2D(rstate, width, height, false, SurfaceFormat.Single));
+                    new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable)); // DIAG: was Single
             }
         }
 
