@@ -394,11 +394,14 @@ float4 ShadePBR(Input input, out float3 gbufferNormal, out float gbufferRoughnes
 
 #ifdef GBUFFER
 // G-buffer MRT output (graphics phase 0.1): scene colour to RT0, encoded
-// world-normal (xyz*0.5+0.5) + perceptual roughness (w) to RT1.
+// world-normal (xyz*0.5+0.5) + perceptual roughness (w) to RT1, linear
+// view-space Z to RT2 (R32F, NRD IN_VIEWZ input - sign follows the view
+// matrix handedness; camera looks down -Z so in-front Z is negative).
 struct GBufferOutput
 {
     float4 color : SV_Target0;
     float4 normalRoughness : SV_Target1;
+    float viewZ : SV_Target2;
 };
 
 GBufferOutput main(Input input)
@@ -409,6 +412,7 @@ GBufferOutput main(Input input)
     GBufferOutput o;
     o.color = lit;
     o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
+    o.viewZ = input.viewPosition.z;
     return o;
 }
 #else

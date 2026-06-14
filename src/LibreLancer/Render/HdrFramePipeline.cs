@@ -95,11 +95,13 @@ internal sealed class HdrFramePipeline : IDisposable
         public readonly int Height;
         public readonly RenderTarget2D Scene;
 
-        // G-buffer MRT (graphics phase 0.1): RT1 world-normal + roughness.
-        // Allocated only when SIRIUS_GBUFFER is set, so the default frame is
-        // byte-identical and pays no VRAM. Bound as an extra opaque-pass
-        // colour attachment by SystemRenderer; its own depth goes unused.
+        // G-buffer MRT (graphics phase 0.1): RT1 world-normal + roughness,
+        // RT2 linear view-Z (R32F). Allocated only when SIRIUS_GBUFFER is set,
+        // so the default frame is byte-identical and pays no VRAM. Bound as
+        // extra opaque-pass colour attachments by SystemRenderer; their own
+        // depth goes unused.
         public readonly RenderTarget2D? GBufferNormal;
+        public readonly RenderTarget2D? GBufferViewZ;
 
         // Mip chain from half-res down; [0] receives the bright pass and,
         // after the up walk, holds the final bloom for the tonemap
@@ -145,6 +147,8 @@ internal sealed class HdrFramePipeline : IDisposable
             {
                 GBufferNormal = new RenderTarget2D(rstate,
                     new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
+                GBufferViewZ = new RenderTarget2D(rstate,
+                    new Texture2D(rstate, width, height, false, SurfaceFormat.Single));
             }
         }
 
@@ -162,6 +166,7 @@ internal sealed class HdrFramePipeline : IDisposable
         {
             Scene.Dispose();
             GBufferNormal?.Dispose();
+            GBufferViewZ?.Dispose();
             DisposeBloomChain();
             foreach (var target in ExposureChain)
             {
@@ -194,6 +199,10 @@ internal sealed class HdrFramePipeline : IDisposable
     /// <summary>G-buffer RT1 (world-normal + roughness) of the current frame,
     /// or null when SIRIUS_GBUFFER is off (graphics phase 0.1).</summary>
     public RenderTarget2D? CurrentGBufferNormalTarget => current?.GBufferNormal;
+
+    /// <summary>G-buffer RT2 (linear view-Z, R32F) of the current frame, or
+    /// null when SIRIUS_GBUFFER is off (graphics phase 0.1).</summary>
+    public RenderTarget2D? CurrentGBufferViewZTarget => current?.GBufferViewZ;
 
     public HdrFramePipeline(RenderContext rstate)
     {
@@ -795,24 +804,44 @@ internal sealed class HdrFramePipeline : IDisposable
         list.Render();
     }
 
-    private static readonly bool debugGBuffer =
-        Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_SHOW") == "1";
+    // SIRIUS_GBUFFER_SHOW: 1 = RT1 normal+roughness, 2 = RT2 viewZ (phase 0.1).
+    private static readonly int debugGBuffer =
+        Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_SHOW") switch
+        {
+            "1" => 1,
+            "2" => 2,
+            _ => 0
+        };
 
-    /// <summary>Fullscreen G-buffer RT1 (world-normal in RGB, roughness in A)
-    /// over the final image, via the proven Renderer2D path - the raw
-    /// RGBA16F-&gt;LDR vkCmdBlitImage produced display garbage (phase 0.1).</summary>
+    /// <summary>Fullscreen G-buffer debug over the final image via the proven
+    /// Renderer2D path (the raw RGBA16F-&gt;LDR vkCmdBlitImage produced display
+    /// garbage). Mode 1 = RT1 world-normal; mode 2 = RT2 linear view-Z as a
+    /// grayscale ramp (phase 0.1).</summary>
     private void DrawGBufferDebug(SizedTargets targets)
     {
-        if (!debugGBuffer || targets.GBufferNormal == null)
+        if (debugGBuffer == 0 || targets.GBufferNormal == null)
         {
             return;
         }
         var list = rstate.Renderer2D.CreateDrawList();
-        // Opaque: RT1's alpha is roughness, not coverage - alpha-blending it
-        // would make the buffer see-through where the surface is smooth.
-        list.DrawImageStretched(targets.GBufferNormal.Texture,
-            new Rectangle(0, 0, targets.Width, targets.Height), Color4.White,
-            mode: BlendMode.Opaque);
+        if (debugGBuffer == 2 && targets.GBufferViewZ != null)
+        {
+            // Linear view-Z scaled to a visible ramp. The view looks down -Z
+            // (in-front Z is negative), so the scale is negative to map depth
+            // into [0,1]; background (cleared 0) stays black.
+            const float s = -1.0f / 4000.0f;
+            list.DrawImageStretched(targets.GBufferViewZ.Texture,
+                new Rectangle(0, 0, targets.Width, targets.Height),
+                new Color4(s, s, s, 1f), mode: BlendMode.Opaque);
+        }
+        else
+        {
+            // Opaque: RT1's alpha is roughness, not coverage - alpha-blending
+            // it would make the buffer see-through where the surface is smooth.
+            list.DrawImageStretched(targets.GBufferNormal.Texture,
+                new Rectangle(0, 0, targets.Width, targets.Height), Color4.White,
+                mode: BlendMode.Opaque);
+        }
         list.Render();
     }
 

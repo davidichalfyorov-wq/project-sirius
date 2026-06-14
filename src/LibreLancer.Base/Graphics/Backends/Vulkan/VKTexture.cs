@@ -153,9 +153,12 @@ internal unsafe class VKTexture2D : ITexture2D
             // (phase 5: receives scene-depth copies for volumetrics)
             imageInfo.Usage = 0x4 | 0x20 | 0x2;
         }
-        else if (!is3D && format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable)
+        else if (!is3D && format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable
+            or SurfaceFormat.Single or SurfaceFormat.HalfVector2)
         {
-            imageInfo.Usage |= 0x10; // COLOR_ATTACHMENT for renderable formats
+            // COLOR_ATTACHMENT for renderable formats. Single (R32F) = G-buffer
+            // viewZ; HalfVector2 (RG16F) = G-buffer motion vectors (phase 0.1).
+            imageInfo.Usage |= 0x10;
         }
 
         ulong image;
