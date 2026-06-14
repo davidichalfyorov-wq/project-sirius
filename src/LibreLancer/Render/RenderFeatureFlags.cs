@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace LibreLancer.Render;
 
@@ -21,7 +22,9 @@ public enum RenderFeatureBits
     VolumetricNearComposite = 1 << 12,
     VolumetricNearDetail = 1 << 13,
     VolumetricWakeHistory = 1 << 14,
-    VolumetricWakeCurl = 1 << 15
+    VolumetricWakeCurl = 1 << 15,
+    VolumetricLightningDeterministic = 1 << 16,
+    VolumetricLightningGoldenDisable = 1 << 17
 }
 
 /// <summary>
@@ -64,7 +67,9 @@ public readonly record struct RenderFeatureSet(
     RenderFeatureBits Bits,
     int VolumetricQuality,
     RenderDebugView DebugView,
-    string? CapturePath)
+    string? CapturePath,
+    float VolumetricLightningReplayTime = -1f,
+    int VolumetricLightningReplaySeed = 0)
 {
     public bool VolumetricNebula => Bits.HasFlag(RenderFeatureBits.VolumetricNebula);
     public bool VolumetricNearCascade => Bits.HasFlag(RenderFeatureBits.VolumetricNearCascade);
@@ -72,6 +77,8 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricComposite => Bits.HasFlag(RenderFeatureBits.VolumetricComposite);
     public bool VolumetricMaterialFog => Bits.HasFlag(RenderFeatureBits.VolumetricMaterialFog);
     public bool VolumetricLightningChannels => Bits.HasFlag(RenderFeatureBits.VolumetricLightningChannels);
+    public bool VolumetricLightningDeterministic => Bits.HasFlag(RenderFeatureBits.VolumetricLightningDeterministic);
+    public bool VolumetricLightningGoldenDisable => Bits.HasFlag(RenderFeatureBits.VolumetricLightningGoldenDisable);
     public bool VolumetricTemporal => Bits.HasFlag(RenderFeatureBits.VolumetricTemporal);
     public bool VolumetricReprojection => Bits.HasFlag(RenderFeatureBits.VolumetricReprojection);
     public bool VolumetricBlueNoise => Bits.HasFlag(RenderFeatureBits.VolumetricBlueNoise);
@@ -105,6 +112,14 @@ public readonly record struct RenderFeatureSet(
         if (OverrideBool(settings.SelectedVolumetricLightningChannels, "SIRIUS_VOLUMETRIC_LIGHTNING_CHANNELS",
                 "SIRIUS_VOLFOG_LIGHTNING", "SIRIUS_VOLLIGHTNING"))
             bits |= RenderFeatureBits.VolumetricLightningChannels;
+        if (OverrideBool(settings.SelectedVolumetricLightningDeterministic,
+                "SIRIUS_VOLFOG_LIGHTNING_DETERMINISTIC", "SIRIUS_VOLLIGHTNING_DETERMINISTIC",
+                "SIRIUS_VOLFOG_LIGHTNING_REPLAY"))
+            bits |= RenderFeatureBits.VolumetricLightningDeterministic;
+        if (OverrideBool(settings.SelectedVolumetricLightningGoldenDisable,
+                "SIRIUS_VOLFOG_LIGHTNING_GOLDEN_DISABLE", "SIRIUS_VOLLIGHTNING_GOLDEN_DISABLE",
+                "SIRIUS_VOLFOG_LIGHTNING_DISABLE"))
+            bits |= RenderFeatureBits.VolumetricLightningGoldenDisable;
         if (OverrideBool(settings.SelectedVolumetricTemporal, "SIRIUS_VOLFOG_TEMPORAL", "SIRIUS_VOLUMETRIC_TEMPORAL"))
             bits |= RenderFeatureBits.VolumetricTemporal;
         if (OverrideBool(settings.SelectedVolumetricReprojection, "SIRIUS_VOLFOG_REPROJECT",
@@ -141,7 +156,14 @@ public readonly record struct RenderFeatureSet(
                       RenderFeatureBits.VolumetricNearComposite |
                       RenderFeatureBits.VolumetricNearDetail |
                       RenderFeatureBits.VolumetricWakeHistory |
-                      RenderFeatureBits.VolumetricWakeCurl);
+                      RenderFeatureBits.VolumetricWakeCurl |
+                      RenderFeatureBits.VolumetricLightningDeterministic |
+                      RenderFeatureBits.VolumetricLightningGoldenDisable);
+        }
+        if ((bits & RenderFeatureBits.VolumetricLightningChannels) == 0)
+        {
+            bits &= ~(RenderFeatureBits.VolumetricLightningDeterministic |
+                      RenderFeatureBits.VolumetricLightningGoldenDisable);
         }
         if ((bits & RenderFeatureBits.VolumetricTemporal) == 0)
         {
@@ -170,7 +192,16 @@ public readonly record struct RenderFeatureSet(
             FirstNonEmpty(Environment.GetEnvironmentVariable("SIRIUS_DEBUG_VIEW"), settings.SelectedDebugView));
         var capturePath = FirstNonEmpty(
             Environment.GetEnvironmentVariable("SIRIUS_CAPTURE_PATH"), settings.SelectedRenderCapturePath);
-        return new RenderFeatureSet(bits, Math.Clamp(settings.SelectedVolumetricQuality, 0, 3), debugView, capturePath);
+        var replayTime = OverrideFloat(settings.SelectedVolumetricLightningReplayTime,
+            "SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", "SIRIUS_VOLLIGHTNING_REPLAY_TIME");
+        if (!float.IsFinite(replayTime) || replayTime < 0f)
+        {
+            replayTime = -1f;
+        }
+        var replaySeed = OverrideInt(settings.SelectedVolumetricLightningReplaySeed,
+            "SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", "SIRIUS_VOLLIGHTNING_REPLAY_SEED");
+        return new RenderFeatureSet(bits, Math.Clamp(settings.SelectedVolumetricQuality, 0, 3), debugView,
+            capturePath, replayTime, replaySeed);
     }
 
     private static string? FirstNonEmpty(string? a, string? b) =>
@@ -189,6 +220,38 @@ public readonly record struct RenderFeatureSet(
                    value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                    value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
                    value.Equals("on", StringComparison.OrdinalIgnoreCase);
+        }
+        return fallback;
+    }
+
+    private static float OverrideFloat(float fallback, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+            return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : fallback;
+        }
+        return fallback;
+    }
+
+    private static int OverrideInt(int fallback, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : fallback;
         }
         return fallback;
     }

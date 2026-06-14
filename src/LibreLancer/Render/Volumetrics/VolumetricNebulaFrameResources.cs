@@ -738,7 +738,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return false;
         }
 
-        var frame = lightningChannels.BuildFrame(profile, features, totalTimeSeconds);
+        var frame = lightningChannels.BuildFrame(profile, features,
+            VolumetricLightningPolicy.FromFeatures(features, totalTimeSeconds));
         LightningDebugSummary = frame.DebugSummary;
         if (!frame.Active)
         {

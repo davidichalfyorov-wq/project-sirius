@@ -88,6 +88,50 @@ public class VolumetricLightningChannelTests
         Assert.Contains("art=crow-electric", frame.DebugSummary);
     }
 
+    [Fact]
+    public void GoldenDisableSuppressesLightningFrame()
+    {
+        var state = new VolumetricLightningChannelState();
+        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true,
+            goldenCapture: true, goldenDisable: true);
+
+        var frame = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
+
+        Assert.False(frame.Active);
+        Assert.Contains("golden disabled", frame.DebugSummary);
+    }
+
+    [Fact]
+    public void ReplayTimeBuildsStableChannel()
+    {
+        var state = new VolumetricLightningChannelState();
+        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true, seedSalt: 77);
+
+        var frameA = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
+        var frameB = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
+
+        Assert.True(frameA.Active);
+        Assert.Equal(frameA.Point0, frameB.Point0);
+        Assert.Equal(frameA.Point7, frameB.Point7);
+        Assert.Equal(frameA.Intensity, frameB.Intensity);
+        Assert.Contains("replay", frameA.DebugSummary);
+    }
+
+    [Fact]
+    public void ReplaySeedChangesChannelShape()
+    {
+        var state = new VolumetricLightningChannelState();
+        var profile = MakeProfile(hasLightning: true);
+        var frameA = state.BuildFrame(profile, MakeFeatures(),
+            VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true, seedSalt: 11));
+        var frameB = state.BuildFrame(profile, MakeFeatures(),
+            VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true, seedSalt: 29));
+
+        Assert.True(frameA.Active);
+        Assert.True(frameB.Active);
+        Assert.NotEqual(frameA.Point0, frameB.Point0);
+    }
+
     private static RenderFeatureSet MakeFeatures() => new(
         RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricLightningChannels,
         2,

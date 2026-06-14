@@ -84,6 +84,18 @@ public interface IRendererSettings
     /// <summary>Inject segmented lightning-channel light into the froxel lighting volume.</summary>
     bool SelectedVolumetricLightningChannels => false;
 
+    /// <summary>Use deterministic lightning timing/seed policy for repeatable captures.</summary>
+    bool SelectedVolumetricLightningDeterministic => false;
+
+    /// <summary>Suppress volumetric lightning only while golden-capture mode is active.</summary>
+    bool SelectedVolumetricLightningGoldenDisable => false;
+
+    /// <summary>Replay lightning at a fixed time; negative values use live/frozen time.</summary>
+    float SelectedVolumetricLightningReplayTime => -1f;
+
+    /// <summary>Additional deterministic seed salt for lightning replay/capture checks.</summary>
+    int SelectedVolumetricLightningReplaySeed => 0;
+
     /// <summary>Temporal history/reprojection scaffold for integrated froxel fog.</summary>
     bool SelectedVolumetricTemporal => false;
 

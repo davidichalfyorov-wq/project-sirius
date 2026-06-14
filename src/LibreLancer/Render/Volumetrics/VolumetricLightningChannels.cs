@@ -16,19 +16,26 @@ public sealed class VolumetricLightningChannelState
     public VolumetricLightningChannelFrame BuildFrame(NebulaVolumeProfile profile, RenderFeatureSet features,
         float totalTimeSeconds)
     {
-        if (!features.VolumetricLightningChannels || !profile.HasLightning)
+        return BuildFrame(profile, features, VolumetricLightningPolicy.FromFeatures(features, totalTimeSeconds));
+    }
+
+    public VolumetricLightningChannelFrame BuildFrame(NebulaVolumeProfile profile, RenderFeatureSet features,
+        VolumetricLightningPolicy policy)
+    {
+        if (!policy.Enabled || !profile.HasLightning)
         {
-            return VolumetricLightningChannelFrame.Inactive("off");
+            return VolumetricLightningChannelFrame.Inactive(!policy.Enabled ? policy.DebugSummary : "off");
         }
 
-        var seed = StableHash(profile.Nickname) ^ StableHash(profile.Archetype);
+        var seed = StableHash(profile.Nickname) ^ StableHash(profile.Archetype) ^ policy.SeedSalt;
         var art = VolumetricLightningArtProfile.ForNebula(profile, features.VolumetricQuality);
-        var intensity = EvaluatePulse(totalTimeSeconds, art.Timing.IntervalSeconds, art.Timing.FlashSeconds,
+        var intensity = EvaluatePulse(policy.TimeSeconds, art.Timing.IntervalSeconds, art.Timing.FlashSeconds,
             art.Timing.AfterglowSeconds, art.FlashCount, out var phase, out var flashIndex);
         if (intensity <= 0.0001f)
         {
             return VolumetricLightningChannelFrame.Inactive(
-                FormattableString.Invariant($"waiting {art.Name} interval={art.Timing.IntervalSeconds:0.0}s"));
+                FormattableString.Invariant(
+                    $"waiting {art.Name}, policy={policy.DebugSummary}, interval={art.Timing.IntervalSeconds:0.0}s"));
         }
 
         Span<Vector4> points = stackalloc Vector4[MaxPoints];
@@ -48,7 +55,7 @@ public sealed class VolumetricLightningChannelState
             art.FlashCount,
             art.DebugColorMode,
             FormattableString.Invariant(
-                $"art={art.Name}, pts={MaxPoints}, flashes={art.FlashCount}, flash={flashIndex}, I={gain:0.00}, r={art.Radius:0.00}"));
+                $"art={art.Name}, policy={policy.DebugSummary}, pts={MaxPoints}, flashes={art.FlashCount}, flash={flashIndex}, I={gain:0.00}, r={art.Radius:0.00}"));
     }
 
     public static float EvaluatePulse(float time, float interval, float flashDuration, float afterglowDuration,
@@ -163,6 +170,105 @@ public sealed class VolumetricLightningChannelState
     }
 
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;
+}
+
+public readonly record struct VolumetricLightningPolicy(
+    bool ChannelsEnabled,
+    bool GoldenCapture,
+    bool GoldenDisableRequested,
+    bool Deterministic,
+    float TimeSeconds,
+    int SeedSalt,
+    string DebugSummary)
+{
+    public bool Enabled => ChannelsEnabled && !(GoldenCapture && GoldenDisableRequested);
+
+    public string HudMode
+    {
+        get
+        {
+            if (!ChannelsEnabled)
+            {
+                return "off";
+            }
+            if (GoldenCapture && GoldenDisableRequested)
+            {
+                return "gold-off";
+            }
+            if (Deterministic && SeedSalt != 0)
+            {
+                return "replay+seed";
+            }
+            return Deterministic ? "replay" : "live";
+        }
+    }
+
+    public static VolumetricLightningPolicy FromFeatures(RenderFeatureSet features, float liveTimeSeconds)
+    {
+        var frozenTime = global::LibreLancer.RenderClock.Frozen;
+        var golden = !string.IsNullOrWhiteSpace(global::LibreLancer.SiriusAutoplay.GoldenDir) ||
+                     frozenTime.HasValue;
+        var replay = features.VolumetricLightningReplayTime >= 0f &&
+                     float.IsFinite(features.VolumetricLightningReplayTime);
+        var deterministic = features.VolumetricLightningDeterministic || replay;
+        var time = liveTimeSeconds;
+        if (replay)
+        {
+            time = features.VolumetricLightningReplayTime;
+        }
+        else if (deterministic && frozenTime.HasValue)
+        {
+            time = (float)frozenTime.Value;
+        }
+        time = MathF.Max(0f, time);
+        var summary = BuildSummary(features.VolumetricLightningChannels, golden,
+            features.VolumetricLightningGoldenDisable, deterministic, replay, time,
+            features.VolumetricLightningReplaySeed);
+        return new VolumetricLightningPolicy(
+            features.VolumetricLightningChannels,
+            golden,
+            features.VolumetricLightningGoldenDisable,
+            deterministic,
+            time,
+            features.VolumetricLightningReplaySeed,
+            summary);
+    }
+
+    public static VolumetricLightningPolicy ForTesting(float timeSeconds, bool deterministic = false,
+        bool goldenCapture = false, bool goldenDisable = false, int seedSalt = 0, bool channelsEnabled = true)
+    {
+        var time = MathF.Max(0f, timeSeconds);
+        return new VolumetricLightningPolicy(
+            channelsEnabled,
+            goldenCapture,
+            goldenDisable,
+            deterministic,
+            time,
+            seedSalt,
+            BuildSummary(channelsEnabled, goldenCapture, goldenDisable, deterministic, deterministic, time, seedSalt));
+    }
+
+    private static string BuildSummary(bool channelsEnabled, bool golden, bool goldenDisable, bool deterministic,
+        bool replay, float time, int seed)
+    {
+        if (!channelsEnabled)
+        {
+            return "off";
+        }
+        if (golden && goldenDisable)
+        {
+            return "golden disabled";
+        }
+        if (replay)
+        {
+            return FormattableString.Invariant($"replay t={time:0.000}s seed={seed}");
+        }
+        if (deterministic)
+        {
+            return FormattableString.Invariant($"{(golden ? "golden deterministic" : "deterministic")} t={time:0.000}s seed={seed}");
+        }
+        return "live";
+    }
 }
 
 public enum VolumetricLightningDebugColorMode

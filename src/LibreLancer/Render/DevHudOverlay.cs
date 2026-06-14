@@ -166,6 +166,11 @@ public class DevHudOverlay
             Line($"vol curl   {(features.VolumetricWakeCurl ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol matfog {(features.VolumetricMaterialFog ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol bolt   {(features.VolumetricLightningChannels ? "req" : "off")}", Color4.LightSkyBlue);
+            if (features.VolumetricLightningChannels)
+            {
+                var lightningPolicy = VolumetricLightningPolicy.FromFeatures(features, 0f);
+                Line($"vol boltP  {lightningPolicy.HudMode}", Color4.LightSkyBlue);
+            }
             Line($"vol temp   {(features.VolumetricTemporal ? (volumetricHistoryActive(froxels) ? "hist" : "req") : "off")}",
                 features.VolumetricTemporal ? Color4.LightYellow : Color4.LightSkyBlue);
             Line($"vol reproj {(features.VolumetricReprojection ? "req" : "off")}", Color4.LightSkyBlue);

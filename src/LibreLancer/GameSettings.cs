@@ -123,6 +123,14 @@ namespace LibreLancer
         public bool VolumetricMaterialFog = false;
         [Entry("volumetric_lightning_channels")]
         public bool VolumetricLightningChannels = false;
+        [Entry("volumetric_lightning_deterministic")]
+        public bool VolumetricLightningDeterministic = false;
+        [Entry("volumetric_lightning_golden_disable")]
+        public bool VolumetricLightningGoldenDisable = false;
+        [Entry("volumetric_lightning_replay_time")]
+        public float VolumetricLightningReplayTime = -1f;
+        [Entry("volumetric_lightning_replay_seed")]
+        public int VolumetricLightningReplaySeed = 0;
         [Entry("volumetric_temporal")]
         public bool VolumetricTemporal = false;
         [Entry("volumetric_reprojection")]
@@ -169,6 +177,12 @@ namespace LibreLancer
         public bool Phase5MaterialFogEnabled => VolumetricNebulaRequested && VolumetricMaterialFog;
 
         public bool Phase5LightningChannelsEnabled => VolumetricNebulaRequested && VolumetricLightningChannels;
+
+        public bool Phase5LightningDeterministicEnabled =>
+            Phase5LightningChannelsEnabled && VolumetricLightningDeterministic;
+
+        public bool Phase5LightningGoldenDisableEnabled =>
+            Phase5LightningChannelsEnabled && VolumetricLightningGoldenDisable;
 
         public bool Phase5TemporalEnabled => VolumetricNebulaRequested && VolumetricTemporal;
 
@@ -247,6 +261,12 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricComposite => VolumetricNebulaRequested && VolumetricComposite;
         bool IRendererSettings.SelectedVolumetricMaterialFog => VolumetricNebulaRequested && VolumetricMaterialFog;
         bool IRendererSettings.SelectedVolumetricLightningChannels => VolumetricNebulaRequested && VolumetricLightningChannels;
+        bool IRendererSettings.SelectedVolumetricLightningDeterministic => Phase5LightningDeterministicEnabled;
+        bool IRendererSettings.SelectedVolumetricLightningGoldenDisable => Phase5LightningGoldenDisableEnabled;
+        float IRendererSettings.SelectedVolumetricLightningReplayTime =>
+            Phase5LightningChannelsEnabled ? VolumetricLightningReplayTime : -1f;
+        int IRendererSettings.SelectedVolumetricLightningReplaySeed =>
+            Phase5LightningChannelsEnabled ? VolumetricLightningReplaySeed : 0;
         bool IRendererSettings.SelectedVolumetricTemporal => VolumetricNebulaRequested && VolumetricTemporal;
         bool IRendererSettings.SelectedVolumetricReprojection => Phase5ReprojectionEnabled;
         bool IRendererSettings.SelectedVolumetricBlueNoise => Phase5BlueNoiseEnabled;
@@ -320,6 +340,10 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_composite = {(VolumetricComposite ? "true" : "false")}");
             writer.WriteLine($"volumetric_material_fog = {(VolumetricMaterialFog ? "true" : "false")}");
             writer.WriteLine($"volumetric_lightning_channels = {(VolumetricLightningChannels ? "true" : "false")}");
+            writer.WriteLine($"volumetric_lightning_deterministic = {(VolumetricLightningDeterministic ? "true" : "false")}");
+            writer.WriteLine($"volumetric_lightning_golden_disable = {(VolumetricLightningGoldenDisable ? "true" : "false")}");
+            writer.WriteLine($"volumetric_lightning_replay_time = {Fmt(VolumetricLightningReplayTime)}");
+            writer.WriteLine($"volumetric_lightning_replay_seed = {VolumetricLightningReplaySeed}");
             writer.WriteLine($"volumetric_temporal = {(VolumetricTemporal ? "true" : "false")}");
             writer.WriteLine($"volumetric_reprojection = {(VolumetricReprojection ? "true" : "false")}");
             writer.WriteLine($"volumetric_blue_noise = {(VolumetricBlueNoise ? "true" : "false")}");
@@ -388,6 +412,10 @@ namespace LibreLancer
                 VolumetricComposite = VolumetricComposite,
                 VolumetricMaterialFog = VolumetricMaterialFog,
                 VolumetricLightningChannels = VolumetricLightningChannels,
+                VolumetricLightningDeterministic = VolumetricLightningDeterministic,
+                VolumetricLightningGoldenDisable = VolumetricLightningGoldenDisable,
+                VolumetricLightningReplayTime = VolumetricLightningReplayTime,
+                VolumetricLightningReplaySeed = VolumetricLightningReplaySeed,
                 VolumetricTemporal = VolumetricTemporal,
                 VolumetricReprojection = VolumetricReprojection,
                 VolumetricBlueNoise = VolumetricBlueNoise,
@@ -470,6 +498,10 @@ namespace LibreLancer
                 VolumetricComposite = false;
                 VolumetricMaterialFog = false;
                 VolumetricLightningChannels = false;
+                VolumetricLightningDeterministic = false;
+                VolumetricLightningGoldenDisable = false;
+                VolumetricLightningReplayTime = -1f;
+                VolumetricLightningReplaySeed = 0;
                 VolumetricTemporal = false;
                 VolumetricReprojection = false;
                 VolumetricBlueNoise = false;
@@ -485,6 +517,10 @@ namespace LibreLancer
                 VolumetricComposite = false;
                 VolumetricMaterialFog = false;
                 VolumetricLightningChannels = false;
+                VolumetricLightningDeterministic = false;
+                VolumetricLightningGoldenDisable = false;
+                VolumetricLightningReplayTime = -1f;
+                VolumetricLightningReplaySeed = 0;
                 VolumetricTemporal = false;
                 VolumetricReprojection = false;
                 VolumetricBlueNoise = false;
@@ -512,6 +548,18 @@ namespace LibreLancer
             {
                 FLLog.Info("Config", "volumetric_wake_curl requires volumetric_wake_history, disabling.");
                 VolumetricWakeCurl = false;
+            }
+            if (!VolumetricLightningChannels)
+            {
+                VolumetricLightningDeterministic = false;
+                VolumetricLightningGoldenDisable = false;
+                VolumetricLightningReplayTime = -1f;
+                VolumetricLightningReplaySeed = 0;
+            }
+            if (float.IsNaN(VolumetricLightningReplayTime) || float.IsInfinity(VolumetricLightningReplayTime) ||
+                VolumetricLightningReplayTime < 0f)
+            {
+                VolumetricLightningReplayTime = -1f;
             }
             if (AtmosphereLuts && !RenderContext.HasFeature(GraphicsFeature.Compute))
             {
