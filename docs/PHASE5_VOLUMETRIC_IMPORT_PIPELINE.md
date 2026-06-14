@@ -56,6 +56,10 @@ Rules for the OpenVDB layer:
   not copied from artist-authored `data` paths. The cache identity is derived
   from canonical system, canonical nebula, grid, dimensions, and content hash so
   rebuilt Blender/Houdini/OpenVDB exports produce deterministic reviewed assets.
+- Import tools should write a text cache manifest next to each generated
+  `.siriusvol` asset. The manifest records cache key/path, canonical locks,
+  source DCC/file/data, license, content hash, dimensions, and density
+  normalization so binary volume assets stay reviewable in CI and code review.
 - Runtime import plans require explicit canonical identity locks. A sidecar can
   be parsed for diagnostics without them, but it cannot be bound to an active
   `NebulaVolumeProfile` unless `canonical_nebula` is present, and

@@ -355,6 +355,53 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsDeterministicCacheManifestForReviewedEngineVolume()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = artist_exports/tmp/li01_badlands_density.vdb",
+            "grid = density",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "density_min = 0.2",
+            "density_max = 1.2",
+            "density_multiplier = 0.5",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+
+        Assert.True(plan.Valid);
+        Assert.EndsWith(".siriusvol.manifest", plan.CacheManifestRelativePath);
+        var lines = plan.BuildCacheManifestLines();
+        Assert.Contains("cache_version = 1", lines);
+        Assert.Contains($"cache = {plan.CacheRelativePath}", lines);
+        Assert.Contains($"manifest = {plan.CacheManifestRelativePath}", lines);
+        Assert.Contains("canonical_system = Li01", lines);
+        Assert.Contains("canonical_nebula = li01_badlands", lines);
+        Assert.Contains("density_normalize_scale = 0.5", lines);
+        Assert.Contains("density_normalize_bias = -0.1", lines);
+        Assert.Contains("source_file = art/li01/badlands_density.blend", lines);
+        Assert.Contains("source_data = artist_exports/tmp/li01_badlands_density.vdb", lines);
+        Assert.Contains("content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", lines);
+    }
+
+    [Fact]
+    public void InvalidImportPlanDoesNotEmitCacheManifest()
+    {
+        var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
+
+        Assert.Equal("", plan.CacheKey);
+        Assert.Equal("", plan.CacheRelativePath);
+        Assert.Equal("", plan.CacheManifestRelativePath);
+        Assert.Empty(plan.BuildCacheManifestLines());
+    }
+
+    [Fact]
     public void RejectsVerifiedImportPlanWhenPayloadHashMismatches()
     {
         var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([

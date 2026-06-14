@@ -655,6 +655,47 @@ public readonly record struct VolumetricOpenVdbImportPlan(
         ? ""
         : $"volumes/openvdb/{CacheKey}.siriusvol";
 
+    public string CacheManifestRelativePath => !Valid
+        ? ""
+        : $"{CacheRelativePath}.manifest";
+
+    public string[] BuildCacheManifestLines()
+    {
+        if (!Valid)
+        {
+            return [];
+        }
+
+        return
+        [
+            "# Sirius Phase 5 OpenVDB cache manifest",
+            "cache_version = 1",
+            $"cache_key = {CacheKey}",
+            $"cache = {CacheRelativePath}",
+            $"manifest = {CacheManifestRelativePath}",
+            $"canonical_system = {Metadata.CanonicalSystem}",
+            $"canonical_nebula = {Metadata.CanonicalNebula}",
+            $"profile = {Metadata.ProfileNickname}",
+            $"grid = {Metadata.GridName}",
+            $"dimensions = {Metadata.Width}, {Metadata.Height}, {Metadata.Depth}",
+            $"voxel_size_meters = {Fmt(Metadata.VoxelSizeMeters)}",
+            $"density_min = {Fmt(Metadata.DensityMin)}",
+            $"density_max = {Fmt(Metadata.DensityMax)}",
+            $"density_multiplier = {Fmt(Metadata.DensityMultiplier)}",
+            $"density_normalize_scale = {Fmt(DensityNormalize.X)}",
+            $"density_normalize_bias = {Fmt(DensityNormalize.Y)}",
+            $"axis = {Metadata.AxisConvention}",
+            $"bounds = {Metadata.BoundsMode}",
+            $"placement = {Metadata.PlacementMode}",
+            $"preserve_zone_transform = {Metadata.PreserveZoneTransform.ToString().ToLowerInvariant()}",
+            $"source = {Metadata.Source}",
+            $"source_file = {Metadata.SourceFile}",
+            $"source_data = {Metadata.DataPath}",
+            $"license = {Metadata.License}",
+            $"content_hash = {Metadata.ContentHash}"
+        ];
+    }
+
     public string DebugSummary => !Valid
         ? $"invalid: {Error}"
         : FormattableString.Invariant(
@@ -662,4 +703,7 @@ public readonly record struct VolumetricOpenVdbImportPlan(
 
     public static VolumetricOpenVdbImportPlan Invalid(string error) =>
         new(false, default, VolumetricDensitySource.PerlinWorleyRuntime, Vector2.Zero, error);
+
+    private static string Fmt(float value) =>
+        value.ToString("0.########", CultureInfo.InvariantCulture);
 }
