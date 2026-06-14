@@ -268,14 +268,14 @@ public class DrawList2D
         FillRectangle(new Rectangle(rect.X + rect.Width - width, rect.Y, width, rect.Height), color);
     }
 
-    public void DrawImageStretched(Texture2D tex, Rectangle dest, Color4 color, bool flip = false, QuadRotation orient = QuadRotation.None)
+    public void DrawImageStretched(Texture2D tex, Rectangle dest, Color4 color, bool flip = false, QuadRotation orient = QuadRotation.None, ushort mode = BlendMode.Normal)
     {
         DrawQuad (
             tex,
             new Rectangle (0, 0, tex.Width, tex.Height),
             dest,
             color,
-            BlendMode.Normal,
+            mode,
             flip,
             orient
         );

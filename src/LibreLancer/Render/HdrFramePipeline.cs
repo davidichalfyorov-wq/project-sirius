@@ -808,8 +808,11 @@ internal sealed class HdrFramePipeline : IDisposable
             return;
         }
         var list = rstate.Renderer2D.CreateDrawList();
+        // Opaque: RT1's alpha is roughness, not coverage - alpha-blending it
+        // would make the buffer see-through where the surface is smooth.
         list.DrawImageStretched(targets.GBufferNormal.Texture,
-            new Rectangle(0, 0, targets.Width, targets.Height), Color4.White);
+            new Rectangle(0, 0, targets.Width, targets.Height), Color4.White,
+            mode: BlendMode.Opaque);
         list.Render();
     }
 
