@@ -42,6 +42,9 @@ public class Game : IUIThread, IGLWindow
     public ScreenshotSaveHandler? ScreenshotSave;
     public RenderContext RenderContext => impl.RenderContext;
     public string? Renderer => impl.Renderer;
+    public IntPtr WindowHandle => impl.WindowHandle;
+    public IntPtr NativeWindowHandle => impl.NativeWindowHandle;
+    public IntPtr RenderDocDevicePointer => impl.RenderContext.Backend.RenderDocDevicePointer;
 
     protected Game(int w, int h, bool allowScreensaver, GameConfiguration? configuration = null)
     {

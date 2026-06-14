@@ -85,6 +85,9 @@ internal unsafe partial class VKRenderContext : IRenderContext
     private static readonly bool descriptorStats =
         Environment.GetEnvironmentVariable("SIRIUS_VK_STATS") == "1";
 
+    public IntPtr RenderDocDevicePointer =>
+        instance == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(instance);
+
     // --- GPU pass timers (roadmap 9.3) ---------------------------------
     // 64 timestamp pairs per frame slot; results read back when the slot
     // recycles (the fence wait guarantees availability in practice, but

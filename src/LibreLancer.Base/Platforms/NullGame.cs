@@ -27,6 +27,8 @@ internal class NullGame : IGame
     public float DpiScale => 1;
     public int Width => 1024;
     public int Height => 768;
+    public IntPtr WindowHandle => IntPtr.Zero;
+    public IntPtr NativeWindowHandle => IntPtr.Zero;
     public void SetWindowIcon(int width, int height, ReadOnlySpan<Bgra8> data)
     {
     }

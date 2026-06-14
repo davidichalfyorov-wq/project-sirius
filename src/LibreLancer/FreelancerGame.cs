@@ -156,7 +156,7 @@ namespace LibreLancer
             Services.Add(Typewriter);
             try
             {
-            Render.RenderDocCapture.Initialize();
+            Render.RenderDocCapture.Initialize(RenderDocDevicePointer, NativeWindowHandle);
             Keyboard.KeyDown += e =>
             {
                 if (e.Key == Keys.F12)

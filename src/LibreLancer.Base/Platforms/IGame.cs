@@ -15,6 +15,8 @@ internal interface IGame : IUIThread
     int Height { get; }
     void SetWindowIcon(int width, int height, ReadOnlySpan<Bgra8> data);
     bool Focused { get; }
+    IntPtr WindowHandle { get; }
+    IntPtr NativeWindowHandle { get; }
     string Title { get; set; }
     Point MinimumWindowSize { get; set; }
     void BringToFront();

@@ -69,6 +69,28 @@ internal class SDL3Game : IGame
 
     public float DpiScale { get; set; } = 1;
     public int Width { get; private set; }
+    public IntPtr WindowHandle => windowptr;
+    public IntPtr NativeWindowHandle
+    {
+        get
+        {
+            if (windowptr == IntPtr.Zero)
+                return IntPtr.Zero;
+            var props = SDL3.SDL_GetWindowProperties(windowptr);
+            if (props == 0)
+                return IntPtr.Zero;
+            var win32 = SDL3.SDL_GetPointerProperty(props, SDL3.SDL_PROP_WINDOW_WIN32_HWND_POINTER, IntPtr.Zero);
+            if (win32 != IntPtr.Zero)
+                return win32;
+            var cocoa = SDL3.SDL_GetPointerProperty(props, SDL3.SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, IntPtr.Zero);
+            if (cocoa != IntPtr.Zero)
+                return cocoa;
+            var x11 = SDL3.SDL_GetNumberProperty(props, SDL3.SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+            if (x11 != 0)
+                return new IntPtr(x11);
+            return IntPtr.Zero;
+        }
+    }
 
     public unsafe void SetWindowIcon(int width, int height, ReadOnlySpan<Bgra8> data)
     {

@@ -98,6 +98,9 @@ internal interface IRenderContext
     /// <summary>Requests capture of the current/next frame. Returns false until a backend capture API is linked.</summary>
     bool RequestFrameCapture(string? outputPath) => false;
 
+    /// <summary>RenderDoc API device pointer for backend-specific in-app captures.</summary>
+    IntPtr RenderDocDevicePointer => IntPtr.Zero;
+
     /// <summary>Device memory held by backend allocators (0 when untracked).</summary>
     long DeviceMemoryAllocated => 0;
 

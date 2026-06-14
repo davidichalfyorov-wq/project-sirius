@@ -66,6 +66,26 @@ internal class SDL2Game : IGame
 
     public float DpiScale { get; set; } = 1;
     public int Width => width;
+    public IntPtr WindowHandle => windowptr;
+    public IntPtr NativeWindowHandle
+    {
+        get
+        {
+            if (windowptr == IntPtr.Zero)
+                return IntPtr.Zero;
+            SDL2.SDL_VERSION(out var version);
+            var info = new SDL2.SDL_SysWMinfo { version = version };
+            if (SDL2.SDL_GetWindowWMInfo(windowptr, ref info) != SDL2.SDL_bool.SDL_TRUE)
+                return IntPtr.Zero;
+            return info.subsystem switch
+            {
+                SDL2.SDL_SYSWM_TYPE.SDL_SYSWM_WINDOWS => info.info.win.window,
+                SDL2.SDL_SYSWM_TYPE.SDL_SYSWM_X11 => info.info.x11.window,
+                SDL2.SDL_SYSWM_TYPE.SDL_SYSWM_COCOA => info.info.cocoa.window,
+                _ => IntPtr.Zero
+            };
+        }
+    }
 
     public unsafe void SetWindowIcon(int width, int height, ReadOnlySpan<Bgra8> data)
     {
