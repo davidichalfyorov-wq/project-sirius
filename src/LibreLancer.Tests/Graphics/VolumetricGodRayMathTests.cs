@@ -28,6 +28,7 @@ public class VolumetricGodRayMathTests
         Assert.True(result.SunTransmittance >= result.BurnthroughFloor);
         Assert.InRange(result.RayDensity, 0.65f, 1.18f);
         Assert.Contains("T=", result.DebugSummary);
+        Assert.Contains("q3", result.DebugSummary);
     }
 
     [Fact]
@@ -40,6 +41,29 @@ public class VolumetricGodRayMathTests
 
         Assert.True(far.OpticalDepth > near.OpticalDepth);
         Assert.True(far.SunTransmittance < near.SunTransmittance);
+    }
+
+    [Fact]
+    public void EffectiveQualityControlsBurnthroughFloor()
+    {
+        var profile = MakeProfile(coreExtinction: 0.00008f, godRays: 0.95f);
+
+        var low = VolumetricGodRayMath.ForProfile(profile, 180_000f, 0, 0.35f, enabled: true);
+        var ultra = VolumetricGodRayMath.ForProfile(profile, 180_000f, 3, 0.35f, enabled: true);
+
+        Assert.True(ultra.BurnthroughFloor > low.BurnthroughFloor);
+        Assert.True(ultra.SunTransmittance > low.SunTransmittance);
+    }
+
+    [Fact]
+    public void PostIntensityIsClampedForHdrComposite()
+    {
+        var profile = MakeProfile();
+
+        var result = VolumetricGodRayMath.ForProfile(profile, 50_000f, 2, 12f, enabled: true);
+
+        Assert.Equal(2f, result.PostIntensity);
+        Assert.Contains("I=2.00", result.DebugSummary);
     }
 
     private static NebulaVolumeProfile MakeProfile(float coreExtinction = 0.000025f, float godRays = 0.55f) => new(

@@ -54,7 +54,7 @@ public static class VolumetricGodRayMath
             floor,
             postIntensity,
             FormattableString.Invariant(
-                $"T={transmittance:0.00} od={opticalDepth:0.00} path={pathLength / 1000f:0}km dens={density:0.00}"));
+                $"q{q} T={transmittance:0.00} od={opticalDepth:0.00} path={pathLength / 1000f:0}km dens={density:0.00} I={postIntensity:0.00}"));
     }
 }
 

@@ -847,10 +847,14 @@ namespace LibreLancer.Render
                 sunDistance = Vector3.Distance(camera.Position, sunPosition);
             }
 
+            var effectiveQuality = VolumetricNebulaFrameResources.LastDebug is { Allocated: true, Quality: >= 0 } debug
+                ? debug.Quality
+                : features.VolumetricQuality;
             var godRays = VolumetricGodRayMath.ForProfile(activeProfile, sunDistance,
-                features.VolumetricQuality, Settings.SelectedGodRaysIntensity, enabled: true);
+                effectiveQuality, Settings.SelectedGodRaysIntensity, enabled: true);
             volumetricSunTransmittance = godRays.SunTransmittance;
             hdrPipeline.GodRaysSunTransmittance = godRays.SunTransmittance;
+            hdrPipeline.GodRaysIntensity = godRays.PostIntensity;
             hdrPipeline.GodRaysDensity = godRays.RayDensity;
             hdrPipeline.GodRaysDecay = godRays.RayDecay;
             VolumetricNebulaFrameResources.NoteGodRays(true, godRays.DebugSummary);
