@@ -36,19 +36,63 @@ public static class VolumetricOpenVdbImport
         var metadata = new VolumetricOpenVdbImportMetadata(
             DataPath: Get(values, "data"),
             GridName: Get(values, "grid", "density"),
+            ProfileNickname: Get(values, "profile", Get(values, "profile_nickname")),
             Width: ParseInt(values, "width"),
             Height: ParseInt(values, "height"),
             Depth: ParseInt(values, "depth"),
             VoxelSizeMeters: ParseFloat(values, "voxel_size_meters", 1f),
             OriginMeters: ParseVector3(values, "origin_meters", Vector3.Zero),
             ScaleMeters: ParseVector3(values, "scale_meters", Vector3.One),
+            DensityMin: ParseFloat(values, "density_min", 0f),
+            DensityMax: ParseFloat(values, "density_max", 1f),
             DensityMultiplier: ParseFloat(values, "density_multiplier", 1f),
+            AxisConvention: Get(values, "axis", Get(values, "axis_convention", "freelancer_y_up")),
             CanonicalSystem: Get(values, "canonical_system"),
             CanonicalNebula: Get(values, "canonical_nebula"),
             Source: Get(values, "source"),
             License: Get(values, "license"),
             PreserveZoneTransform: ParseBool(values, "preserve_zone_transform", true));
         return Validate(metadata);
+    }
+
+    public static VolumetricOpenVdbImportPlan CreateImportPlan(
+        IEnumerable<string> lines,
+        NebulaVolumeProfile profile,
+        string canonicalSystem = "")
+    {
+        var parsed = ParseManifest(lines);
+        if (!parsed.Valid)
+        {
+            return VolumetricOpenVdbImportPlan.Invalid(parsed.Error);
+        }
+
+        var metadata = parsed.Metadata;
+        if (!string.IsNullOrWhiteSpace(metadata.CanonicalSystem) &&
+            !string.IsNullOrWhiteSpace(canonicalSystem) &&
+            !Matches(metadata.CanonicalSystem, canonicalSystem))
+        {
+            return VolumetricOpenVdbImportPlan.Invalid("OpenVDB manifest canonical system does not match active system");
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.CanonicalNebula) &&
+            !Matches(metadata.CanonicalNebula, profile.Nickname) &&
+            !Matches(metadata.CanonicalNebula, profile.SourceFile))
+        {
+            return VolumetricOpenVdbImportPlan.Invalid("OpenVDB manifest canonical nebula does not match active profile");
+        }
+
+        var nickname = string.IsNullOrWhiteSpace(metadata.ProfileNickname)
+            ? profile.Nickname
+            : metadata.ProfileNickname;
+        var range = MathF.Max(metadata.DensityMax - metadata.DensityMin, 1e-5f);
+        var scale = metadata.DensityMultiplier / range;
+        var bias = -metadata.DensityMin * scale;
+        return new VolumetricOpenVdbImportPlan(
+            true,
+            metadata with { ProfileNickname = nickname },
+            VolumetricDensitySource.OpenVdbImported,
+            new Vector2(scale, bias),
+            "");
     }
 
     private static VolumetricOpenVdbImportResult Validate(VolumetricOpenVdbImportMetadata metadata)
@@ -73,9 +117,21 @@ public static class VolumetricOpenVdbImport
         {
             return VolumetricOpenVdbImportResult.Invalid("voxel size must be positive");
         }
+        if (metadata.ScaleMeters.X <= 0f || metadata.ScaleMeters.Y <= 0f || metadata.ScaleMeters.Z <= 0f)
+        {
+            return VolumetricOpenVdbImportResult.Invalid("scale must be positive");
+        }
+        if (metadata.DensityMax <= metadata.DensityMin)
+        {
+            return VolumetricOpenVdbImportResult.Invalid("density range must be positive");
+        }
         if (metadata.DensityMultiplier < 0f)
         {
             return VolumetricOpenVdbImportResult.Invalid("density multiplier must be non-negative");
+        }
+        if (!IsSupportedAxisConvention(metadata.AxisConvention))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("unsupported axis convention");
         }
         if (!metadata.PreserveZoneTransform)
         {
@@ -125,18 +181,34 @@ public static class VolumetricOpenVdbImport
             ? new Vector3(x, y, z)
             : fallback;
     }
+
+    private static bool Matches(string authored, string runtime) =>
+        string.Equals(NormalizeName(authored), NormalizeName(runtime), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeName(string value) =>
+        value.Trim().Replace('\\', '/');
+
+    private static bool IsSupportedAxisConvention(string value)
+    {
+        var axis = value.Trim().Replace("-", "_").ToLowerInvariant();
+        return axis is "freelancer_y_up" or "y_up" or "z_up";
+    }
 }
 
 public readonly record struct VolumetricOpenVdbImportMetadata(
     string DataPath,
     string GridName,
+    string ProfileNickname,
     int Width,
     int Height,
     int Depth,
     float VoxelSizeMeters,
     Vector3 OriginMeters,
     Vector3 ScaleMeters,
+    float DensityMin,
+    float DensityMax,
     float DensityMultiplier,
+    string AxisConvention,
     string CanonicalSystem,
     string CanonicalNebula,
     string Source,
@@ -145,7 +217,7 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
 {
     public string DebugSummary =>
         FormattableString.Invariant(
-            $"{GridName} {Width}x{Height}x{Depth} voxel={VoxelSizeMeters:0.###}m density={DensityMultiplier:0.###} lock={(PreserveZoneTransform ? "zone" : "off")}");
+            $"{GridName} {Width}x{Height}x{Depth} voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} lock={(PreserveZoneTransform ? "zone" : "off")}");
 }
 
 public readonly record struct VolumetricOpenVdbImportResult(
@@ -155,4 +227,23 @@ public readonly record struct VolumetricOpenVdbImportResult(
 {
     public static VolumetricOpenVdbImportResult Invalid(string error) =>
         new(false, default, error);
+}
+
+public readonly record struct VolumetricOpenVdbImportPlan(
+    bool Valid,
+    VolumetricOpenVdbImportMetadata Metadata,
+    VolumetricDensitySource DensitySource,
+    Vector2 DensityNormalize,
+    string Error)
+{
+    public float NormalizeDensity(float rawDensity) =>
+        Math.Clamp(rawDensity * DensityNormalize.X + DensityNormalize.Y, 0f, Metadata.DensityMultiplier);
+
+    public string DebugSummary => !Valid
+        ? $"invalid: {Error}"
+        : FormattableString.Invariant(
+            $"{Metadata.ProfileNickname}: {Metadata.DebugSummary} normalize=({DensityNormalize.X:0.###},{DensityNormalize.Y:0.###})");
+
+    public static VolumetricOpenVdbImportPlan Invalid(string error) =>
+        new(false, default, VolumetricDensitySource.PerlinWorleyRuntime, Vector2.Zero, error);
 }

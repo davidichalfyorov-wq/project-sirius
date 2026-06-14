@@ -49,6 +49,7 @@ PR-OVDB-1:
   - manifest parser
   - bounds/scale validation
   - density min/max normalization
+  - profile metadata bridge to the existing `NebulaVolumeProfile`
   - no runtime renderer changes
 
 PR-OVDB-2:
@@ -62,3 +63,35 @@ PR-OVDB-3:
   - procedural fallback retained
   - golden Li01/Badlands comparison
 ```
+
+The initial sidecar manifest is deliberately plain text so it can be emitted by
+Blender, Houdini, or an OpenVDB conversion script without linking OpenVDB into
+the game. A canonical Li01 export should look like:
+
+```ini
+data = li01_badlands_density.vdb
+grid = density
+profile = li01_badlands
+width = 128
+height = 96
+depth = 64
+voxel_size_meters = 250
+origin_meters = 0, 0, 0
+scale_meters = 1, 1, 1
+density_min = 0.02
+density_max = 0.85
+density_multiplier = 0.75
+axis = z_up
+canonical_system = Li01
+canonical_nebula = li01_badlands
+source = blender_openvdb_export
+license = project-owned
+preserve_zone_transform = true
+```
+
+`canonical_system`, `canonical_nebula`, and `preserve_zone_transform = true`
+are safety fields. They let the importer reject authored volumes that would move
+Freelancer's original nebula placement. `density_min` and `density_max` define
+the authored scalar range; the runtime bridge computes a normalized density
+scale/bias from those values and keeps procedural density as the fallback when
+the imported asset is unavailable.
