@@ -135,7 +135,8 @@ public class VolumetricNebulaLayoutTests
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.WakeCurl && x.DebugName == "vol_nebula_wake_curl");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.DebugView && x.DebugName == "vol_nebula_debug_view");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.TemporalReproject);
-        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.MaterialFogExport);
+        Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.MaterialFogExport &&
+                                     x.DebugName == "vol_nebula_material_fog");
         Assert.Contains(passes, x => x.Pass == VolumetricNebulaPassSlot.AtmosphereBridge);
         Assert.True(IndexOf(VolumetricNebulaPassSlot.WakeCurl) < IndexOf(VolumetricNebulaPassSlot.InjectDensity));
         Assert.True(IndexOf(VolumetricNebulaPassSlot.Integrate) < IndexOf(VolumetricNebulaPassSlot.DepthCopy));

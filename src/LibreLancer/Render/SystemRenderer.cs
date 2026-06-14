@@ -977,7 +977,15 @@ namespace LibreLancer.Render
             {
                 return false;
             }
-            return volumetricNebulaResources.BindMaterialFog(features, activeProfile);
+            rstate.BeginPassTimer("vol_nebula_material_fog");
+            try
+            {
+                return volumetricNebulaResources.BindMaterialFog(features, activeProfile);
+            }
+            finally
+            {
+                rstate.EndPassTimer();
+            }
         }
 
         private void UpdateVolumetricGodRays(RenderFeatureSet features, bool hasActiveProfile,
