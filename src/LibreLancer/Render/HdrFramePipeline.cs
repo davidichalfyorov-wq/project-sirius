@@ -102,6 +102,7 @@ internal sealed class HdrFramePipeline : IDisposable
         // depth goes unused.
         public readonly RenderTarget2D? GBufferNormal;
         public readonly RenderTarget2D? GBufferViewZ;
+        public readonly RenderTarget2D? GBufferMotion; // RG16F screen MV (0.2)
 
         // Mip chain from half-res down; [0] receives the bright pass and,
         // after the up walk, holds the final bloom for the tonemap
@@ -149,6 +150,8 @@ internal sealed class HdrFramePipeline : IDisposable
                     new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
                 GBufferViewZ = new RenderTarget2D(rstate,
                     new Texture2D(rstate, width, height, false, SurfaceFormat.Single));
+                GBufferMotion = new RenderTarget2D(rstate,
+                    new Texture2D(rstate, width, height, false, SurfaceFormat.HalfVector2));
             }
         }
 
@@ -167,6 +170,7 @@ internal sealed class HdrFramePipeline : IDisposable
             Scene.Dispose();
             GBufferNormal?.Dispose();
             GBufferViewZ?.Dispose();
+            GBufferMotion?.Dispose();
             DisposeBloomChain();
             foreach (var target in ExposureChain)
             {
@@ -203,6 +207,10 @@ internal sealed class HdrFramePipeline : IDisposable
     /// <summary>G-buffer RT2 (linear view-Z, R32F) of the current frame, or
     /// null when SIRIUS_GBUFFER is off (graphics phase 0.1).</summary>
     public RenderTarget2D? CurrentGBufferViewZTarget => current?.GBufferViewZ;
+
+    /// <summary>G-buffer RT3 (screen-space motion vector, RG16F) of the current
+    /// frame, or null when SIRIUS_GBUFFER is off (graphics phase 0.2).</summary>
+    public RenderTarget2D? CurrentGBufferMotionTarget => current?.GBufferMotion;
 
     public HdrFramePipeline(RenderContext rstate)
     {
@@ -804,12 +812,14 @@ internal sealed class HdrFramePipeline : IDisposable
         list.Render();
     }
 
-    // SIRIUS_GBUFFER_SHOW: 1 = RT1 normal+roughness, 2 = RT2 viewZ (phase 0.1).
+    // SIRIUS_GBUFFER_SHOW: 1 = RT1 normal+roughness, 2 = RT2 viewZ (R32F),
+    // 4 = RT3 screen motion vector (RG16F) (phase 0.1/0.2).
     private static readonly int debugGBuffer =
         Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_SHOW") switch
         {
             "1" => 1,
             "2" => 2,
+            "4" => 4,
             _ => 0
         };
 
@@ -819,6 +829,13 @@ internal sealed class HdrFramePipeline : IDisposable
             System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var vzs)
             ? vzs : -0.02f;
+
+    // Motion-vector debug scale: NDC delta * scale into R(=x)/G(=y) channels.
+    private static readonly float gbufferMotionScale =
+        float.TryParse(Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_MOTION_SCALE"),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var mvs)
+            ? mvs : 20f;
 
     /// <summary>Fullscreen G-buffer debug over the final image via the proven
     /// Renderer2D path (the raw RGBA16F-&gt;LDR vkCmdBlitImage produced display
@@ -841,6 +858,16 @@ internal sealed class HdrFramePipeline : IDisposable
             // via SIRIUS_GBUFFER_VIEWZ_SCALE.
             var s = gbufferViewZScale;
             list.DrawImageStretched(targets.GBufferViewZ.Texture,
+                new Rectangle(0, 0, targets.Width, targets.Height),
+                new Color4(s, s, s, 1f), mode: BlendMode.Opaque);
+        }
+        else if (debugGBuffer == 4 && targets.GBufferMotion != null)
+        {
+            // Screen motion vector: RG16F sampled as (mv.x, mv.y, 0, 1), scaled
+            // into R (=+x) / G (=+y). Black where motion is ~0 (frozen camera,
+            // or geometry tracking the camera); negative motion clamps to 0.
+            var s = gbufferMotionScale;
+            list.DrawImageStretched(targets.GBufferMotion.Texture,
                 new Rectangle(0, 0, targets.Width, targets.Height),
                 new Color4(s, s, s, 1f), mode: BlendMode.Opaque);
         }

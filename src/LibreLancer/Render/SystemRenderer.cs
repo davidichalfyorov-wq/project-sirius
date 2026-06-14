@@ -643,11 +643,13 @@ namespace LibreLancer.Render
             if (gbufferNormal != null)
             {
                 // RT1 = normal+roughness (SV_Target1), RT2 = view-Z
-                // (SV_Target2) - order must match the shader output indices.
+                // (SV_Target2), RT3 = screen motion (SV_Target3) - order must
+                // match the shader output indices.
                 rstate.SetGBufferTargets(new RenderTarget2D[]
                 {
                     gbufferNormal,
-                    hdrPipeline.CurrentGBufferViewZTarget!
+                    hdrPipeline.CurrentGBufferViewZTarget!,
+                    hdrPipeline.CurrentGBufferMotionTarget!
                 });
                 RenderMaterial.GBufferPassActive = true;
             }

@@ -402,6 +402,10 @@ struct GBufferOutput
     float4 color : SV_Target0;
     float4 normalRoughness : SV_Target1;
     float viewZ : SV_Target2;
+    // Screen-space motion vector (NDC delta cur->prev) to RT3 (RG16F). The
+    // depth remap leaves X/Y untouched, so it is consistent between cur and
+    // prev. Camera-only for static geometry (per-object prev-world = 0.2.1).
+    float2 motion : SV_Target3;
 };
 
 GBufferOutput main(Input input)
@@ -413,6 +417,9 @@ GBufferOutput main(Input input)
     o.color = lit;
     o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
     o.viewZ = input.viewPosition.z;
+    float4 curClip = mul(float4(input.worldPosition, 1.0), ViewProjection);
+    float4 prevClip = mul(float4(input.worldPosition, 1.0), PrevViewProjection);
+    o.motion = (curClip.xy / curClip.w) - (prevClip.xy / prevClip.w);
     return o;
 }
 #else
