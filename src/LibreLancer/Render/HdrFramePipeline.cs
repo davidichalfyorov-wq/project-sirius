@@ -625,16 +625,10 @@ internal sealed class HdrFramePipeline : IDisposable
         }
         var avgLum = count > 0 ? (float)Math.Exp(logSum / count) : 0.18f;
 
-        if (!float.IsFinite(adaptedLuminance) || adaptedLuminance <= 0f)
-        {
-            adaptedLuminance = avgLum;
-        }
-        var speed = avgLum > adaptedLuminance ? AutoExpSpeedUp : AutoExpSpeedDown;
-        var t = 1f - MathF.Exp(-MathF.Max(DeltaSeconds, 0f) * MathF.Max(speed, 0f));
-        adaptedLuminance += (avgLum - adaptedLuminance) * Math.Clamp(t, 0f, 1f);
-
-        var exp = AutoExpKey * MathF.Pow(2f, AutoExpCompensation) / MathF.Max(adaptedLuminance, 1e-4f);
-        Exposure = Math.Clamp(exp, AutoExpMinExposure, AutoExpMaxExposure);
+        adaptedLuminance = AutoExposureMath.AdaptLuminance(adaptedLuminance, avgLum, DeltaSeconds,
+            AutoExpSpeedUp, AutoExpSpeedDown);
+        Exposure = AutoExposureMath.ExposureForLuminance(adaptedLuminance, AutoExpKey,
+            AutoExpCompensation, AutoExpMinExposure, AutoExpMaxExposure);
     }
 
     private struct GodRaysUniforms
