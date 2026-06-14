@@ -614,6 +614,67 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void ValidatesEngineVolumePayloadByteCount()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(MakeCacheArtifactPlan());
+        var payload = new byte[checked((int)descriptor.PayloadBytes)];
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidatePayload(payload, descriptor);
+
+        Assert.True(validation.Valid);
+    }
+
+    [Fact]
+    public void RejectsEngineVolumePayloadByteCountMismatch()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(MakeCacheArtifactPlan());
+        var payload = new byte[checked((int)descriptor.PayloadBytes) - 1];
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidatePayload(payload, descriptor);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("byte count", validation.Error);
+    }
+
+    [Fact]
+    public void EncodesEngineVolumeUnitDensityForUnormFormats()
+    {
+        Assert.Equal(0u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            -1f,
+            VolumetricEngineVolumeFormat.DensityR8UNorm));
+        Assert.Equal(128u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            0.5f,
+            VolumetricEngineVolumeFormat.DensityR8UNorm));
+        Assert.Equal(255u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            2f,
+            VolumetricEngineVolumeFormat.DensityR8UNorm));
+
+        Assert.Equal(0u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            -1f,
+            VolumetricEngineVolumeFormat.DensityR16UNorm));
+        Assert.Equal(32768u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            0.5f,
+            VolumetricEngineVolumeFormat.DensityR16UNorm));
+        Assert.Equal(65535u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            2f,
+            VolumetricEngineVolumeFormat.DensityR16UNorm));
+    }
+
+    [Fact]
+    public void EncodesEngineVolumeUnitDensityForR16Float()
+    {
+        Assert.Equal(0x0000u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            -1f,
+            VolumetricEngineVolumeFormat.DensityR16Float));
+        Assert.Equal(0x3800u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            0.5f,
+            VolumetricEngineVolumeFormat.DensityR16Float));
+        Assert.Equal(0x3C00u, VolumetricEngineVolumeDescriptor.EncodeUnitDensity(
+            2f,
+            VolumetricEngineVolumeFormat.DensityR16Float));
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");

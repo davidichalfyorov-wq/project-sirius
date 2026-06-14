@@ -105,6 +105,49 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
     public static VolumetricEngineVolumeDescriptor Invalid(string error) =>
         new(false, 0, default, 0, 0, 0, Vector2.Zero, "", "", "", "", "", "", "", error);
 
+    public static VolumetricEngineVolumePayloadValidation ValidatePayload(
+        ReadOnlySpan<byte> payload,
+        VolumetricEngineVolumeDescriptor descriptor)
+    {
+        if (!descriptor.Valid)
+        {
+            return VolumetricEngineVolumePayloadValidation.Invalid(
+                "cannot validate engine volume payload for invalid descriptor");
+        }
+        if (descriptor.BytesPerVoxel <= 0 || descriptor.PayloadBytes <= 0)
+        {
+            return VolumetricEngineVolumePayloadValidation.Invalid(
+                "engine volume descriptor has invalid payload format");
+        }
+        if (payload.Length != descriptor.PayloadBytes)
+        {
+            return VolumetricEngineVolumePayloadValidation.Invalid(
+                "engine volume payload byte count mismatch");
+        }
+
+        return VolumetricEngineVolumePayloadValidation.Ok();
+    }
+
+    public uint EncodeUnitDensity(float unitDensity) =>
+        EncodeUnitDensity(unitDensity, Format);
+
+    public static uint EncodeUnitDensity(
+        float unitDensity,
+        VolumetricEngineVolumeFormat format)
+    {
+        var clamped = Math.Clamp(unitDensity, 0f, 1f);
+        return format switch
+        {
+            VolumetricEngineVolumeFormat.DensityR8UNorm =>
+                (uint)MathF.Round(clamped * byte.MaxValue, MidpointRounding.AwayFromZero),
+            VolumetricEngineVolumeFormat.DensityR16UNorm =>
+                (uint)MathF.Round(clamped * ushort.MaxValue, MidpointRounding.AwayFromZero),
+            VolumetricEngineVolumeFormat.DensityR16Float =>
+                BitConverter.HalfToUInt16Bits((Half)clamped),
+            _ => 0
+        };
+    }
+
     public static VolumetricEngineVolumeHeaderValidation ValidateHeader(
         IEnumerable<string> lines,
         VolumetricEngineVolumeDescriptor descriptor)
@@ -267,5 +310,16 @@ public readonly record struct VolumetricEngineVolumeHeaderValidation(
         new(true, "");
 
     public static VolumetricEngineVolumeHeaderValidation Invalid(string error) =>
+        new(false, error);
+}
+
+public readonly record struct VolumetricEngineVolumePayloadValidation(
+    bool Valid,
+    string Error)
+{
+    public static VolumetricEngineVolumePayloadValidation Ok() =>
+        new(true, "");
+
+    public static VolumetricEngineVolumePayloadValidation Invalid(string error) =>
         new(false, error);
 }
