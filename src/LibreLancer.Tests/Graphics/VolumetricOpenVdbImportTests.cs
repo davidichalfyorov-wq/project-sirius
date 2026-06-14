@@ -753,6 +753,27 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void ReadsDenseEngineVolumeArtifactDescriptorAndPayloadWindow()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR16UNorm);
+        var artifact = VolumetricEngineVolumeDescriptor.BuildDenseArtifact(
+            [0.5f, 1f],
+            descriptor);
+
+        var read = VolumetricEngineVolumeDescriptor.ReadDenseArtifact(artifact.Artifact);
+
+        Assert.True(read.Valid);
+        Assert.Equal(descriptor.Format, read.Descriptor.Format);
+        Assert.Equal(descriptor.Width, read.Descriptor.Width);
+        Assert.Equal(descriptor.PayloadBytes, read.PayloadBytes);
+        Assert.Equal(new byte[] { 0x00, 0x80, 0xFF, 0xFF },
+            artifact.Artifact.AsSpan(read.PayloadOffset, read.PayloadBytes).ToArray());
+        Assert.True(VolumetricEngineVolumeDescriptor.ValidatePayload(
+            artifact.Artifact.AsSpan(read.PayloadOffset, read.PayloadBytes),
+            read.Descriptor).Valid);
+    }
+
+    [Fact]
     public void RejectsDenseEngineVolumeArtifactWithoutHeaderTerminator()
     {
         var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
@@ -777,6 +798,37 @@ public class VolumetricOpenVdbImportTests
 
         Assert.False(validation.Valid);
         Assert.Contains("byte count", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsDenseEngineVolumeArtifactWithMismatchedHeaderLayout()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var header = ReplaceLine(
+            descriptor.BuildHeaderLines(),
+            "payload_layout = ",
+            "payload_layout = z_major");
+        var artifact = Encoding.ASCII.GetBytes(string.Join('\n', header) + "\n\n\0\0");
+
+        var read = VolumetricEngineVolumeDescriptor.ReadDenseArtifact(artifact);
+
+        Assert.False(read.Valid);
+        Assert.Contains("payload_layout", read.Error);
+    }
+
+    [Fact]
+    public void RejectsParsedEngineVolumeHeaderWithMismatchedPayloadBytes()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var header = ReplaceLine(
+            descriptor.BuildHeaderLines(),
+            "payload_bytes = ",
+            "payload_bytes = 4");
+
+        var parsed = VolumetricEngineVolumeDescriptor.ParseHeader(header);
+
+        Assert.False(parsed.Valid);
+        Assert.Contains("payload_bytes", parsed.Error);
     }
 
     [Fact]

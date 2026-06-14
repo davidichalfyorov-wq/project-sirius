@@ -251,6 +251,39 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
         return VolumetricEngineVolumeArtifactValidation.Ok();
     }
 
+    public static VolumetricEngineVolumeArtifactReadResult ReadDenseArtifact(
+        ReadOnlySpan<byte> artifact)
+    {
+        var split = IndexOfHeaderTerminator(artifact);
+        if (split < 0)
+        {
+            return VolumetricEngineVolumeArtifactReadResult.Invalid(
+                "engine volume artifact missing header terminator");
+        }
+
+        var header = Encoding.ASCII.GetString(artifact[..split]);
+        var descriptor = ParseHeader(header.Split('\n'));
+        if (!descriptor.Valid)
+        {
+            return VolumetricEngineVolumeArtifactReadResult.Invalid(descriptor.Error);
+        }
+
+        var payloadOffset = split + 2;
+        var payloadLength = artifact.Length - payloadOffset;
+        var payloadValidation = ValidatePayload(artifact[payloadOffset..], descriptor);
+        if (!payloadValidation.Valid)
+        {
+            return VolumetricEngineVolumeArtifactReadResult.Invalid(payloadValidation.Error);
+        }
+
+        return new VolumetricEngineVolumeArtifactReadResult(
+            true,
+            descriptor,
+            payloadOffset,
+            payloadLength,
+            "");
+    }
+
     public uint EncodeUnitDensity(float unitDensity) =>
         EncodeUnitDensity(unitDensity, Format);
 
@@ -373,6 +406,103 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
         return VolumetricEngineVolumeHeaderValidation.Ok();
     }
 
+    public static VolumetricEngineVolumeDescriptor ParseHeader(IEnumerable<string> lines)
+    {
+        if (!TryParseKeyValueLines(lines, out var values, out var parseError))
+        {
+            return Invalid(parseError);
+        }
+
+        if (!Required(values, "magic", out var magic) ||
+            !string.Equals(magic, Magic, StringComparison.Ordinal))
+        {
+            return Invalid("engine volume header magic mismatch");
+        }
+        if (!RequiredInt(values, "version", out var version) || version != CurrentVersion)
+        {
+            return Invalid("engine volume header version mismatch");
+        }
+        if (!Required(values, "format", out var formatToken) ||
+            !TryParseFormatToken(formatToken, out var format))
+        {
+            return Invalid("engine volume header invalid format");
+        }
+        if (!Required(values, "payload_layout", out var payloadLayout) ||
+            !string.Equals(payloadLayout, DensePayloadLayout, StringComparison.Ordinal))
+        {
+            return Invalid("engine volume header payload_layout mismatch");
+        }
+        if (!RequiredDimensions(values, out var width, out var height, out var depth))
+        {
+            return Invalid("engine volume header invalid dimensions");
+        }
+        if (!RequiredLong(values, "voxel_count", out var voxelCount))
+        {
+            return Invalid("engine volume header invalid voxel_count");
+        }
+        if (!RequiredLong(values, "payload_bytes", out var payloadBytes))
+        {
+            return Invalid("engine volume header invalid payload_bytes");
+        }
+        if (!RequiredFloat(values, "density_normalize_scale", out var normalizeScale))
+        {
+            return Invalid("engine volume header invalid density_normalize_scale");
+        }
+        if (!RequiredFloat(values, "density_normalize_bias", out var normalizeBias))
+        {
+            return Invalid("engine volume header invalid density_normalize_bias");
+        }
+
+        var requiredStrings =
+            new (string Key, string Value)[]
+            {
+                ("cache_key", ""),
+                ("cache", ""),
+                ("manifest", ""),
+                ("canonical_system", ""),
+                ("canonical_nebula", ""),
+                ("grid", ""),
+                ("content_hash", "")
+            };
+        var strings = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (key, _) in requiredStrings)
+        {
+            if (!Required(values, key, out var value))
+            {
+                return Invalid($"engine volume header missing {key}");
+            }
+            strings[key] = value;
+        }
+
+        var descriptor = new VolumetricEngineVolumeDescriptor(
+            true,
+            version,
+            format,
+            width,
+            height,
+            depth,
+            new Vector2(normalizeScale, normalizeBias),
+            strings["cache_key"],
+            strings["cache"],
+            strings["manifest"],
+            strings["canonical_system"],
+            strings["canonical_nebula"],
+            strings["grid"],
+            strings["content_hash"],
+            "");
+
+        if (descriptor.VoxelCount != voxelCount)
+        {
+            return Invalid("engine volume header voxel_count mismatch");
+        }
+        if (descriptor.PayloadBytes != payloadBytes)
+        {
+            return Invalid("engine volume header payload_bytes mismatch");
+        }
+
+        return descriptor;
+    }
+
     private static bool IsSupportedFormat(VolumetricEngineVolumeFormat format) =>
         format is VolumetricEngineVolumeFormat.DensityR8UNorm
             or VolumetricEngineVolumeFormat.DensityR16UNorm
@@ -386,6 +516,20 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
             VolumetricEngineVolumeFormat.DensityR16Float => "density_r16_float",
             _ => "unknown"
         };
+
+    private static bool TryParseFormatToken(
+        string token,
+        out VolumetricEngineVolumeFormat format)
+    {
+        format = token switch
+        {
+            "density_r8_unorm" => VolumetricEngineVolumeFormat.DensityR8UNorm,
+            "density_r16_unorm" => VolumetricEngineVolumeFormat.DensityR16UNorm,
+            "density_r16_float" => VolumetricEngineVolumeFormat.DensityR16Float,
+            _ => default
+        };
+        return format != default;
+    }
 
     private static string Fmt(float value) =>
         value.ToString("0.########", CultureInfo.InvariantCulture);
@@ -416,6 +560,79 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
 
         error = "";
         return true;
+    }
+
+    private static bool Required(
+        Dictionary<string, string> values,
+        string key,
+        out string value)
+    {
+        if (values.TryGetValue(key, out var found) && found.Length > 0)
+        {
+            value = found;
+            return true;
+        }
+
+        value = "";
+        return false;
+    }
+
+    private static bool RequiredInt(
+        Dictionary<string, string> values,
+        string key,
+        out int value)
+    {
+        value = 0;
+        return Required(values, key, out var raw) &&
+            int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static bool RequiredLong(
+        Dictionary<string, string> values,
+        string key,
+        out long value)
+    {
+        value = 0;
+        return Required(values, key, out var raw) &&
+            long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static bool RequiredFloat(
+        Dictionary<string, string> values,
+        string key,
+        out float value)
+    {
+        value = 0;
+        return Required(values, key, out var raw) &&
+            float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static bool RequiredDimensions(
+        Dictionary<string, string> values,
+        out int width,
+        out int height,
+        out int depth)
+    {
+        width = 0;
+        height = 0;
+        depth = 0;
+        if (!Required(values, "dimensions", out var raw))
+        {
+            return false;
+        }
+
+        var parts = raw.Split(',');
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        return int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out width) &&
+            int.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out height) &&
+            int.TryParse(parts[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out depth) &&
+            width > 0 &&
+            height > 0 &&
+            depth > 0;
     }
 
     private static int IndexOfHeaderTerminator(ReadOnlySpan<byte> artifact)
@@ -490,4 +707,15 @@ public readonly record struct VolumetricEngineVolumeArtifactValidation(
 
     public static VolumetricEngineVolumeArtifactValidation Invalid(string error) =>
         new(false, error);
+}
+
+public readonly record struct VolumetricEngineVolumeArtifactReadResult(
+    bool Valid,
+    VolumetricEngineVolumeDescriptor Descriptor,
+    int PayloadOffset,
+    int PayloadBytes,
+    string Error)
+{
+    public static VolumetricEngineVolumeArtifactReadResult Invalid(string error) =>
+        new(false, VolumetricEngineVolumeDescriptor.Invalid(error), 0, 0, error);
 }

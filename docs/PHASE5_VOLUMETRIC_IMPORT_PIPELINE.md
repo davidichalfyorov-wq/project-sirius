@@ -75,7 +75,9 @@ Rules for the OpenVDB layer:
   samples in x-major order using little-endian 16-bit values for `r16_*`
   formats; tools should not invent alternate byte layouts. The generated
   dense `.siriusvol` artifact is an ASCII descriptor header, a blank `\n\n`
-  terminator, then the binary payload bytes.
+  terminator, then the binary payload bytes. CI can parse the header back from
+  the artifact and validate the following payload window without trusting an
+  external sidecar.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density
