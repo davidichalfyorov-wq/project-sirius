@@ -146,6 +146,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 
         if (profile is not { IsValid: true } active)
         {
+            DisposeTextures();
             ClearImportedDensity("waiting for active nebula profile");
             LastDebug = VolumetricNebulaResourceDebug.Waiting("waiting for active nebula profile");
             return;
