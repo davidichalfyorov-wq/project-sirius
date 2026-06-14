@@ -230,6 +230,11 @@ public readonly record struct RenderFeatureSet(
         }
         var replaySeed = OverrideInt(settings.SelectedVolumetricLightningReplaySeed,
             "SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", "SIRIUS_VOLLIGHTNING_REPLAY_SEED");
+        if ((bits & RenderFeatureBits.VolumetricLightningChannels) == 0)
+        {
+            replayTime = -1f;
+            replaySeed = 0;
+        }
         return new RenderFeatureSet(bits, Math.Clamp(settings.SelectedVolumetricQuality, 0, 3), debugView,
             capturePath, replayTime, replaySeed);
     }

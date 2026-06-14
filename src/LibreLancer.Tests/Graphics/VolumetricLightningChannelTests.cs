@@ -251,6 +251,27 @@ public class VolumetricLightningChannelTests
         Assert.Contains("replay t=0.250s seed=77", policy.DebugSummary);
     }
 
+    [Fact]
+    public void EnvironmentReplayTimeIsIgnoredWithoutLightningChannels()
+    {
+        using var _ = new CleanLightningEnvironment();
+        Environment.SetEnvironmentVariable("SIRIUS_VOLUMETRIC_NEBULA", "1");
+        Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", "0.25");
+        Environment.SetEnvironmentVariable("SIRIUS_VOLFOG_LIGHTNING_REPLAY_SEED", "77");
+
+        var features = RenderFeatureSet.FromSettings(new GameSettings());
+        var policy = VolumetricLightningPolicy.FromFeatures(features, liveTimeSeconds: 9f);
+
+        Assert.True(features.VolumetricNebula);
+        Assert.False(features.VolumetricLightningChannels);
+        Assert.Equal(-1f, features.VolumetricLightningReplayTime);
+        Assert.Equal(0, features.VolumetricLightningReplaySeed);
+        Assert.False(policy.Enabled);
+        Assert.False(policy.Replay);
+        Assert.Equal("off", policy.HudMode);
+        Assert.Equal("off", policy.DebugSummary);
+    }
+
     private static RenderFeatureSet MakeFeatures() => new(
         RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricLightningChannels,
         2,
