@@ -106,6 +106,14 @@ internal static class VKSpirv
                     break;
                 case OpTypeSampledImage:
                     typeKinds[words[i + 1]] = SpirvResourceKind.SampledImage;
+                    if (cubeTypes.Contains(words[i + 2]))
+                    {
+                        cubeTypes.Add(words[i + 1]);
+                    }
+                    else if (threeDTypes.Contains(words[i + 2]))
+                    {
+                        threeDTypes.Add(words[i + 1]);
+                    }
                     break;
                 case OpTypeAccelerationStructureKHR:
                     typeKinds[words[i + 1]] = SpirvResourceKind.AccelerationStructure;

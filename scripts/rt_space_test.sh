@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -u
-ROOT="/run/media/ddavidich/Disk1/Project Sirius"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${SIRIUS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 OUT="${1:?outdir}"
 mkdir -p "$OUT"; rm -f "$OUT"/*.png "$OUT/run.log"
 PROFILE=/tmp/rt_test_home

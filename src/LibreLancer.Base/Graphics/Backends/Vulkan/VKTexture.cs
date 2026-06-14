@@ -113,7 +113,7 @@ internal unsafe class VKTexture2D : ITexture2D
     public VkImageLayout DescriptorLayout => isStorage ? (VkImageLayout)1 : (VkImageLayout)5;
 
     public VKTexture2D(VKRenderContext context, int width, int height, bool hasMipMaps, SurfaceFormat format,
-        bool cube = false, int layers = 1, int depth3d = 1, bool storage = false)
+        bool cube = false, int layers = 1, int depth3d = 1, bool storage = false, bool texture3d = false)
     {
         this.context = context;
         Width = width;
@@ -121,14 +121,15 @@ internal unsafe class VKTexture2D : ITexture2D
         Format = format;
         texDepth = depth3d;
         isStorage = storage;
+        var is3D = texture3d || depth3d > 1;
         // 3D textures: single level (froxel grids/noise volumes don't mip).
-        LevelCount = hasMipMaps && depth3d == 1 ? 1 + (int)Math.Floor(Math.Log2(Math.Max(width, height))) : 1;
+        LevelCount = hasMipMaps && !is3D ? 1 + (int)Math.Floor(Math.Log2(Math.Max(width, height))) : 1;
 
         var imageInfo = new VkImageCreateInfo
         {
             SType = VkStructureType.ImageCreateInfo,
             Flags = cube ? 0x10u : 0u, // CUBE_COMPATIBLE
-            ImageType = depth3d > 1 ? 2 : 1,
+            ImageType = is3D ? 2 : 1,
             Format = (VkFormat)VKFormats.ToVk(format),
             Extent2D = new VkExtent2D { Width = (uint)width, Height = (uint)height },
             ExtentDepth = (uint)depth3d,
@@ -152,7 +153,7 @@ internal unsafe class VKTexture2D : ITexture2D
             // (phase 5: receives scene-depth copies for volumetrics)
             imageInfo.Usage = 0x4 | 0x20 | 0x2;
         }
-        else if (depth3d == 1 && format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable)
+        else if (!is3D && format is SurfaceFormat.Bgra8 or SurfaceFormat.HdrBlendable)
         {
             imageInfo.Usage |= 0x10; // COLOR_ATTACHMENT for renderable formats
         }
@@ -161,7 +162,7 @@ internal unsafe class VKTexture2D : ITexture2D
         Vk.Check(Vk.CreateImage(context.Device, &imageInfo, null, &image), "vkCreateImage");
         Image = image;
         // VK_OBJECT_TYPE_IMAGE = 10
-        context.SetObjectName(10, image, depth3d > 1
+        context.SetObjectName(10, image, is3D
             ? $"Tex3D {width}x{height}x{depth3d} {format}{(storage ? " storage" : "")}"
             : $"{(cube ? "TexCube" : "Tex2D")} {width}x{height} {format}");
 
@@ -174,7 +175,7 @@ internal unsafe class VKTexture2D : ITexture2D
         {
             SType = VkStructureType.ImageViewCreateInfo,
             Image = Image,
-            ViewType = cube ? 3 : depth3d > 1 ? 2 : 1, // 2 = VIEW_TYPE_3D
+            ViewType = cube ? 3 : is3D ? 2 : 1, // 2 = VIEW_TYPE_3D
             Format = imageInfo.Format,
             SubresourceRange = new VkImageSubresourceRange
             {
@@ -368,7 +369,7 @@ internal sealed unsafe class VKTexture3D : VKTexture2D, ITexture3D
 
     public VKTexture3D(VKRenderContext context, int width, int height, int depth, SurfaceFormat format,
         bool storage)
-        : base(context, width, height, false, format, depth3d: depth, storage: storage)
+        : base(context, width, height, false, format, depth3d: depth, storage: storage, texture3d: true)
     {
         Depth = depth;
     }

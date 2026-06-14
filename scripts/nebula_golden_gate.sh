@@ -11,7 +11,8 @@
 # Refresh baselines deliberately with: nebula_golden_gate.sh --rebase
 set -euo pipefail
 
-ROOT="/run/media/ddavidich/Disk1/Project Sirius"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${SIRIUS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 GOLD="$ROOT/tests/goldens/nebula"
 POSE="-7460,500,55000,0"
 OUT="${NEBULA_GOLDEN_OUT:-$(mktemp -d /tmp/nebula_golden_gate.XXXX)}"

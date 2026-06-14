@@ -5,7 +5,8 @@
 #
 # Usage: golden_capture.sh <output-dir> [gl|vulkan]
 set -e
-ROOT="/run/media/ddavidich/Disk1/Project Sirius"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${SIRIUS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 OUT="$1"
 RENDERER="${2:-gl}"
 [ -n "$OUT" ] || { echo "usage: golden_capture.sh <output-dir> [gl|vulkan]"; exit 1; }
