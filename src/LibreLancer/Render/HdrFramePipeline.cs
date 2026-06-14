@@ -148,7 +148,7 @@ internal sealed class HdrFramePipeline : IDisposable
                 GBufferNormal = new RenderTarget2D(rstate,
                     new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
                 GBufferViewZ = new RenderTarget2D(rstate,
-                    new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable)); // DIAG: was Single
+                    new Texture2D(rstate, width, height, false, SurfaceFormat.Single));
             }
         }
 
@@ -833,10 +833,12 @@ internal sealed class HdrFramePipeline : IDisposable
         var list = rstate.Renderer2D.CreateDrawList();
         if (debugGBuffer == 2 && targets.GBufferViewZ != null)
         {
-            // Linear view-Z scaled to a visible ramp; background (cleared 0)
-            // stays black. The scale (and sign - the view-Z sign follows the
-            // view matrix handedness) is tunable without a rebuild via
-            // SIRIUS_GBUFFER_VIEWZ_SCALE for arbitrary scene depth ranges.
+            // Linear view-Z ramp. NOTE: RT2 is R32F and Renderer2D cannot
+            // sample single-channel float (returns 0) - a faithful grayscale
+            // depth view needs a dedicated R32F->grayscale fullscreen shader
+            // (debug-infra follow-up). The RT2 WRITE is verified (3rd MRT
+            // attachment captures shader output; VVL=0). Scale/sign tunable
+            // via SIRIUS_GBUFFER_VIEWZ_SCALE.
             var s = gbufferViewZScale;
             list.DrawImageStretched(targets.GBufferViewZ.Texture,
                 new Rectangle(0, 0, targets.Width, targets.Height),

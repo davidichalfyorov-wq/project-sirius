@@ -401,7 +401,7 @@ struct GBufferOutput
 {
     float4 color : SV_Target0;
     float4 normalRoughness : SV_Target1;
-    float4 viewZ : SV_Target2; // DIAG: was float
+    float viewZ : SV_Target2;
 };
 
 GBufferOutput main(Input input)
@@ -412,7 +412,7 @@ GBufferOutput main(Input input)
     GBufferOutput o;
     o.color = lit;
     o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
-    o.viewZ = float4(0.7, 0.3, 0.1, 1.0); // DIAG: distinct colour to isolate RT2 plumbing
+    o.viewZ = input.viewPosition.z;
     return o;
 }
 #else
