@@ -53,6 +53,27 @@ public class VolumetricLightningChannelTests
     }
 
     [Fact]
+    public void ArtProfilesUseNebulaNicknameAndSourceHints()
+    {
+        var storm = VolumetricLightningArtProfile.ForNebula(
+            MakeProfile(hasLightning: true, nickname: "zone_li01_storm_channel", archetype: "generic"),
+            2);
+        var nomad = VolumetricLightningArtProfile.ForNebula(
+            MakeProfile(hasLightning: true, nickname: "zone_unknown", sourceFile: "nomad_plasma_cloud.ini",
+                archetype: "generic"),
+            2);
+        var ice = VolumetricLightningArtProfile.ForNebula(
+            MakeProfile(hasLightning: true, nickname: "zone_ice_static", archetype: "generic"),
+            2);
+
+        Assert.Equal("crow-electric", storm.Name);
+        Assert.Equal("nomad-plasma", nomad.Name);
+        Assert.Equal("ice-static", ice.Name);
+        Assert.Equal(VolumetricLightningDebugColorMode.ElectricBlue, storm.DebugColorMode);
+        Assert.Equal(VolumetricLightningDebugColorMode.PlasmaViolet, nomad.DebugColorMode);
+    }
+
+    [Fact]
     public void DebugColorModesResolveToDistinctShaderColors()
     {
         var fog = new Vector4(0.36f, 0.44f, 0.52f, 1f);
@@ -335,10 +356,11 @@ public class VolumetricLightningChannelTests
         }
     }
 
-    private static NebulaVolumeProfile MakeProfile(bool hasLightning) => new(
-        "zone_crow_test",
-        "crow.ini",
-        "crow",
+    private static NebulaVolumeProfile MakeProfile(bool hasLightning, string nickname = "zone_crow_test",
+        string sourceFile = "crow.ini", string archetype = "crow") => new(
+        nickname,
+        sourceFile,
+        archetype,
         ShapeKind.Sphere,
         Vector3.Zero,
         Matrix4x4.Identity,

@@ -314,14 +314,20 @@ public readonly record struct VolumetricLightningArtProfile(
             Math.Clamp(profile.FogColor.G * 1.35f + 0.15f, 0f, 1.6f),
             Math.Clamp(profile.FogColor.B * 1.35f + 0.15f, 0f, 1.6f),
             1f);
-        return ForArchetype(profile.Archetype, quality, fogColor);
+        return ForProfileHint(profile.Archetype, profile.Nickname, profile.SourceFile, quality, fogColor);
     }
 
     public static VolumetricLightningArtProfile ForArchetype(string archetype, int quality, Vector4 fogColor)
     {
+        return ForProfileHint(archetype, string.Empty, string.Empty, quality, fogColor);
+    }
+
+    public static VolumetricLightningArtProfile ForProfileHint(string archetype, string nickname, string sourceFile,
+        int quality, Vector4 fogColor)
+    {
         var q = Math.Clamp(quality, 0, 3);
-        if (archetype.Contains("crow", StringComparison.OrdinalIgnoreCase) ||
-            archetype.Contains("electric", StringComparison.OrdinalIgnoreCase))
+        var hint = string.Join('|', archetype ?? string.Empty, nickname ?? string.Empty, sourceFile ?? string.Empty);
+        if (HasHint(hint, "crow", "electric", "storm"))
         {
             return new VolumetricLightningArtProfile(
                 "crow-electric",
@@ -335,8 +341,7 @@ public readonly record struct VolumetricLightningArtProfile(
                 1.0f,
                 VolumetricLightningDebugColorMode.ElectricBlue);
         }
-        if (archetype.Contains("nomad", StringComparison.OrdinalIgnoreCase) ||
-            archetype.Contains("plasma", StringComparison.OrdinalIgnoreCase))
+        if (HasHint(hint, "nomad", "plasma"))
         {
             return new VolumetricLightningArtProfile(
                 "nomad-plasma",
@@ -350,7 +355,7 @@ public readonly record struct VolumetricLightningArtProfile(
                 0.72f,
                 VolumetricLightningDebugColorMode.PlasmaViolet);
         }
-        if (archetype.Contains("ice", StringComparison.OrdinalIgnoreCase))
+        if (HasHint(hint, "ice", "crystal"))
         {
             return new VolumetricLightningArtProfile(
                 "ice-static",
@@ -375,6 +380,18 @@ public readonly record struct VolumetricLightningArtProfile(
             0.05f,
             0.10f,
             VolumetricLightningDebugColorMode.FogTint);
+    }
+
+    private static bool HasHint(string hint, params string[] tokens)
+    {
+        foreach (var token in tokens)
+        {
+            if (hint.Contains(token, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Vector4 ResolveShaderColor()
