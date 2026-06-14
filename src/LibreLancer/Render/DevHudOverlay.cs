@@ -121,6 +121,13 @@ public class DevHudOverlay
                 Line($"vol wake   {froxels.DisplacementSummary}",
                     froxels.DisplacementUpdated ? Color4.LightGreen : Color4.LightBlue);
             }
+            if (froxels.WakeHistoryUpdated || !string.IsNullOrWhiteSpace(froxels.WakeHistorySummary))
+            {
+                Line($"vol wakeH  {(froxels.WakeHistoryUpdated ? "hist" : "off")}",
+                    froxels.WakeHistoryUpdated ? Color4.LightGreen : Color4.LightBlue);
+                Line($"vol trail  {froxels.WakeHistorySummary}",
+                    froxels.WakeHistoryUpdated ? Color4.LightGreen : Color4.LightBlue);
+            }
             Line($"vol comp   {(froxels.Allocated ? (froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "hdr" : "off") : "off")}",
                 froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
             Line($"vol depth  {(froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "copy" : "no")}",
@@ -141,6 +148,7 @@ public class DevHudOverlay
             Line($"vol comp   {(features.VolumetricComposite ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol nearc  {(features.VolumetricNearComposite ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol nearD  {(features.VolumetricNearDetail ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol wakeH  {(features.VolumetricWakeHistory ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol matfog {(features.VolumetricMaterialFog ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol bolt   {(features.VolumetricLightningChannels ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol temp   {(features.VolumetricTemporal ? (volumetricHistoryActive(froxels) ? "hist" : "req") : "off")}",
@@ -155,6 +163,7 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricTransmittance or
                 RenderDebugView.VolumetricFroxels or
                 RenderDebugView.VolumetricDisplacement or
+                RenderDebugView.VolumetricDisplacementHistory or
                 RenderDebugView.VolumetricLightning or
                 RenderDebugView.VolumetricHistory or
                 RenderDebugView.VolumetricHistoryConfidence or

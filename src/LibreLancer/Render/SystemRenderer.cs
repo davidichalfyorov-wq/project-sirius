@@ -832,6 +832,7 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricFroxels or
                                   RenderDebugView.VolumetricZones or
                                   RenderDebugView.VolumetricDisplacement or
+                                  RenderDebugView.VolumetricDisplacementHistory or
                                   RenderDebugView.VolumetricLightning or
                                   RenderDebugView.VolumetricHistory or
                                   RenderDebugView.VolumetricHistoryConfidence or

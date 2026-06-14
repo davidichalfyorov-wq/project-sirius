@@ -69,6 +69,9 @@ public interface IRendererSettings
     /// <summary>Interactive ship density displacement/wake. Stubbed until PR-5.2+.</summary>
     bool SelectedVolumetricShipDisplacement => false;
 
+    /// <summary>Persistent near-field wake trail history for ship fog displacement.</summary>
+    bool SelectedVolumetricWakeHistory => false;
+
     /// <summary>First visible opt-in froxel composite. Default false; legacy nebula remains fallback.</summary>
     bool SelectedVolumetricComposite => false;
 
