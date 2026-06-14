@@ -28,6 +28,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     private readonly VolumetricTemporalState temporalState = new();
     private VolumetricBlueNoiseResources? blueNoise;
     private VolumetricImportedDensityFrame importedDensity;
+    private Texture3D? importedDensityTexture;
+    private string importedDensityTextureKey = string.Empty;
     private Texture2D? fallbackJitterTexture;
     private Texture3D? fallbackDisplacementTexture;
 
@@ -96,6 +98,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public string BlueNoiseSourceName { get; private set; } = "off";
     public bool ImportedDensityReady => importedDensity.Valid;
     public string ImportedDensitySummary => importedDensity.Valid ? importedDensity.DebugSummary : "off";
+    public bool ImportedDensityTextureReady => importedDensityTexture != null;
 
     public static VolumetricNebulaResourceDebug LastDebug { get; private set; } =
         VolumetricNebulaResourceDebug.Disabled("not initialized");
@@ -384,7 +387,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
         if (importedDensity.Valid)
         {
-            operation += " + openvdb ready";
+            operation += ImportedDensityTextureReady ? " + openvdb sampled" : " + openvdb ready";
         }
 
         LastDebug = new VolumetricNebulaResourceDebug(
@@ -424,6 +427,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return false;
         }
 
+        var nextKey = ImportedDensityTextureKey(densityFrame.Descriptor);
+        if (!string.Equals(importedDensityTextureKey, nextKey, StringComparison.Ordinal))
+        {
+            DisposeImportedDensityTexture();
+        }
         importedDensity = densityFrame;
         LastImportedDensitySource = densityFrame.DebugSummary;
         return true;
@@ -432,6 +440,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public void ClearImportedDensity(string reason = "off")
     {
         importedDensity = VolumetricImportedDensityFrame.Invalid(reason);
+        DisposeImportedDensityTexture();
         LastImportedDensitySource = "off";
     }
 
@@ -892,8 +901,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 
         var shader = AllShaders.FroxelInject.Get(0);
         var jitterTexture = BindJitterTexture(rstate, features.VolumetricBlueNoise, out var jitterActive);
+        var importedDensityTexture = BindImportedDensityTexture(rstate, out var importedDensityActive);
         DispatchInjectGrid(rstate, shader, mainDesc, Density!, profile, totalTimeSeconds, jitterTexture, jitterActive,
-            VolumetricNearDensityTuning.Disabled, null, null);
+            VolumetricNearDensityTuning.Disabled, null, null, importedDensityTexture, importedDensityActive);
         if (NearAllocated)
         {
             var tuning = VolumetricNearDensityTuning.ForProfile(profile, features.VolumetricQuality,
@@ -903,13 +913,14 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                 : DisplacementUpdatedThisFrame ? ShipDisplacement : null;
             var wakeVectors = WakeCurlUpdatedThisFrame ? WakeVectorField : null;
             DispatchInjectGrid(rstate, shader, nearDesc, NearDensity!, profile, totalTimeSeconds, jitterTexture,
-                jitterActive, tuning, displacementSource, wakeVectors);
+                jitterActive, tuning, displacementSource, wakeVectors, importedDensityTexture, importedDensityActive);
             NearDetailTunedThisFrame = tuning.Enabled;
             NearDetailSummary = tuning.DebugSummary;
         }
         rstate.Textures[3] = null;
         rstate.Textures[4] = null;
         rstate.Textures[5] = null;
+        rstate.Textures[6] = null;
         rstate.SetStorageImage(0, null);
         GpuDensityInjectedThisFrame = true;
         return true;
@@ -918,7 +929,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     private void DispatchInjectGrid(RenderContext rstate, Shader shader, FroxelGridDesc grid,
         Texture3D density, NebulaVolumeProfile profile, float totalTimeSeconds, Texture2D jitterTexture,
         bool jitterActive, VolumetricNearDensityTuning nearTuning, Texture3D? displacement,
-        Texture3D? wakeVectors)
+        Texture3D? wakeVectors, Texture3D importedDensityTexture, bool importedDensityActive)
     {
         var displacementActive = displacement != null && grid.Kind == FroxelGridKind.Near;
         var displacementTexture = BindDisplacementTexture(rstate, displacement, out _);
@@ -967,7 +978,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             NearDustParams = nearTuning.ShaderDustParams,
             DisplacementParams = new Vector4(displacementActive ? 1f : 0f,
                 Math.Clamp(profile.DisplacementStrength, 0f, 2f), 1f, 0f),
-            WakeVectorParams = new Vector4(wakeVectorActive ? 1f : 0f, wakeWarp, wakeSoftening, 0f)
+            WakeVectorParams = new Vector4(wakeVectorActive ? 1f : 0f, wakeWarp, wakeSoftening, 0f),
+            ImportedDensityParams = new Vector4(importedDensityActive ? 1f : 0f, 0.85f, 1f, 0f)
         };
         shader.SetUniformBlock(3, ref inject);
         rstate.Textures[3] = jitterTexture;
@@ -976,6 +988,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         rstate.Samplers[4] = SamplerState.LinearClamp;
         rstate.Textures[5] = wakeVectorTexture;
         rstate.Samplers[5] = SamplerState.LinearClamp;
+        rstate.Textures[6] = importedDensityTexture;
+        rstate.Samplers[6] = SamplerState.LinearClamp;
         rstate.SetStorageImage(0, density);
         rstate.Shader = shader;
         rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
@@ -1236,6 +1250,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         public Vector4 NearDustParams;
         public Vector4 DisplacementParams;
         public Vector4 WakeVectorParams;
+        public Vector4 ImportedDensityParams;
     }
 
     private struct FroxelDisplacementParams
@@ -1432,6 +1447,74 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         return fallbackDisplacementTexture;
     }
 
+    private Texture3D BindImportedDensityTexture(RenderContext rstate, out bool active)
+    {
+        active = false;
+        if (importedDensity.Valid)
+        {
+            var key = ImportedDensityTextureKey(importedDensity.Descriptor);
+            if (importedDensityTexture == null ||
+                !string.Equals(importedDensityTextureKey, key, StringComparison.Ordinal))
+            {
+                DisposeImportedDensityTexture();
+                importedDensityTexture = CreateImportedDensityTexture(rstate, importedDensity);
+                importedDensityTextureKey = key;
+            }
+
+            active = importedDensityTexture != null;
+            if (active)
+            {
+                return importedDensityTexture!;
+            }
+        }
+
+        fallbackDisplacementTexture ??= CreateFallbackDisplacementTexture(rstate);
+        return fallbackDisplacementTexture;
+    }
+
+    public static ushort[] BuildImportedDensityTextureData(VolumetricImportedDensityFrame densityFrame)
+    {
+        if (!densityFrame.Valid ||
+            densityFrame.UnitDensitySamples.Length != densityFrame.Descriptor.VoxelCount)
+        {
+            return [];
+        }
+
+        var data = new ushort[checked(densityFrame.UnitDensitySamples.Length * 4)];
+        for (var i = 0; i < densityFrame.UnitDensitySamples.Length; i++)
+        {
+            var v = Math.Clamp(densityFrame.UnitDensitySamples[i], 0f, 1f);
+            data[(i * 4) + 0] = BitConverter.HalfToUInt16Bits((Half)v);
+            data[(i * 4) + 1] = HalfZero;
+            data[(i * 4) + 2] = HalfZero;
+            data[(i * 4) + 3] = HalfOne;
+        }
+        return data;
+    }
+
+    private static Texture3D CreateImportedDensityTexture(
+        RenderContext rstate,
+        VolumetricImportedDensityFrame densityFrame)
+    {
+        var descriptor = densityFrame.Descriptor;
+        var texture = new Texture3D(rstate, descriptor.Width, descriptor.Height, descriptor.Depth,
+            SurfaceFormat.HdrBlendable, storage: false);
+        texture.SetData(BuildImportedDensityTextureData(densityFrame));
+        return texture;
+    }
+
+    private static string ImportedDensityTextureKey(VolumetricEngineVolumeDescriptor descriptor) =>
+        descriptor.Valid
+            ? $"{descriptor.Width}x{descriptor.Height}x{descriptor.Depth}:{descriptor.Format}:{descriptor.ContentHash}"
+            : "";
+
+    private void DisposeImportedDensityTexture()
+    {
+        importedDensityTexture?.Dispose();
+        importedDensityTexture = null;
+        importedDensityTextureKey = string.Empty;
+    }
+
     private static Texture2D CreateFallbackJitterTexture(RenderContext rstate)
     {
         var texture = new Texture2D(rstate, 1, 1, false, SurfaceFormat.Bgra8);
@@ -1541,6 +1624,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
         disposed = true;
         DisposeTextures();
+        DisposeImportedDensityTexture();
         LastDebug = VolumetricNebulaResourceDebug.Disabled("disposed");
         LastBlueNoiseSource = "off";
         LastImportedDensitySource = "off";

@@ -14,6 +14,7 @@ public readonly record struct VolumetricImportedDensityFrame(
     float MaxDensity,
     float MeanDensity,
     float Coverage,
+    float[] UnitDensitySamples,
     string DebugSummary,
     string Error)
 {
@@ -81,9 +82,11 @@ public readonly record struct VolumetricImportedDensityFrame(
         var max = 0f;
         double sum = 0.0;
         var covered = 0;
+        var samples = new float[unitDensitySamples.Length];
         for (var i = 0; i < unitDensitySamples.Length; i++)
         {
             var v = Math.Clamp(unitDensitySamples[i], 0f, 1f);
+            samples[i] = v;
             min = MathF.Min(min, v);
             max = MathF.Max(max, v);
             sum += v;
@@ -105,6 +108,7 @@ public readonly record struct VolumetricImportedDensityFrame(
             max,
             mean,
             coverage,
+            samples,
             summary,
             "");
     }
@@ -117,5 +121,5 @@ public readonly record struct VolumetricImportedDensityFrame(
             canonicalSystem).Valid;
 
     public static VolumetricImportedDensityFrame Invalid(string error) =>
-        new(false, VolumetricEngineVolumeDescriptor.Invalid(error), 0, 0f, 0f, 0f, 0f, "", error);
+        new(false, VolumetricEngineVolumeDescriptor.Invalid(error), 0, 0f, 0f, 0f, 0f, [], "", error);
 }

@@ -27,8 +27,31 @@ public class VolumetricImportedDensityFrameTests
         Assert.Equal(1f, frame.MaxDensity);
         Assert.Equal((0f + 3f / 255f + 128f / 255f + 1f) / 4f, frame.MeanDensity, 6);
         Assert.Equal(0.5f, frame.Coverage);
+        Assert.Equal([0f, 3f / 255f, 128f / 255f, 1f], frame.UnitDensitySamples);
         Assert.Contains("openvdb 4x1x1", frame.DebugSummary);
         Assert.Contains("hash=ba7816bf8f01", frame.DebugSummary);
+    }
+
+    [Fact]
+    public void ImportedDensityTexturePackingUsesRgba16fDensityInRed()
+    {
+        var decoded = BuildDecodedVolume([0f, 0.5f, 1f]);
+        var frame = VolumetricImportedDensityFrame.FromRuntimeLoadResult(
+            decoded,
+            MakeProfile("li01_badlands"),
+            "Li01");
+
+        var packed = VolumetricNebulaFrameResources.BuildImportedDensityTextureData(frame);
+
+        Assert.True(frame.Valid);
+        Assert.Equal(12, packed.Length);
+        Assert.Equal(0f, (float)BitConverter.UInt16BitsToHalf(packed[0]));
+        Assert.Equal(0f, (float)BitConverter.UInt16BitsToHalf(packed[1]));
+        Assert.Equal(0f, (float)BitConverter.UInt16BitsToHalf(packed[2]));
+        Assert.Equal(1f, (float)BitConverter.UInt16BitsToHalf(packed[3]));
+        Assert.Equal(128f / 255f, (float)BitConverter.UInt16BitsToHalf(packed[4]), 3);
+        Assert.Equal(1f, (float)BitConverter.UInt16BitsToHalf(packed[8]));
+        Assert.Equal(1f, (float)BitConverter.UInt16BitsToHalf(packed[11]));
     }
 
     [Fact]

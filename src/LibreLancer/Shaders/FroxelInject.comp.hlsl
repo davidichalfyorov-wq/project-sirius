@@ -11,6 +11,8 @@ Texture3D<float4> DisplacementVolume : register(t4, TEXTURE_SPACE);
 SamplerState DisplacementSampler : register(s4, TEXTURE_SPACE);
 Texture3D<float4> WakeVectorField : register(t5, TEXTURE_SPACE);
 SamplerState WakeVectorSampler : register(s5, TEXTURE_SPACE);
+Texture3D<float4> ImportedDensityVolume : register(t6, TEXTURE_SPACE);
+SamplerState ImportedDensitySampler : register(s6, TEXTURE_SPACE);
 
 cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
 {
@@ -26,6 +28,7 @@ cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
     float4 NearDustParams;      // x: dust density, y: dust strength, z: contrast, w: warp boost
     float4 DisplacementParams;  // x: enabled, y: strength, z: near-only, w: unused
     float4 WakeVectorParams;    // x: enabled, y: domain warp, z: softening, w: unused
+    float4 ImportedDensityParams; // x: enabled, y: blend, z: density multiplier, w: unused
 };
 
 float Hash13(float3 p)
@@ -160,6 +163,14 @@ void main(uint3 id : SV_DispatchThreadID)
     float dustGate = smoothstep(1.0 - saturate(NearDustParams.x), 1.0, nearDustNoise);
     float dust = dustGate * saturate(NearDustParams.y) * zoneFalloff * nearDetail;
     normalizedDensity = saturate(normalizedDensity * lerp(1.0, max(NearDustParams.z, 0.1), nearDetail) + dust);
+    if (ImportedDensityParams.x > 0.5)
+    {
+        float importedDensity = ImportedDensityVolume.SampleLevel(ImportedDensitySampler, uvw, 0).r;
+        importedDensity = saturate(importedDensity * max(ImportedDensityParams.z, 0.0)) * zoneFalloff;
+        float importedBlend = saturate(ImportedDensityParams.y);
+        normalizedDensity = lerp(normalizedDensity, importedDensity, importedBlend);
+        carved = max(carved, importedDensity);
+    }
     if (DisplacementParams.x > 0.5 && GridSize.w > 0.5)
     {
         float4 disp = DisplacementVolume.SampleLevel(DisplacementSampler, uvw, 0);
