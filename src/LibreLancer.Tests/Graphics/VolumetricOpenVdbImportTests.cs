@@ -7,6 +7,10 @@ namespace LibreLancer.Tests.Graphics;
 
 public class VolumetricOpenVdbImportTests
 {
+    private const string SourceFileLine = "source_file = art/li01/badlands_density.blend";
+    private const string ContentHashLine =
+        "content_hash = sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
     [Fact]
     public void ParsesLi01DensityManifestWithCanonicalLock()
     {
@@ -29,7 +33,9 @@ public class VolumetricOpenVdbImportTests
             "canonical_system = Li01",
             "canonical_nebula = li01_badlands",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "preserve_zone_transform = true"
         ]);
 
@@ -50,6 +56,8 @@ public class VolumetricOpenVdbImportTests
         Assert.True(result.Metadata.PreserveZoneTransform);
         Assert.Contains("raw=3", result.Metadata.DebugSummary);
         Assert.Contains("source=blender_openvdb_export", result.Metadata.DebugSummary);
+        Assert.Contains("file=art/li01/badlands_density.blend", result.Metadata.DebugSummary);
+        Assert.Contains("hash=sha256:aaaaaaaaaaaa", result.Metadata.DebugSummary);
         Assert.Contains("license=project-owned", result.Metadata.DebugSummary);
         Assert.Contains("lock=zone", result.Metadata.DebugSummary);
         Assert.Contains("placement=zone_locked", result.Metadata.DebugSummary);
@@ -64,7 +72,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "preserve_zone_transform = false"
         ]);
 
@@ -81,7 +91,9 @@ public class VolumetricOpenVdbImportTests
             "height = 128",
             "depth = 128",
             "source = blender_openvdb_export",
-            "license = project-owned"
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
         ]);
 
         Assert.False(result.Valid);
@@ -97,7 +109,9 @@ public class VolumetricOpenVdbImportTests
             "height = 512",
             "depth = 128",
             "source = houdini_openvdb_export",
-            "license = project-owned"
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
         ]);
 
         Assert.False(result.Valid);
@@ -113,7 +127,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "world_position_meters = 12000, 0, -5000"
         ]);
 
@@ -130,7 +146,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "rotation_degrees = 0, 45, 0"
         ]);
 
@@ -147,7 +165,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "placement = world_authored"
         ]);
 
@@ -164,7 +184,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "bounds = world_bounds"
         ]);
 
@@ -187,7 +209,9 @@ public class VolumetricOpenVdbImportTests
             "canonical_system = Li01",
             "canonical_nebula = li01_badlands",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "preserve_zone_transform = true"
         ], MakeProfile("li01_badlands"), "Li01");
 
@@ -210,7 +234,9 @@ public class VolumetricOpenVdbImportTests
             "canonical_system = Li01",
             "canonical_nebula = li01_badlands",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "preserve_zone_transform = true"
         ], MakeProfile("zone_not_badlands"), "Li01");
 
@@ -227,7 +253,9 @@ public class VolumetricOpenVdbImportTests
             "height = 96",
             "depth = 64",
             "source = blender_openvdb_export",
+            SourceFileLine,
             "license = project-owned",
+            ContentHashLine,
             "density_min = 1",
             "density_max = 1"
         ]);
@@ -237,27 +265,65 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
-    public void RejectsMissingSourceOrLicenseMetadata()
+    public void RejectsMissingProvenanceMetadata()
     {
         var missingSource = VolumetricOpenVdbImport.ParseManifest([
             "data = li01_badlands_density.vdb",
             "width = 128",
             "height = 96",
             "depth = 64",
+            SourceFileLine,
+            ContentHashLine,
             "license = project-owned"
+        ]);
+        var missingSourceFile = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            "license = project-owned",
+            ContentHashLine
         ]);
         var missingLicense = VolumetricOpenVdbImport.ParseManifest([
             "data = li01_badlands_density.vdb",
             "width = 128",
             "height = 96",
             "depth = 64",
-            "source = blender_openvdb_export"
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            ContentHashLine
+        ]);
+        var missingHash = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned"
+        ]);
+        var invalidHash = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = not-a-hash"
         ]);
 
         Assert.False(missingSource.Valid);
         Assert.Contains("source metadata", missingSource.Error);
+        Assert.False(missingSourceFile.Valid);
+        Assert.Contains("source file metadata", missingSourceFile.Error);
         Assert.False(missingLicense.Valid);
         Assert.Contains("license metadata", missingLicense.Error);
+        Assert.False(missingHash.Valid);
+        Assert.Contains("content hash metadata", missingHash.Error);
+        Assert.False(invalidHash.Valid);
+        Assert.Contains("content hash", invalidHash.Error);
     }
 
     private static NebulaVolumeProfile MakeProfile(string nickname) =>

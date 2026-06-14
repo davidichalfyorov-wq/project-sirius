@@ -41,6 +41,10 @@ Rules for the OpenVDB layer:
   density range, axis convention, license/owner, and profile nickname.
 - Import manifests are rejected if `source` or `license` is missing. This keeps
   generated nebula volumes reviewable before they enter the engine asset cache.
+- Import manifests are also rejected if `source_file` or `content_hash` is
+  missing. `content_hash` must be `sha256:<64 hex>` or `blake3:<64 hex>` so
+  dense OpenVDB exports can be reproduced, reviewed, and invalidated without
+  guessing which DCC cache produced them.
 - The initial runtime metadata bridge accepts at most 256^3 dense voxels before
   compression/cache conversion. Larger authored OpenVDB files should be reduced
   offline or split into reviewed tiles before the game can consume them.
@@ -96,7 +100,9 @@ placement = zone_locked
 canonical_system = Li01
 canonical_nebula = li01_badlands
 source = blender_openvdb_export
+source_file = art/li01/badlands_density.blend
 license = project-owned
+content_hash = sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 preserve_zone_transform = true
 ```
 

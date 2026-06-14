@@ -85,7 +85,9 @@ public static class VolumetricOpenVdbImport
             CanonicalSystem: Get(values, "canonical_system"),
             CanonicalNebula: Get(values, "canonical_nebula"),
             Source: Get(values, "source"),
+            SourceFile: Get(values, "source_file", Get(values, "dcc_file")),
             License: Get(values, "license"),
+            ContentHash: Get(values, "content_hash", Get(values, "sha256", Get(values, "hash"))),
             PreserveZoneTransform: ParseBool(values, "preserve_zone_transform", true));
         return Validate(metadata);
     }
@@ -144,9 +146,21 @@ public static class VolumetricOpenVdbImport
         {
             return VolumetricOpenVdbImportResult.Invalid("missing source metadata");
         }
+        if (string.IsNullOrWhiteSpace(metadata.SourceFile))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("missing source file metadata");
+        }
         if (string.IsNullOrWhiteSpace(metadata.License))
         {
             return VolumetricOpenVdbImportResult.Invalid("missing license metadata");
+        }
+        if (string.IsNullOrWhiteSpace(metadata.ContentHash))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("missing content hash metadata");
+        }
+        if (!IsSupportedContentHash(metadata.ContentHash))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("content hash must be sha256:<64 hex> or blake3:<64 hex>");
         }
         if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.Depth <= 0)
         {
@@ -260,6 +274,28 @@ public static class VolumetricOpenVdbImport
         var placement = value.Trim().Replace("-", "_").ToLowerInvariant();
         return placement is "zone_locked" or "canonical_zone";
     }
+
+    private static bool IsSupportedContentHash(string value)
+    {
+        var hash = value.Trim();
+        if (hash.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ||
+            hash.StartsWith("blake3:", StringComparison.OrdinalIgnoreCase))
+        {
+            hash = hash[(hash.IndexOf(':') + 1)..];
+        }
+        if (hash.Length != 64)
+        {
+            return false;
+        }
+        foreach (var ch in hash)
+        {
+            if (!Uri.IsHexDigit(ch))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 public readonly record struct VolumetricOpenVdbImportMetadata(
@@ -281,7 +317,9 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
     string CanonicalSystem,
     string CanonicalNebula,
     string Source,
+    string SourceFile,
     string License,
+    string ContentHash,
     bool PreserveZoneTransform)
 {
     public long VoxelCount => (long)Width * Height * Depth;
@@ -292,7 +330,16 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
 
     public string DebugSummary =>
         FormattableString.Invariant(
-            $"{GridName} {Width}x{Height}x{Depth} voxels={VoxelCount} raw={EstimatedRawDensityMiB:0.##}MiB voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} bounds={BoundsMode} placement={PlacementMode} lock={(PreserveZoneTransform ? "zone" : "off")} source={Source} license={License}");
+            $"{GridName} {Width}x{Height}x{Depth} voxels={VoxelCount} raw={EstimatedRawDensityMiB:0.##}MiB voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} bounds={BoundsMode} placement={PlacementMode} lock={(PreserveZoneTransform ? "zone" : "off")} source={Source} file={SourceFile} hash={ShortHash(ContentHash)} license={License}");
+
+    private static string ShortHash(string hash)
+    {
+        var normalized = hash.Trim();
+        var split = normalized.IndexOf(':');
+        var prefix = split > 0 ? normalized[..(split + 1)] : "";
+        var body = split > 0 ? normalized[(split + 1)..] : normalized;
+        return body.Length <= 12 ? normalized : prefix + body[..12];
+    }
 }
 
 public readonly record struct VolumetricOpenVdbImportResult(
