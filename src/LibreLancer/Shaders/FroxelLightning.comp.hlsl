@@ -61,6 +61,32 @@ float ChannelMask(float3 p, int pointCount, float radius)
     return saturate(accum);
 }
 
+float3 ResolveLightningColor(float3 profileColor, int debugColorMode)
+{
+    if (debugColorMode == 1)
+    {
+        return saturate(float3(
+            max(profileColor.r * 0.92, 0.46),
+            max(profileColor.g * 1.05, 0.62),
+            max(profileColor.b * 1.14, 1.00)));
+    }
+    if (debugColorMode == 2)
+    {
+        return saturate(float3(
+            max(profileColor.r * 1.12, 0.72),
+            max(profileColor.g * 0.82, 0.36),
+            max(profileColor.b * 1.15, 1.00)));
+    }
+    if (debugColorMode == 3)
+    {
+        return saturate(float3(
+            profileColor.r * 1.10 + 0.035,
+            profileColor.g * 1.04 + 0.025,
+            profileColor.b * 0.96 + 0.020));
+    }
+    return saturate(profileColor);
+}
+
 [numthreads(4, 4, 4)]
 void main(uint3 id : SV_DispatchThreadID)
 {
@@ -79,9 +105,10 @@ void main(uint3 id : SV_DispatchThreadID)
 
     float contribution = mask * Params.z * (0.18 + medium * 0.82);
     contribution *= Params2.x > 0.5 ? 0.82 : 1.0;
+    float3 channelColor = ResolveLightningColor(Color.rgb, (int)(Params2.z + 0.5));
 
     float4 current = Lighting[id];
-    current.rgb += Color.rgb * contribution;
+    current.rgb += channelColor * contribution;
     current.a = max(current.a, contribution);
     Lighting[id] = current;
 }

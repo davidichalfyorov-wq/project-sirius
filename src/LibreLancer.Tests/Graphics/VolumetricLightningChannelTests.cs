@@ -53,6 +53,36 @@ public class VolumetricLightningChannelTests
     }
 
     [Fact]
+    public void DebugColorModesResolveToDistinctShaderColors()
+    {
+        var fog = new Vector4(0.36f, 0.44f, 0.52f, 1f);
+        var electric = VolumetricLightningArtProfile.ResolveShaderColor(
+            fog, VolumetricLightningDebugColorMode.ElectricBlue);
+        var plasma = VolumetricLightningArtProfile.ResolveShaderColor(
+            fog, VolumetricLightningDebugColorMode.PlasmaViolet);
+        var fogTint = VolumetricLightningArtProfile.ResolveShaderColor(
+            fog, VolumetricLightningDebugColorMode.FogTint);
+
+        Assert.True(electric.Z >= electric.Y);
+        Assert.True(plasma.X > electric.X);
+        Assert.True(plasma.Z >= 0.99f);
+        Assert.True(fogTint.X > fog.X);
+        Assert.NotEqual(electric, plasma);
+        Assert.NotEqual(plasma, fogTint);
+    }
+
+    [Fact]
+    public void ArtProfileExposesShaderResolvedColor()
+    {
+        var crow = VolumetricLightningArtProfile.ForArchetype("crow", 3, new Vector4(0.2f, 0.3f, 0.4f, 1f));
+        var resolved = crow.ResolveShaderColor();
+
+        Assert.Equal(1f, resolved.W);
+        Assert.True(resolved.Z >= 0.99f);
+        Assert.True(resolved.Y >= 0.62f);
+    }
+
+    [Fact]
     public void ChannelBuildsEightPointsInNormalizedVolume()
     {
         Span<Vector4> points = stackalloc Vector4[VolumetricLightningChannelState.MaxPoints];

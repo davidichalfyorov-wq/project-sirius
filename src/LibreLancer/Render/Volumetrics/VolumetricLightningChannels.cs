@@ -360,6 +360,38 @@ public readonly record struct VolumetricLightningArtProfile(
             0.10f,
             VolumetricLightningDebugColorMode.FogTint);
     }
+
+    public Vector4 ResolveShaderColor()
+    {
+        var rgb = ResolveShaderColor(Color, DebugColorMode);
+        return new Vector4(rgb.X, rgb.Y, rgb.Z, Color.W);
+    }
+
+    public static Vector3 ResolveShaderColor(Vector4 profileColor, VolumetricLightningDebugColorMode mode)
+    {
+        var baseColor = new Vector3(profileColor.X, profileColor.Y, profileColor.Z);
+        return mode switch
+        {
+            VolumetricLightningDebugColorMode.ElectricBlue => Clamp01(new Vector3(
+                MathF.Max(baseColor.X * 0.92f, 0.46f),
+                MathF.Max(baseColor.Y * 1.05f, 0.62f),
+                MathF.Max(baseColor.Z * 1.14f, 1.00f))),
+            VolumetricLightningDebugColorMode.PlasmaViolet => Clamp01(new Vector3(
+                MathF.Max(baseColor.X * 1.12f, 0.72f),
+                MathF.Max(baseColor.Y * 0.82f, 0.36f),
+                MathF.Max(baseColor.Z * 1.15f, 1.00f))),
+            VolumetricLightningDebugColorMode.FogTint => Clamp01(new Vector3(
+                baseColor.X * 1.10f + 0.035f,
+                baseColor.Y * 1.04f + 0.025f,
+                baseColor.Z * 0.96f + 0.020f)),
+            _ => Clamp01(baseColor)
+        };
+    }
+
+    private static Vector3 Clamp01(Vector3 value) => new(
+        Math.Clamp(value.X, 0f, 1f),
+        Math.Clamp(value.Y, 0f, 1f),
+        Math.Clamp(value.Z, 0f, 1f));
 }
 
 public readonly record struct VolumetricLightningTiming(
