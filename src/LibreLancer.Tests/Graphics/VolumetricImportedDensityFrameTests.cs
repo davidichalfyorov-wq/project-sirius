@@ -147,6 +147,21 @@ public class VolumetricImportedDensityFrameTests
         Assert.Equal("off", VolumetricNebulaFrameResources.LastImportedDensitySource);
     }
 
+    [Fact]
+    public void ImportedDensityTextureKeyIncludesCanonicalAndNormalizationIdentity()
+    {
+        var descriptor = BuildDecodedVolume([0f, 0.25f, 0.5f, 1f]).Descriptor;
+        var canonicalSystem = descriptor with { CanonicalSystem = "Li02" };
+        var canonicalNebula = descriptor with { CanonicalNebula = "li01_alt_badlands" };
+        var densityNormalize = descriptor with { DensityNormalize = new Vector2(2f, -0.25f) };
+
+        var key = VolumetricNebulaFrameResources.ImportedDensityTextureKey(descriptor);
+
+        Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(canonicalSystem));
+        Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(canonicalNebula));
+        Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(densityNormalize));
+    }
+
     private static VolumetricEngineVolumeRuntimeLoadResult BuildDecodedVolume(float[] samples,
         string canonicalSystem = "Li01")
     {

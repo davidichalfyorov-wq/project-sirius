@@ -1523,9 +1523,12 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         return texture;
     }
 
-    private static string ImportedDensityTextureKey(VolumetricEngineVolumeDescriptor descriptor) =>
+    public static string ImportedDensityTextureKey(VolumetricEngineVolumeDescriptor descriptor) =>
         descriptor.Valid
-            ? $"{descriptor.Width}x{descriptor.Height}x{descriptor.Depth}:{descriptor.Format}:{descriptor.ContentHash}"
+            ? FormattableString.Invariant(
+                $"{descriptor.Version}:{descriptor.CanonicalSystem}:{descriptor.CanonicalNebula}:{descriptor.GridName}:" +
+                $"{descriptor.Width}x{descriptor.Height}x{descriptor.Depth}:{descriptor.Format}:" +
+                $"{descriptor.DensityNormalize.X:R},{descriptor.DensityNormalize.Y:R}:{descriptor.ContentHash}")
             : "";
 
     private void DisposeImportedDensityTexture()
