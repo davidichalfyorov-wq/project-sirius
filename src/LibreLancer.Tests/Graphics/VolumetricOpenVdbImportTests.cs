@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
 using LibreLancer.Data.GameData.World;
@@ -832,6 +833,65 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void PacksReviewedOpenVdbDensitySamplesIntoDenseArtifact()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        Assert.True(packed.Valid);
+        Assert.Equal(VolumetricEngineVolumeFormat.DensityR8UNorm, packed.Descriptor.Format);
+        Assert.Equal("volumes/openvdb/li01_li01_badlands_density_3x1x1_ba7816bf8f01.siriusvol",
+            packed.ArtifactPlan.EngineVolumePath);
+        Assert.True(VolumetricOpenVdbImport.ValidateCacheManifest(
+            packed.CacheManifestLines,
+            packed.ArtifactPlan.ImportPlan).Valid);
+
+        var read = VolumetricEngineVolumeDescriptor.ReadDenseArtifact(packed.Artifact);
+        Assert.True(read.Valid);
+        Assert.Equal(new byte[] { 0, 128, 255 },
+            packed.Artifact.AsSpan(read.PayloadOffset, read.PayloadBytes).ToArray());
+    }
+
+    [Fact]
+    public void DecodesAndNormalizesOpenVdbFloat32DensitySamples()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan(
+            MakeVerifiedManifestLines(),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            "Li01");
+
+        var decoded = VolumetricOpenVdbPacker.DecodeAndNormalizeFloat32Samples(
+            Float32Bytes(0.2f, 1.2f, 2f),
+            3,
+            plan);
+
+        Assert.True(decoded.Valid);
+        Assert.Equal([0f, 0.5f, 0.5f], decoded.UnitDensitySamples);
+    }
+
+    [Fact]
+    public void RejectsOpenVdbPackWhenSampleCountMismatches()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        Assert.False(packed.Valid);
+        Assert.Contains("sample count", packed.Error);
+        Assert.Empty(packed.Artifact);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
@@ -1207,6 +1267,38 @@ public class VolumetricOpenVdbImportTests
             "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             "preserve_zone_transform = true"
     ];
+
+    private static string[] MakeSmallVerifiedManifestLines(int width) =>
+    [
+            "data = artist_exports/tmp/li01_badlands_density.vdb",
+            "grid = density",
+            $"width = {width}",
+            "height = 1",
+            "depth = 1",
+            "density_min = 0",
+            "density_max = 1",
+            "density_multiplier = 1",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "preserve_zone_transform = true"
+    ];
+
+    private static byte[] Float32Bytes(params float[] values)
+    {
+        var bytes = new byte[values.Length * sizeof(float)];
+        for (var i = 0; i < values.Length; i++)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(
+                bytes.AsSpan(i * sizeof(float), sizeof(float)),
+                BitConverter.SingleToInt32Bits(values[i]));
+        }
+
+        return bytes;
+    }
 
     private static string[] ReplaceLine(string[] lines, string prefix, string replacement)
     {

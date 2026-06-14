@@ -1,5 +1,4 @@
 using System;
-using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using LibreLancer;
@@ -51,49 +50,33 @@ internal static class Program
         var sourcePayload = File.ReadAllBytes(sourcePayloadPath);
         var runtimeSystem = options.RuntimeSystem ?? manifest.Metadata.CanonicalSystem;
         var profile = MakeProfile(manifest.Metadata.CanonicalNebula);
-        var artifactPlan = VolumetricOpenVdbImport.CreateCacheArtifactPlan(
+        var samplesPayload = File.ReadAllBytes(options.Samples);
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
             manifestLines,
             profile,
             sourcePayload,
-            runtimeSystem);
-        if (!artifactPlan.Valid)
+            samplesPayload,
+            runtimeSystem,
+            options.Format);
+        if (!packed.Valid)
         {
-            throw new InvalidOperationException(artifactPlan.Error);
-        }
-
-        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(artifactPlan, options.Format);
-        if (!descriptor.Valid)
-        {
-            throw new InvalidOperationException(descriptor.Error);
-        }
-
-        var authoredSamples = ReadFloat32Samples(options.Samples, checked((int)descriptor.VoxelCount));
-        var unitSamples = new float[authoredSamples.Length];
-        for (var i = 0; i < authoredSamples.Length; i++)
-        {
-            unitSamples[i] = artifactPlan.ImportPlan.NormalizeDensity(authoredSamples[i]);
-        }
-
-        var artifact = VolumetricEngineVolumeDescriptor.BuildDenseArtifact(unitSamples, descriptor);
-        if (!artifact.Valid)
-        {
-            throw new InvalidOperationException(artifact.Error);
+            throw new InvalidOperationException(packed.Error);
         }
 
         var outputRoot = Path.GetFullPath(options.OutputRoot);
-        var volumePath = ResolveOutput(outputRoot, artifactPlan.EngineVolumePath);
-        var manifestPath = ResolveOutput(outputRoot, artifactPlan.CacheManifestPath);
+        var volumePath = ResolveOutput(outputRoot, packed.ArtifactPlan.EngineVolumePath);
+        var manifestPath = ResolveOutput(outputRoot, packed.ArtifactPlan.CacheManifestPath);
         Directory.CreateDirectory(Path.GetDirectoryName(volumePath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
 
-        File.WriteAllBytes(volumePath, artifact.Artifact);
-        File.WriteAllLines(manifestPath, artifactPlan.CacheManifestLines);
+        File.WriteAllBytes(volumePath, packed.Artifact);
+        File.WriteAllLines(manifestPath, packed.CacheManifestLines);
 
-        Console.WriteLine($"Wrote {artifactPlan.EngineVolumePath}");
-        Console.WriteLine($"Wrote {artifactPlan.CacheManifestPath}");
+        Console.WriteLine($"Wrote {packed.ArtifactPlan.EngineVolumePath}");
+        Console.WriteLine($"Wrote {packed.ArtifactPlan.CacheManifestPath}");
         Console.WriteLine(
             FormattableString.Invariant(
-                $"{descriptor.Width}x{descriptor.Height}x{descriptor.Depth}, {descriptor.Format}, {descriptor.PayloadBytes} payload bytes"));
+                $"{packed.Descriptor.Width}x{packed.Descriptor.Height}x{packed.Descriptor.Depth}, {packed.Descriptor.Format}, {packed.Descriptor.PayloadBytes} payload bytes"));
     }
 
     private static Options Parse(string[] args)
@@ -165,30 +148,6 @@ internal static class Program
             "r16f" or "r16_float" or "density_r16_float" => VolumetricEngineVolumeFormat.DensityR16Float,
             _ => throw new ArgumentException($"Unsupported density format '{value}'.")
         };
-
-    private static float[] ReadFloat32Samples(string path, int expectedSamples)
-    {
-        var bytes = File.ReadAllBytes(path);
-        if (bytes.Length % sizeof(float) != 0)
-        {
-            throw new InvalidOperationException("sample payload must be raw little-endian float32 values");
-        }
-
-        var samples = new float[bytes.Length / sizeof(float)];
-        if (samples.Length != expectedSamples)
-        {
-            throw new InvalidOperationException(
-                $"sample count mismatch: expected {expectedSamples}, got {samples.Length}");
-        }
-
-        for (var i = 0; i < samples.Length; i++)
-        {
-            var bits = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i * sizeof(float), sizeof(float)));
-            samples[i] = BitConverter.Int32BitsToSingle(bits);
-        }
-
-        return samples;
-    }
 
     private static string ResolveOutput(string outputRoot, string relativePath)
     {
