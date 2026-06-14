@@ -19,23 +19,40 @@ public readonly record struct VolumetricNebulaFrameDebug(
     public static VolumetricNebulaFrameDebug Evaluate(GameSettings settings, RenderContext rstate)
     {
         var rendererSettings = (IRendererSettings)settings;
-        var requested = rendererSettings.SelectedVolumetricNebula;
-        var quality = rendererSettings.SelectedVolumetricQuality;
-        var debugView = settings.Phase5DebugView;
-        var atmosphereLuts = rendererSettings.SelectedAtmosphereLuts;
+        return EvaluateSnapshot(
+            rendererSettings.SelectedVolumetricNebula,
+            rstate.HasFeature(GraphicsFeature.Compute),
+            rendererSettings.SelectedVolumetricQuality,
+            settings.Phase5DebugView,
+            rendererSettings.SelectedVolumetricNearCascade,
+            rendererSettings.SelectedVolumetricNearDetail,
+            rendererSettings.SelectedVolumetricShipDisplacement,
+            rendererSettings.SelectedAtmosphereLuts,
+            VolumetricNebulaFrameResources.LastDebug);
+    }
 
+    public static VolumetricNebulaFrameDebug EvaluateSnapshot(
+        bool requested,
+        bool computeSupported,
+        int quality,
+        string debugView,
+        bool nearCascade,
+        bool nearDetail,
+        bool shipDisplacement,
+        bool atmosphereLuts,
+        VolumetricNebulaResourceDebug resources)
+    {
         if (!requested)
         {
             return new VolumetricNebulaFrameDebug(
                 false, false, false, "disabled", "", quality, false, false, false, atmosphereLuts, debugView);
         }
-        if (!rstate.HasFeature(GraphicsFeature.Compute))
+        if (!computeSupported)
         {
             return new VolumetricNebulaFrameDebug(
                 true, false, true, "backend has no compute feature", "", quality, false, false, false, atmosphereLuts, debugView);
         }
 
-        var resources = VolumetricNebulaFrameResources.LastDebug;
         if (resources.Allocated)
         {
             var compositeActive = resources.LastOperation.Contains("composite", System.StringComparison.OrdinalIgnoreCase);
@@ -46,9 +63,9 @@ public readonly record struct VolumetricNebulaFrameDebug(
                 resources.LastOperation,
                 resources.ActiveProfile,
                 resources.Quality,
-                rendererSettings.SelectedVolumetricNearCascade,
-                rendererSettings.SelectedVolumetricNearDetail,
-                rendererSettings.SelectedVolumetricShipDisplacement,
+                nearCascade,
+                nearDetail,
+                shipDisplacement,
                 atmosphereLuts,
                 debugView);
         }
@@ -60,9 +77,9 @@ public readonly record struct VolumetricNebulaFrameDebug(
             resources.LastOperation,
             resources.ActiveProfile,
             quality,
-            rendererSettings.SelectedVolumetricNearCascade,
-            rendererSettings.SelectedVolumetricNearDetail,
-            rendererSettings.SelectedVolumetricShipDisplacement,
+            nearCascade,
+            nearDetail,
+            shipDisplacement,
             atmosphereLuts,
             debugView);
     }
