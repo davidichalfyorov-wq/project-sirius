@@ -270,6 +270,46 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void RejectsImportPlanWithoutCanonicalNebulaLock()
+    {
+        var plan = VolumetricOpenVdbImport.CreateImportPlan([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "canonical_system = Li01",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine,
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), "Li01");
+
+        Assert.False(plan.Valid);
+        Assert.Contains("canonical nebula lock", plan.Error);
+    }
+
+    [Fact]
+    public void RejectsImportPlanWithoutCanonicalSystemLockWhenRuntimeSystemIsKnown()
+    {
+        var plan = VolumetricOpenVdbImport.CreateImportPlan([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine,
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), "Li01");
+
+        Assert.False(plan.Valid);
+        Assert.Contains("canonical system lock", plan.Error);
+    }
+
+    [Fact]
     public void RejectsManifestForDifferentCanonicalNebula()
     {
         var plan = VolumetricOpenVdbImport.CreateImportPlan([

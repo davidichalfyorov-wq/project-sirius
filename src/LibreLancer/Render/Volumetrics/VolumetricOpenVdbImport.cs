@@ -104,6 +104,15 @@ public static class VolumetricOpenVdbImport
         }
 
         var metadata = parsed.Metadata;
+        if (string.IsNullOrWhiteSpace(metadata.CanonicalNebula))
+        {
+            return VolumetricOpenVdbImportPlan.Invalid("OpenVDB manifest missing canonical nebula lock");
+        }
+        if (!string.IsNullOrWhiteSpace(canonicalSystem) &&
+            string.IsNullOrWhiteSpace(metadata.CanonicalSystem))
+        {
+            return VolumetricOpenVdbImportPlan.Invalid("OpenVDB manifest missing canonical system lock");
+        }
         if (!string.IsNullOrWhiteSpace(metadata.CanonicalSystem) &&
             !string.IsNullOrWhiteSpace(canonicalSystem) &&
             !Matches(metadata.CanonicalSystem, canonicalSystem))

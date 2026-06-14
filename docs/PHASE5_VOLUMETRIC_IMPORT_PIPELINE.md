@@ -45,6 +45,12 @@ Rules for the OpenVDB layer:
   missing. `content_hash` must be `sha256:<64 hex>` or `blake3:<64 hex>` so
   dense OpenVDB exports can be reproduced, reviewed, and invalidated without
   guessing which DCC cache produced them.
+- Runtime import plans require explicit canonical identity locks. A sidecar can
+  be parsed for diagnostics without them, but it cannot be bound to an active
+  `NebulaVolumeProfile` unless `canonical_nebula` is present, and
+  `canonical_system` is present whenever the runtime knows the active system.
+  This prevents a valid density cache from being accidentally applied to the
+  wrong Freelancer nebula zone.
 - `data` and `source_file` must be portable project-relative paths. Absolute
   paths, Windows drive paths, backslashes, empty segments, `.` segments, and
   `..` traversal are rejected so Blender/Houdini exports remain reproducible and
