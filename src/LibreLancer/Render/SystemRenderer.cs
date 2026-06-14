@@ -3,9 +3,11 @@
 // LICENSE, which is part of this source code package
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 using LibreLancer.Data.GameData;
 using LibreLancer.Data.GameData.World;
 using LibreLancer.Fx;
@@ -293,6 +295,8 @@ namespace LibreLancer.Render
         private VolumetricNebulaFrameResources? volumetricNebulaResources;
         private VolumetricAtmosphereFrameResources? volumetricAtmosphereResources;
         private readonly VolumetricShipDisplacementState volumetricShipDisplacement = new();
+        private string importedDensityCacheKey = string.Empty;
+        private VolumetricImportedDensityFrame importedDensityFrame;
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
         private bool rtShadowsWasActive;
@@ -775,11 +779,103 @@ namespace LibreLancer.Render
             }
 
             volumetricNebulaResources ??= new VolumetricNebulaFrameResources();
+            if (profile is { IsValid: true } activeProfile)
+            {
+                TryBindImportedDensityVolume(activeProfile);
+            }
             var displacementFrame = features.VolumetricShipDisplacement
                 ? volumetricShipDisplacement.BuildFrame(World.Objects, camera.Position, (float)game.TotalTime)
                 : VolumetricShipDisplacementFrame.Empty;
             volumetricNebulaResources.Ensure(rstate, renderWidth, renderHeight, features, profile,
                 (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position), displacementFrame);
+        }
+
+        private void TryBindImportedDensityVolume(NebulaVolumeProfile activeProfile)
+        {
+            if (volumetricNebulaResources == null)
+            {
+                return;
+            }
+
+            var manifestPath =
+                Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST") ??
+                Environment.GetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST");
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                importedDensityCacheKey = string.Empty;
+                importedDensityFrame = default;
+                volumetricNebulaResources.ClearImportedDensity();
+                return;
+            }
+
+            var canonicalSystem = starSystem?.Nickname ?? "";
+            var cacheKey = $"{manifestPath}|{canonicalSystem}|{activeProfile.Nickname}|{activeProfile.SourceFile}";
+            if (!string.Equals(cacheKey, importedDensityCacheKey, StringComparison.Ordinal))
+            {
+                importedDensityFrame = LoadImportedDensityVolume(manifestPath, activeProfile, canonicalSystem);
+                importedDensityCacheKey = cacheKey;
+                if (!importedDensityFrame.Valid)
+                {
+                    FLLog.Warning("Volumetrics",
+                        $"OpenVDB density manifest '{manifestPath}' not bound: {importedDensityFrame.Error}");
+                }
+            }
+
+            if (importedDensityFrame.Valid)
+            {
+                volumetricNebulaResources.SetImportedDensity(importedDensityFrame, activeProfile);
+            }
+            else
+            {
+                volumetricNebulaResources.ClearImportedDensity(importedDensityFrame.Error);
+            }
+        }
+
+        private VolumetricImportedDensityFrame LoadImportedDensityVolume(
+            string manifestPath,
+            NebulaVolumeProfile activeProfile,
+            string canonicalSystem)
+        {
+            try
+            {
+                if (!resman.ResourceExists(manifestPath))
+                {
+                    return VolumetricImportedDensityFrame.Invalid("OpenVDB density manifest not found in VFS");
+                }
+
+                string[] manifestLines;
+                using (var stream = resman.OpenResource(manifestPath))
+                using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+                {
+                    manifestLines = reader.ReadToEnd()
+                        .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                }
+
+                return VolumetricImportedDensityFrame.FromCacheManifest(
+                    manifestLines,
+                    activeProfile,
+                    LoadArtifact,
+                    canonicalSystem);
+            }
+            catch (Exception ex)
+            {
+                return VolumetricImportedDensityFrame.Invalid(ex.Message);
+            }
+
+            bool LoadArtifact(string relativePath, out byte[] artifact)
+            {
+                artifact = [];
+                if (!resman.ResourceExists(relativePath))
+                {
+                    return false;
+                }
+
+                using var stream = resman.OpenResource(relativePath);
+                using var buffer = new MemoryStream();
+                stream.CopyTo(buffer);
+                artifact = buffer.ToArray();
+                return artifact.Length > 0;
+            }
         }
 
         private void UpdateVolumetricAtmosphereResources(RenderFeatureSet features, int renderWidth, int renderHeight)

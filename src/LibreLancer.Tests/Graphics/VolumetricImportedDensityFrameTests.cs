@@ -50,6 +50,38 @@ public class VolumetricImportedDensityFrameTests
     }
 
     [Fact]
+    public void ImportedDensityFrameLoadsThroughCacheManifest()
+    {
+        var profile = MakeProfile("li01_badlands");
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(4),
+            profile,
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.25f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var requestedPath = "";
+
+        var frame = VolumetricImportedDensityFrame.FromCacheManifest(
+            packed.CacheManifestLines,
+            profile,
+            (string path, out byte[] artifact) =>
+            {
+                requestedPath = path;
+                artifact = packed.Artifact;
+                return true;
+            },
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.True(frame.Valid);
+        Assert.Equal(packed.ArtifactPlan.EngineVolumePath, requestedPath);
+        Assert.Equal(4, frame.SampleCount);
+        Assert.Equal((0f + 64f / 255f + 128f / 255f + 1f) / 4f, frame.MeanDensity, 6);
+        Assert.Contains("openvdb 4x1x1", frame.DebugSummary);
+    }
+
+    [Fact]
     public void FrameResourcesRejectWrongProfileImportedDensity()
     {
         var decoded = BuildDecodedVolume([0f, 0.25f, 0.5f, 1f]);

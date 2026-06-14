@@ -44,6 +44,22 @@ public readonly record struct VolumetricImportedDensityFrame(
         return FromUnitDensitySamples(load.Descriptor, load.UnitDensitySamples);
     }
 
+    public static VolumetricImportedDensityFrame FromCacheManifest(
+        System.Collections.Generic.IEnumerable<string> cacheManifestLines,
+        NebulaVolumeProfile profile,
+        VolumetricEngineVolumeArtifactLoader loader,
+        string canonicalSystem = "",
+        string requiredGrid = "density")
+    {
+        var load = VolumetricEngineVolumeRuntime.DecodeDenseArtifactFromManifest(
+            cacheManifestLines,
+            profile,
+            loader,
+            canonicalSystem,
+            requiredGrid);
+        return FromRuntimeLoadResult(load, profile, canonicalSystem);
+    }
+
     public static VolumetricImportedDensityFrame FromUnitDensitySamples(
         VolumetricEngineVolumeDescriptor descriptor,
         ReadOnlySpan<float> unitDensitySamples)
