@@ -210,6 +210,11 @@ public class DevHudOverlay
                     cloudShellRequested: features.VolumetricQuality >= 2);
                 Line($"atmo plan  {budget.DebugSummary}",
                     budget.Enabled ? Color4.LightYellow : Color4.Orange);
+                var atmo = VolumetricAtmosphereFrameResources.LastDebug;
+                Line($"atmo data  {(atmo.Allocated ? "allocated" : "off")}",
+                    atmo.Allocated ? Color4.LightGreen : Color4.Orange);
+                Line($"atmo data  {atmo.Summary}",
+                    atmo.Allocated ? Color4.LightGreen : Color4.Orange);
             }
             if (features.DebugView is RenderDebugView.VolumetricDensity or
                 RenderDebugView.VolumetricTransmittance or

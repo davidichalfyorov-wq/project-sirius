@@ -291,6 +291,7 @@ namespace LibreLancer.Render
         private MultisampleTarget? msaa;
         private HdrFramePipeline? hdrPipeline;
         private VolumetricNebulaFrameResources? volumetricNebulaResources;
+        private VolumetricAtmosphereFrameResources? volumetricAtmosphereResources;
         private readonly VolumetricShipDisplacementState volumetricShipDisplacement = new();
         private ShadowMapRenderer? shadowMaps;
         private RayTracedScene? rtScene;
@@ -439,6 +440,7 @@ namespace LibreLancer.Render
             RenderMaterial.VolumetricFogActive = false;
             RenderMaterial.VolumetricFogMaterialActive = false;
             RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);
+            UpdateVolumetricAtmosphereResources(renderFeatures, renderWidth, renderHeight);
             UpdateVolumetricGodRays(renderFeatures, hasActiveProfile, activeProfile);
             var transitioned = false;
 
@@ -778,6 +780,18 @@ namespace LibreLancer.Render
                 : VolumetricShipDisplacementFrame.Empty;
             volumetricNebulaResources.Ensure(rstate, renderWidth, renderHeight, features, profile,
                 (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position), displacementFrame);
+        }
+
+        private void UpdateVolumetricAtmosphereResources(RenderFeatureSet features, int renderWidth, int renderHeight)
+        {
+            if (!features.AtmosphereLuts && volumetricAtmosphereResources == null)
+            {
+                VolumetricAtmosphereFrameResources.NoteDisabled("off");
+                return;
+            }
+
+            volumetricAtmosphereResources ??= new VolumetricAtmosphereFrameResources();
+            volumetricAtmosphereResources.Ensure(rstate, features, renderWidth, renderHeight);
         }
 
         private bool ShouldUseVolumetricCompositeThisFrame(RenderFeatureSet features, bool hasActiveProfile) =>
@@ -1139,6 +1153,7 @@ namespace LibreLancer.Render
             hdrPipeline?.Dispose();
             cubemapStarspheres?.Dispose();
             volumetricNebulaResources?.Dispose();
+            volumetricAtmosphereResources?.Dispose();
 
             Polyline.Dispose();
             FxPool.Dispose();
