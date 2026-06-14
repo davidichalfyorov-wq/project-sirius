@@ -139,6 +139,8 @@ namespace LibreLancer
         public bool VolumetricReprojection = false;
         [Entry("volumetric_blue_noise")]
         public bool VolumetricBlueNoise = false;
+        [Entry("volumetric_openvdb_manifest")]
+        public string VolumetricOpenVdbManifest = "";
         [Entry("volumetric_adaptive_quality")]
         public bool VolumetricAdaptiveQuality = true;
         [Entry("atmosphere_luts")]
@@ -199,6 +201,11 @@ namespace LibreLancer
         public bool Phase5ReprojectionEnabled => Phase5TemporalEnabled && VolumetricReprojection;
 
         public bool Phase5BlueNoiseEnabled => VolumetricNebulaRequested && VolumetricBlueNoise;
+
+        public string? Phase5OpenVdbManifest =>
+            VolumetricNebulaRequested && !string.IsNullOrWhiteSpace(VolumetricOpenVdbManifest)
+                ? VolumetricOpenVdbManifest.Trim()
+                : null;
 
         public bool Phase5AdaptiveQualityEnabled => VolumetricNebulaRequested && VolumetricAdaptiveQuality;
 
@@ -286,6 +293,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricTemporal => VolumetricNebulaRequested && VolumetricTemporal;
         bool IRendererSettings.SelectedVolumetricReprojection => Phase5ReprojectionEnabled;
         bool IRendererSettings.SelectedVolumetricBlueNoise => Phase5BlueNoiseEnabled;
+        string? IRendererSettings.SelectedVolumetricOpenVdbManifest => Phase5OpenVdbManifest;
         bool IRendererSettings.SelectedVolumetricAdaptiveQuality => Phase5AdaptiveQualityEnabled;
         bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
         bool IRendererSettings.SelectedAtmosphereAerialPerspective => AtmosphereLuts && AtmosphereAerial;
@@ -367,6 +375,10 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_temporal = {(VolumetricTemporal ? "true" : "false")}");
             writer.WriteLine($"volumetric_reprojection = {(VolumetricReprojection ? "true" : "false")}");
             writer.WriteLine($"volumetric_blue_noise = {(VolumetricBlueNoise ? "true" : "false")}");
+            if (!string.IsNullOrWhiteSpace(VolumetricOpenVdbManifest))
+            {
+                writer.WriteLine($"volumetric_openvdb_manifest = {VolumetricOpenVdbManifest.Trim()}");
+            }
             writer.WriteLine($"volumetric_adaptive_quality = {(VolumetricAdaptiveQuality ? "true" : "false")}");
             writer.WriteLine($"atmosphere_luts = {(AtmosphereLuts ? "true" : "false")}");
             writer.WriteLine($"atmosphere_aerial = {(AtmosphereAerial ? "true" : "false")}");
@@ -443,6 +455,7 @@ namespace LibreLancer
                 VolumetricTemporal = VolumetricTemporal,
                 VolumetricReprojection = VolumetricReprojection,
                 VolumetricBlueNoise = VolumetricBlueNoise,
+                VolumetricOpenVdbManifest = VolumetricOpenVdbManifest,
                 VolumetricAdaptiveQuality = VolumetricAdaptiveQuality,
                 AtmosphereLuts = AtmosphereLuts,
                 AtmosphereAerial = AtmosphereAerial,
@@ -533,6 +546,7 @@ namespace LibreLancer
                 VolumetricTemporal = false;
                 VolumetricReprojection = false;
                 VolumetricBlueNoise = false;
+                VolumetricOpenVdbManifest = "";
             }
             if (!VolumetricNebulaRequested)
             {
@@ -554,6 +568,7 @@ namespace LibreLancer
                 VolumetricReprojection = false;
                 VolumetricBlueNoise = false;
             }
+            VolumetricOpenVdbManifest = NormalizeVolumetricOpenVdbManifest(VolumetricOpenVdbManifest);
             if (!VolumetricTemporal)
             {
                 VolumetricReprojection = false;
@@ -621,6 +636,31 @@ namespace LibreLancer
                 FLLog.Info("Config", $"Unknown post_aa '{PostAA}', using 'off'.");
                 PostAA = "off";
             }
+        }
+
+        private static string NormalizeVolumetricOpenVdbManifest(string? manifest)
+        {
+            if (string.IsNullOrWhiteSpace(manifest))
+            {
+                return "";
+            }
+
+            var normalized = manifest.Trim().Replace('\\', '/');
+            if (Path.IsPathRooted(normalized) ||
+                normalized.Contains(":", System.StringComparison.Ordinal) ||
+                normalized.StartsWith("../", System.StringComparison.Ordinal) ||
+                normalized.Contains("/../", System.StringComparison.Ordinal) ||
+                normalized.Equals("..", System.StringComparison.Ordinal))
+            {
+                FLLog.Info("Config", "volumetric_openvdb_manifest must be a safe relative VFS path, disabling.");
+                return "";
+            }
+            if (!normalized.EndsWith(".siriusvol.manifest", System.StringComparison.OrdinalIgnoreCase))
+            {
+                FLLog.Info("Config", "volumetric_openvdb_manifest must point to a .siriusvol.manifest file, disabling.");
+                return "";
+            }
+            return normalized;
         }
     }
 }

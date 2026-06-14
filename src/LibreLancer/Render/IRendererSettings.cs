@@ -108,6 +108,9 @@ public interface IRendererSettings
     /// <summary>Blue-noise/STBN jitter source for density and temporal passes.</summary>
     bool SelectedVolumetricBlueNoise => false;
 
+    /// <summary>Optional VFS path to a reviewed OpenVDB-derived .siriusvol manifest.</summary>
+    string? SelectedVolumetricOpenVdbManifest => null;
+
     /// <summary>Allow huge nebula zones and expensive viewports to downshift froxel quality automatically.</summary>
     bool SelectedVolumetricAdaptiveQuality => false;
 

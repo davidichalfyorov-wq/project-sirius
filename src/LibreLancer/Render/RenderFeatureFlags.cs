@@ -76,7 +76,8 @@ public readonly record struct RenderFeatureSet(
     RenderDebugView DebugView,
     string? CapturePath,
     float VolumetricLightningReplayTime = -1f,
-    int VolumetricLightningReplaySeed = 0)
+    int VolumetricLightningReplaySeed = 0,
+    string? VolumetricOpenVdbManifest = null)
 {
     public bool VolumetricNebula => Bits.HasFlag(RenderFeatureBits.VolumetricNebula);
     public bool VolumetricNearCascade => Bits.HasFlag(RenderFeatureBits.VolumetricNearCascade);
@@ -222,6 +223,15 @@ public readonly record struct RenderFeatureSet(
             FirstNonEmpty(Environment.GetEnvironmentVariable("SIRIUS_DEBUG_VIEW"), settings.SelectedDebugView));
         var capturePath = FirstNonEmpty(
             Environment.GetEnvironmentVariable("SIRIUS_CAPTURE_PATH"), settings.SelectedRenderCapturePath);
+        var openVdbManifest = FirstNonEmpty(
+            Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST"),
+            FirstNonEmpty(Environment.GetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST"),
+                settings.SelectedVolumetricOpenVdbManifest));
+        openVdbManifest = NormalizeOpenVdbManifestPath(openVdbManifest);
+        if ((bits & RenderFeatureBits.VolumetricNebula) == 0)
+        {
+            openVdbManifest = null;
+        }
         var replayTime = OverrideFloat(settings.SelectedVolumetricLightningReplayTime,
             "SIRIUS_VOLFOG_LIGHTNING_REPLAY_TIME", "SIRIUS_VOLLIGHTNING_REPLAY_TIME");
         if (!float.IsFinite(replayTime) || replayTime < 0f)
@@ -236,11 +246,30 @@ public readonly record struct RenderFeatureSet(
             replaySeed = 0;
         }
         return new RenderFeatureSet(bits, Math.Clamp(settings.SelectedVolumetricQuality, 0, 3), debugView,
-            capturePath, replayTime, replaySeed);
+            capturePath, replayTime, replaySeed, openVdbManifest);
     }
 
     private static string? FirstNonEmpty(string? a, string? b) =>
         string.IsNullOrWhiteSpace(a) ? (string.IsNullOrWhiteSpace(b) ? null : b) : a;
+
+    private static string? NormalizeOpenVdbManifestPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+        var normalized = path.Trim().Replace('\\', '/');
+        if (normalized.StartsWith("/", StringComparison.Ordinal) ||
+            normalized.Contains(":", StringComparison.Ordinal) ||
+            normalized.StartsWith("../", StringComparison.Ordinal) ||
+            normalized.Contains("/../", StringComparison.Ordinal) ||
+            normalized.Equals("..", StringComparison.Ordinal) ||
+            !normalized.EndsWith(".siriusvol.manifest", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        return normalized;
+    }
 
     private static bool OverrideBool(bool fallback, params string[] names)
     {

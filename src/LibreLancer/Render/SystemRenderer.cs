@@ -781,7 +781,7 @@ namespace LibreLancer.Render
             volumetricNebulaResources ??= new VolumetricNebulaFrameResources();
             if (profile is { IsValid: true } activeProfile)
             {
-                TryBindImportedDensityVolume(activeProfile);
+                TryBindImportedDensityVolume(features, activeProfile);
             }
             var displacementFrame = features.VolumetricShipDisplacement
                 ? volumetricShipDisplacement.BuildFrame(World.Objects, camera.Position, (float)game.TotalTime)
@@ -790,16 +790,14 @@ namespace LibreLancer.Render
                 (float)game.TotalTime, ResolveVolumetricSunDirection(camera.Position), displacementFrame);
         }
 
-        private void TryBindImportedDensityVolume(NebulaVolumeProfile activeProfile)
+        private void TryBindImportedDensityVolume(RenderFeatureSet features, NebulaVolumeProfile activeProfile)
         {
             if (volumetricNebulaResources == null)
             {
                 return;
             }
 
-            var manifestPath =
-                Environment.GetEnvironmentVariable("SIRIUS_VOLFOG_OPENVDB_MANIFEST") ??
-                Environment.GetEnvironmentVariable("SIRIUS_OPENVDB_MANIFEST");
+            var manifestPath = features.VolumetricOpenVdbManifest;
             if (string.IsNullOrWhiteSpace(manifestPath))
             {
                 importedDensityCacheKey = string.Empty;
