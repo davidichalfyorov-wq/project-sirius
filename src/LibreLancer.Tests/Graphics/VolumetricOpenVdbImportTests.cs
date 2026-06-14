@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 using LibreLancer.Data.GameData.World;
 using LibreLancer.Render.Volumetrics;
 using Xunit;
@@ -238,6 +239,64 @@ public class VolumetricOpenVdbImportTests
 
         Assert.False(result.Valid);
         Assert.Contains("source file", result.Error);
+    }
+
+    [Fact]
+    public void NormalizesSha256AliasToContentHash()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "sha256 = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]);
+
+        Assert.True(result.Valid);
+        Assert.Equal("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            result.Metadata.ContentHash);
+    }
+
+    [Fact]
+    public void VerifiesSha256PayloadHash()
+    {
+        var payload = Encoding.ASCII.GetBytes("abc");
+        var verification = VolumetricOpenVdbImport.VerifyContentHash(payload,
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+
+        Assert.True(verification.Supported);
+        Assert.True(verification.Matched);
+        Assert.Equal("sha256", verification.Algorithm);
+        Assert.Equal(verification.Expected, verification.Actual);
+        Assert.Empty(verification.Error);
+    }
+
+    [Fact]
+    public void ReportsSha256PayloadHashMismatch()
+    {
+        var payload = Encoding.ASCII.GetBytes("abc");
+        var verification = VolumetricOpenVdbImport.VerifyContentHash(payload,
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+        Assert.True(verification.Supported);
+        Assert.False(verification.Matched);
+        Assert.Equal("content hash mismatch", verification.Error);
+        Assert.Equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            verification.Actual);
+    }
+
+    [Fact]
+    public void LeavesBlake3PayloadVerificationToOfflineImporter()
+    {
+        var verification = VolumetricOpenVdbImport.VerifyContentHash([1, 2, 3, 4],
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+        Assert.False(verification.Supported);
+        Assert.False(verification.Matched);
+        Assert.Contains("offline import tool", verification.Error);
     }
 
     [Fact]

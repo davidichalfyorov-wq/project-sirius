@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
+using System.Security.Cryptography;
 
 namespace LibreLancer.Render.Volumetrics;
 
@@ -87,9 +88,43 @@ public static class VolumetricOpenVdbImport
             Source: Get(values, "source"),
             SourceFile: Get(values, "source_file", Get(values, "dcc_file")),
             License: Get(values, "license"),
-            ContentHash: Get(values, "content_hash", Get(values, "sha256", Get(values, "hash"))),
+            ContentHash: GetContentHash(values),
             PreserveZoneTransform: ParseBool(values, "preserve_zone_transform", true));
         return Validate(metadata);
+    }
+
+    public static VolumetricOpenVdbHashVerification VerifyContentHash(
+        ReadOnlySpan<byte> payload,
+        VolumetricOpenVdbImportMetadata metadata) =>
+        VerifyContentHash(payload, metadata.ContentHash);
+
+    public static VolumetricOpenVdbHashVerification VerifyContentHash(
+        ReadOnlySpan<byte> payload,
+        string contentHash)
+    {
+        if (!TryParseContentHash(contentHash, out var algorithm, out var expected, out var error))
+        {
+            return VolumetricOpenVdbHashVerification.Invalid(error);
+        }
+
+        if (!algorithm.Equals("sha256", StringComparison.OrdinalIgnoreCase))
+        {
+            return VolumetricOpenVdbHashVerification.Invalid(
+                "BLAKE3 content hash verification is reserved for the offline import tool");
+        }
+
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(payload, hash);
+        var actual = Convert.ToHexString(hash).ToLowerInvariant();
+        var normalizedExpected = expected.ToLowerInvariant();
+        var matched = string.Equals(actual, normalizedExpected, StringComparison.OrdinalIgnoreCase);
+        return new VolumetricOpenVdbHashVerification(
+            Supported: true,
+            Matched: matched,
+            Algorithm: algorithm.ToLowerInvariant(),
+            Expected: normalizedExpected,
+            Actual: actual,
+            Error: matched ? "" : "content hash mismatch");
     }
 
     public static VolumetricOpenVdbImportPlan CreateImportPlan(
@@ -229,6 +264,29 @@ public static class VolumetricOpenVdbImport
     private static string Get(Dictionary<string, string> values, string key, string fallback = "") =>
         values.TryGetValue(key, out var value) ? value : fallback;
 
+    private static string GetContentHash(Dictionary<string, string> values)
+    {
+        if (values.TryGetValue("content_hash", out var contentHash))
+        {
+            return contentHash;
+        }
+        if (values.TryGetValue("sha256", out var sha256))
+        {
+            return PrefixHash("sha256", sha256);
+        }
+        if (values.TryGetValue("blake3", out var blake3))
+        {
+            return PrefixHash("blake3", blake3);
+        }
+        return Get(values, "hash");
+    }
+
+    private static string PrefixHash(string algorithm, string value)
+    {
+        var hash = value.Trim();
+        return hash.Contains(':') ? hash : $"{algorithm}:{hash}";
+    }
+
     private static int ParseInt(Dictionary<string, string> values, string key, int fallback = 0) =>
         values.TryGetValue(key, out var value) &&
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
@@ -292,22 +350,44 @@ public static class VolumetricOpenVdbImport
         return placement is "zone_locked" or "canonical_zone";
     }
 
-    private static bool IsSupportedContentHash(string value)
+    private static bool IsSupportedContentHash(string value) =>
+        TryParseContentHash(value, out _, out _, out _);
+
+    private static bool TryParseContentHash(
+        string value,
+        out string algorithm,
+        out string hex,
+        out string error)
     {
+        algorithm = "";
+        hex = "";
+        error = "";
         var hash = value.Trim();
-        if (hash.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ||
-            hash.StartsWith("blake3:", StringComparison.OrdinalIgnoreCase))
+        var split = hash.IndexOf(':');
+        if (split <= 0)
         {
-            hash = hash[(hash.IndexOf(':') + 1)..];
-        }
-        if (hash.Length != 64)
-        {
+            error = "content hash must include an algorithm prefix";
             return false;
         }
-        foreach (var ch in hash)
+
+        algorithm = hash[..split].Trim().ToLowerInvariant();
+        if (algorithm is not ("sha256" or "blake3"))
+        {
+            error = "unsupported content hash algorithm";
+            return false;
+        }
+
+        hex = hash[(split + 1)..].Trim();
+        if (hex.Length != 64)
+        {
+            error = "content hash must be 64 hex characters";
+            return false;
+        }
+        foreach (var ch in hex)
         {
             if (!Uri.IsHexDigit(ch))
             {
+                error = "content hash must be 64 hex characters";
                 return false;
             }
         }
@@ -388,6 +468,18 @@ public readonly record struct VolumetricOpenVdbImportResult(
 {
     public static VolumetricOpenVdbImportResult Invalid(string error) =>
         new(false, default, error);
+}
+
+public readonly record struct VolumetricOpenVdbHashVerification(
+    bool Supported,
+    bool Matched,
+    string Algorithm,
+    string Expected,
+    string Actual,
+    string Error)
+{
+    public static VolumetricOpenVdbHashVerification Invalid(string error) =>
+        new(false, false, "", "", "", error);
 }
 
 public readonly record struct VolumetricOpenVdbImportPlan(

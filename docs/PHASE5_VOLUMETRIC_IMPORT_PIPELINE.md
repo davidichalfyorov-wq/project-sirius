@@ -45,6 +45,9 @@ Rules for the OpenVDB layer:
   missing. `content_hash` must be `sha256:<64 hex>` or `blake3:<64 hex>` so
   dense OpenVDB exports can be reproduced, reviewed, and invalidated without
   guessing which DCC cache produced them.
+- The metadata bridge can verify `sha256:` payload bytes directly. `blake3:`
+  remains a valid manifest algorithm for offline import tools, but runtime code
+  must report it as unsupported until a reviewed BLAKE3 implementation is added.
 - Runtime import plans require explicit canonical identity locks. A sidecar can
   be parsed for diagnostics without them, but it cannot be bound to an active
   `NebulaVolumeProfile` unless `canonical_nebula` is present, and
