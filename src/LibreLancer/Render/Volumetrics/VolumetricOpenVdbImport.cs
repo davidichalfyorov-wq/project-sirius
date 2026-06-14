@@ -40,22 +40,9 @@ public static class VolumetricOpenVdbImport
 
     public static VolumetricOpenVdbImportResult ParseManifest(IEnumerable<string> lines)
     {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raw in lines)
+        if (!TryParseKeyValueLines(lines, out var values, out var parseError))
         {
-            var line = raw.Split('#', 2)[0].Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            var split = line.IndexOf('=');
-            if (split <= 0)
-            {
-                return VolumetricOpenVdbImportResult.Invalid($"invalid manifest line '{raw}'");
-            }
-
-            values[line[..split].Trim()] = line[(split + 1)..].Trim();
+            return VolumetricOpenVdbImportResult.Invalid(parseError);
         }
 
         if (!ValidateTypedManifestValues(values, out var typedError))
@@ -207,6 +194,92 @@ public static class VolumetricOpenVdbImport
         return plan;
     }
 
+    public static VolumetricOpenVdbCacheManifestValidation ValidateCacheManifest(
+        IEnumerable<string> lines,
+        VolumetricOpenVdbImportPlan plan)
+    {
+        if (!plan.Valid)
+        {
+            return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                "cannot validate cache manifest for invalid import plan");
+        }
+        if (!TryParseKeyValueLines(lines, out var values, out var parseError))
+        {
+            return VolumetricOpenVdbCacheManifestValidation.Invalid(parseError);
+        }
+
+        var dimensions = FormattableString.Invariant(
+            $"{plan.Metadata.Width}, {plan.Metadata.Height}, {plan.Metadata.Depth}");
+        var expected =
+            new (string Key, string Value)[]
+            {
+                ("cache_version", "1"),
+                ("cache_key", plan.CacheKey),
+                ("cache", plan.CacheRelativePath),
+                ("manifest", plan.CacheManifestRelativePath),
+                ("canonical_system", plan.Metadata.CanonicalSystem),
+                ("canonical_nebula", plan.Metadata.CanonicalNebula),
+                ("profile", plan.Metadata.ProfileNickname),
+                ("grid", plan.Metadata.GridName),
+                ("dimensions", dimensions),
+                ("axis", plan.Metadata.AxisConvention),
+                ("bounds", plan.Metadata.BoundsMode),
+                ("placement", plan.Metadata.PlacementMode),
+                ("preserve_zone_transform", plan.Metadata.PreserveZoneTransform.ToString().ToLowerInvariant()),
+                ("source", plan.Metadata.Source),
+                ("source_file", plan.Metadata.SourceFile),
+                ("source_data", plan.Metadata.DataPath),
+                ("license", plan.Metadata.License),
+                ("content_hash", plan.Metadata.ContentHash)
+            };
+
+        foreach (var (key, expectedValue) in expected)
+        {
+            if (!values.TryGetValue(key, out var actualValue))
+            {
+                return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                    $"cache manifest missing {key}");
+            }
+            if (!string.Equals(actualValue, expectedValue, StringComparison.Ordinal))
+            {
+                return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                    $"cache manifest {key} mismatch");
+            }
+        }
+
+        var floatChecks =
+            new (string Key, float Value)[]
+            {
+                ("voxel_size_meters", plan.Metadata.VoxelSizeMeters),
+                ("density_min", plan.Metadata.DensityMin),
+                ("density_max", plan.Metadata.DensityMax),
+                ("density_multiplier", plan.Metadata.DensityMultiplier),
+                ("density_normalize_scale", plan.DensityNormalize.X),
+                ("density_normalize_bias", plan.DensityNormalize.Y)
+            };
+
+        foreach (var (key, expectedValue) in floatChecks)
+        {
+            if (!values.TryGetValue(key, out var actualValue))
+            {
+                return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                    $"cache manifest missing {key}");
+            }
+            if (!float.TryParse(actualValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                    $"cache manifest invalid {key}");
+            }
+            if (MathF.Abs(parsed - expectedValue) > 1e-6f)
+            {
+                return VolumetricOpenVdbCacheManifestValidation.Invalid(
+                    $"cache manifest {key} mismatch");
+            }
+        }
+
+        return VolumetricOpenVdbCacheManifestValidation.Ok();
+    }
+
     private static VolumetricOpenVdbImportResult Validate(VolumetricOpenVdbImportMetadata metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata.DataPath))
@@ -316,6 +389,34 @@ public static class VolumetricOpenVdbImport
     {
         var hash = value.Trim();
         return hash.Contains(':') ? hash : $"{algorithm}:{hash}";
+    }
+
+    private static bool TryParseKeyValueLines(
+        IEnumerable<string> lines,
+        out Dictionary<string, string> values,
+        out string error)
+    {
+        values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in lines)
+        {
+            var line = raw.Split('#', 2)[0].Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var split = line.IndexOf('=');
+            if (split <= 0)
+            {
+                error = $"invalid manifest line '{raw}'";
+                return false;
+            }
+
+            values[line[..split].Trim()] = line[(split + 1)..].Trim();
+        }
+
+        error = "";
+        return true;
     }
 
     private static bool ValidateTypedManifestValues(Dictionary<string, string> values, out string error)
@@ -634,6 +735,17 @@ public readonly record struct VolumetricOpenVdbHashVerification(
 {
     public static VolumetricOpenVdbHashVerification Invalid(string error) =>
         new(false, false, "", "", "", error);
+}
+
+public readonly record struct VolumetricOpenVdbCacheManifestValidation(
+    bool Valid,
+    string Error)
+{
+    public static VolumetricOpenVdbCacheManifestValidation Ok() =>
+        new(true, "");
+
+    public static VolumetricOpenVdbCacheManifestValidation Invalid(string error) =>
+        new(false, error);
 }
 
 public readonly record struct VolumetricOpenVdbImportPlan(

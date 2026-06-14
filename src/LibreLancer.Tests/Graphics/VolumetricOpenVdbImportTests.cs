@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using System.Text;
 using LibreLancer.Data.GameData.World;
@@ -391,6 +392,60 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void ValidatesGeneratedCacheManifestAgainstImportPlan()
+    {
+        var plan = MakeVerifiedImportPlan();
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheManifest(
+            plan.BuildCacheManifestLines(),
+            plan);
+
+        Assert.True(validation.Valid);
+        Assert.Equal("", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsCacheManifestWithMismatchedCacheKey()
+    {
+        var plan = MakeVerifiedImportPlan();
+        var lines = ReplaceLine(
+            plan.BuildCacheManifestLines(),
+            "cache_key = ",
+            "cache_key = wrong");
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheManifest(lines, plan);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("cache_key", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsCacheManifestWithMismatchedDensityNormalization()
+    {
+        var plan = MakeVerifiedImportPlan();
+        var lines = ReplaceLine(
+            plan.BuildCacheManifestLines(),
+            "density_normalize_scale = ",
+            "density_normalize_scale = 0.25");
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheManifest(lines, plan);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("density_normalize_scale", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsCacheManifestForInvalidImportPlan()
+    {
+        var validation = VolumetricOpenVdbImport.ValidateCacheManifest(
+            ["cache_version = 1"],
+            VolumetricOpenVdbImportPlan.Invalid("bad manifest"));
+
+        Assert.False(validation.Valid);
+        Assert.Contains("invalid import plan", validation.Error);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
@@ -713,4 +768,37 @@ public class VolumetricOpenVdbImportTests
             HasInteriorClouds: true,
             HasLightning: false,
             ExclusionCount: 0);
+
+    private static VolumetricOpenVdbImportPlan MakeVerifiedImportPlan() =>
+        VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = artist_exports/tmp/li01_badlands_density.vdb",
+            "grid = density",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "density_min = 0.2",
+            "density_max = 1.2",
+            "density_multiplier = 0.5",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+
+    private static string[] ReplaceLine(string[] lines, string prefix, string replacement)
+    {
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith(prefix, StringComparison.Ordinal))
+            {
+                lines[i] = replacement;
+                return lines;
+            }
+        }
+
+        throw new InvalidOperationException($"Missing line prefix {prefix}");
+    }
 }

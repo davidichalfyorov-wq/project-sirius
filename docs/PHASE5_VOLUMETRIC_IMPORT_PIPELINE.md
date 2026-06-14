@@ -60,6 +60,9 @@ Rules for the OpenVDB layer:
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density
   normalization so binary volume assets stay reviewable in CI and code review.
+  CI/import tooling should validate this cache manifest against the verified
+  import plan before accepting the `.siriusvol`; cache identity, canonical
+  locks, content hash, dimensions, and density normalization must match.
 - Runtime import plans require explicit canonical identity locks. A sidecar can
   be parsed for diagnostics without them, but it cannot be bound to an active
   `NebulaVolumeProfile` unless `canonical_nebula` is present, and
