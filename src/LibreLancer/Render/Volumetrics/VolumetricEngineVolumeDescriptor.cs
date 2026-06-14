@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 
 namespace LibreLancer.Render.Volumetrics;
 
@@ -28,6 +29,7 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
 {
     public const string Magic = "SIRIUSVOL";
     public const int CurrentVersion = 1;
+    public const string DensePayloadLayout = "dense_x_major_little_endian";
 
     public long VoxelCount => Valid ? (long)Width * Height * Depth : 0;
 
@@ -63,6 +65,7 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
             $"dimensions = {Width}, {Height}, {Depth}",
             $"voxel_count = {VoxelCount}",
             $"payload_bytes = {PayloadBytes}",
+            $"payload_layout = {DensePayloadLayout}",
             $"density_normalize_scale = {Fmt(DensityNormalize.X)}",
             $"density_normalize_bias = {Fmt(DensityNormalize.Y)}",
             $"content_hash = {ContentHash}"
@@ -183,6 +186,71 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
         return new VolumetricEngineVolumePayloadBuildResult(true, payload, "");
     }
 
+    public static VolumetricEngineVolumeArtifactBuildResult BuildDenseArtifact(
+        ReadOnlySpan<float> unitDensitySamples,
+        VolumetricEngineVolumeDescriptor descriptor)
+    {
+        var payloadResult = BuildDensePayload(unitDensitySamples, descriptor);
+        if (!payloadResult.Valid)
+        {
+            return VolumetricEngineVolumeArtifactBuildResult.Invalid(payloadResult.Error);
+        }
+
+        var headerBytes = Encoding.ASCII.GetBytes(string.Join('\n', descriptor.BuildHeaderLines()));
+        var payload = payloadResult.Payload;
+        var artifact = new byte[headerBytes.Length + 2 + payload.Length];
+        headerBytes.CopyTo(artifact);
+        artifact[headerBytes.Length] = (byte)'\n';
+        artifact[headerBytes.Length + 1] = (byte)'\n';
+        payload.CopyTo(artifact.AsSpan(headerBytes.Length + 2));
+
+        var validation = ValidateDenseArtifact(artifact, descriptor);
+        if (!validation.Valid)
+        {
+            return VolumetricEngineVolumeArtifactBuildResult.Invalid(validation.Error);
+        }
+
+        return new VolumetricEngineVolumeArtifactBuildResult(
+            true,
+            artifact,
+            headerBytes.Length,
+            payload.Length,
+            "");
+    }
+
+    public static VolumetricEngineVolumeArtifactValidation ValidateDenseArtifact(
+        ReadOnlySpan<byte> artifact,
+        VolumetricEngineVolumeDescriptor descriptor)
+    {
+        if (!descriptor.Valid)
+        {
+            return VolumetricEngineVolumeArtifactValidation.Invalid(
+                "cannot validate engine volume artifact for invalid descriptor");
+        }
+
+        var split = IndexOfHeaderTerminator(artifact);
+        if (split < 0)
+        {
+            return VolumetricEngineVolumeArtifactValidation.Invalid(
+                "engine volume artifact missing header terminator");
+        }
+
+        var header = Encoding.ASCII.GetString(artifact[..split]);
+        var headerValidation = ValidateHeader(header.Split('\n'), descriptor);
+        if (!headerValidation.Valid)
+        {
+            return VolumetricEngineVolumeArtifactValidation.Invalid(headerValidation.Error);
+        }
+
+        var payloadValidation = ValidatePayload(artifact[(split + 2)..], descriptor);
+        if (!payloadValidation.Valid)
+        {
+            return VolumetricEngineVolumeArtifactValidation.Invalid(payloadValidation.Error);
+        }
+
+        return VolumetricEngineVolumeArtifactValidation.Ok();
+    }
+
     public uint EncodeUnitDensity(float unitDensity) =>
         EncodeUnitDensity(unitDensity, Format);
 
@@ -232,6 +300,7 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
                 ("canonical_nebula", descriptor.CanonicalNebula),
                 ("grid", descriptor.GridName),
                 ("dimensions", dimensions),
+                ("payload_layout", DensePayloadLayout),
                 ("content_hash", descriptor.ContentHash)
             };
 
@@ -348,6 +417,19 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
         error = "";
         return true;
     }
+
+    private static int IndexOfHeaderTerminator(ReadOnlySpan<byte> artifact)
+    {
+        for (var i = 0; i < artifact.Length - 1; i++)
+        {
+            if (artifact[i] == (byte)'\n' && artifact[i + 1] == (byte)'\n')
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 }
 
 public enum VolumetricEngineVolumeFormat
@@ -386,4 +468,26 @@ public readonly record struct VolumetricEngineVolumePayloadBuildResult(
 {
     public static VolumetricEngineVolumePayloadBuildResult Invalid(string error) =>
         new(false, [], error);
+}
+
+public readonly record struct VolumetricEngineVolumeArtifactBuildResult(
+    bool Valid,
+    byte[] Artifact,
+    int HeaderBytes,
+    int PayloadBytes,
+    string Error)
+{
+    public static VolumetricEngineVolumeArtifactBuildResult Invalid(string error) =>
+        new(false, [], 0, 0, error);
+}
+
+public readonly record struct VolumetricEngineVolumeArtifactValidation(
+    bool Valid,
+    string Error)
+{
+    public static VolumetricEngineVolumeArtifactValidation Ok() =>
+        new(true, "");
+
+    public static VolumetricEngineVolumeArtifactValidation Invalid(string error) =>
+        new(false, error);
 }

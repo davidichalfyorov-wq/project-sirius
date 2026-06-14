@@ -729,6 +729,57 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsDenseEngineVolumeArtifactWithHeaderAndPayload()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var result = VolumetricEngineVolumeDescriptor.BuildDenseArtifact(
+            [0f, 1f],
+            descriptor);
+
+        Assert.True(result.Valid);
+        Assert.True(result.HeaderBytes > 0);
+        Assert.Equal(2, result.PayloadBytes);
+        Assert.Equal((byte)'\n', result.Artifact[result.HeaderBytes]);
+        Assert.Equal((byte)'\n', result.Artifact[result.HeaderBytes + 1]);
+        Assert.Equal(new byte[] { 0, 255 }, result.Artifact.AsSpan(result.HeaderBytes + 2).ToArray());
+
+        var header = Encoding.ASCII.GetString(result.Artifact.AsSpan(0, result.HeaderBytes));
+        Assert.Contains("magic = SIRIUSVOL", header);
+        Assert.Contains("payload_layout = dense_x_major_little_endian", header);
+        Assert.True(VolumetricEngineVolumeDescriptor.ValidateDenseArtifact(
+            result.Artifact,
+            descriptor).Valid);
+    }
+
+    [Fact]
+    public void RejectsDenseEngineVolumeArtifactWithoutHeaderTerminator()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var headerOnly = Encoding.ASCII.GetBytes(string.Join('\n', descriptor.BuildHeaderLines()));
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidateDenseArtifact(headerOnly, descriptor);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("header terminator", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsDenseEngineVolumeArtifactWithTruncatedPayload()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(2, VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var result = VolumetricEngineVolumeDescriptor.BuildDenseArtifact(
+            [0f, 1f],
+            descriptor);
+
+        var truncated = result.Artifact[..^1];
+        var validation = VolumetricEngineVolumeDescriptor.ValidateDenseArtifact(truncated, descriptor);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("byte count", validation.Error);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
