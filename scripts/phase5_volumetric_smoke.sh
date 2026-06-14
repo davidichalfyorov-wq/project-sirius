@@ -143,6 +143,8 @@ dev_hud=$DEV_HUD
 capture_pass_timings=$PASS_TIMINGS_FLAG
 validation_pass_timings=$VALIDATION_PASS_TIMINGS
 assert_passes=$ASSERT_PASSES
+build_first=$BUILD_FIRST
+build_config=$BUILD_CONFIG
 screenshot=$OUT/capture/space_noui.png
 validation_log=$OUT/validation/run.log
 EOF
