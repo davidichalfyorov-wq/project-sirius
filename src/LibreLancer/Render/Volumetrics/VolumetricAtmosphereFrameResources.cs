@@ -1,5 +1,7 @@
 using System;
+using System.Numerics;
 using LibreLancer.Graphics;
+using LibreLancer.Shaders;
 
 namespace LibreLancer.Render.Volumetrics;
 
@@ -84,6 +86,68 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             true);
     }
 
+    public bool DrawDebugView(RenderContext rstate, global::LibreLancer.Render.RenderDebugView debugView,
+        int renderWidth, int renderHeight)
+    {
+        if (debugView is not (global::LibreLancer.Render.RenderDebugView.AtmosphereLuts or
+                              global::LibreLancer.Render.RenderDebugView.AtmosphereAerial) ||
+            !Allocated ||
+            AllShaders.FroxelDebugSlice == null)
+        {
+            return false;
+        }
+
+        var source = debugView == global::LibreLancer.Render.RenderDebugView.AtmosphereAerial
+            ? AerialPerspective
+            : Transmittance;
+        var paired = debugView == global::LibreLancer.Render.RenderDebugView.AtmosphereAerial
+            ? AerialPerspective
+            : MultiScattering;
+        if (source == null || paired == null)
+        {
+            return false;
+        }
+
+        var shader = AllShaders.FroxelDebugSlice.Get(0);
+        rstate.Textures[0] = source;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.Textures[1] = paired;
+        rstate.Samplers[1] = SamplerState.LinearClamp;
+        var sliceParams = new AtmosphereDebugSliceParams
+        {
+            SliceParams = new Vector4(
+                debugView == global::LibreLancer.Render.RenderDebugView.AtmosphereAerial ? 0.55f : 0f,
+                1f,
+                debugView == global::LibreLancer.Render.RenderDebugView.AtmosphereAerial ? 13f : 12f,
+                1f),
+            GridParams = new Vector4(source.Width, source.Height, Math.Max(1, source.Depth), generation)
+        };
+        shader.SetUniformBlock(3, ref sliceParams);
+
+        var oldCull = rstate.Cull;
+        var oldDepth = rstate.DepthEnabled;
+        var oldBlend = rstate.BlendMode;
+        var width = Math.Max(96, Math.Min(512, Math.Max(renderWidth - 32, 1) / 3));
+        var height = Math.Max(72, Math.Min(288, width * 9 / 16));
+        try
+        {
+            rstate.Cull = false;
+            rstate.DepthEnabled = false;
+            rstate.BlendMode = BlendMode.Opaque;
+            rstate.PushViewport(16, 16, width, height);
+            rstate.Shader = shader;
+            rstate.DrawNoVertexBuffer(PrimitiveTypes.TriangleList, 1);
+            rstate.PopViewport();
+        }
+        finally
+        {
+            rstate.Cull = oldCull;
+            rstate.DepthEnabled = oldDepth;
+            rstate.BlendMode = oldBlend;
+        }
+        return true;
+    }
+
     private void Allocate(RenderContext rstate, VolumetricAtmosphereLutBudget budget)
     {
         DisposeTextures();
@@ -161,6 +225,12 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         disposed = true;
         DisposeTextures();
         NoteDisabled("disposed");
+    }
+
+    private struct AtmosphereDebugSliceParams
+    {
+        public Vector4 SliceParams;
+        public Vector4 GridParams;
     }
 }
 

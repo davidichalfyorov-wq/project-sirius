@@ -865,6 +865,24 @@ namespace LibreLancer.Render
 
         private void DrawVolumetricNebulaDebugView(int renderWidth, int renderHeight, RenderDebugView debugView)
         {
+            if (debugView is RenderDebugView.AtmosphereLuts or RenderDebugView.AtmosphereAerial)
+            {
+                if (volumetricAtmosphereResources == null)
+                {
+                    return;
+                }
+                rstate.BeginPassTimer("vol_atmosphere_debug_view");
+                try
+                {
+                    volumetricAtmosphereResources.DrawDebugView(rstate, debugView, renderWidth, renderHeight);
+                }
+                finally
+                {
+                    rstate.EndPassTimer();
+                }
+                return;
+            }
+
             if (volumetricNebulaResources == null)
             {
                 return;

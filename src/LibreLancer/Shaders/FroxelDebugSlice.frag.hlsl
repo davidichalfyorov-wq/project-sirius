@@ -75,6 +75,19 @@ float4 main(Input input) : SV_Target0
     {
         color = float3(saturate(density.a * gain), saturate(density.r * 0.5), saturate(density.b * 0.5));
     }
+    else if (mode == 12)
+    {
+        float trans = dot(saturate(density.rgb), float3(0.3333, 0.3333, 0.3334));
+        float multi = dot(saturate(integrated.rgb), float3(0.3333, 0.3333, 0.3334));
+        color = lerp(float3(0.02, 0.06, 0.10), float3(0.65, 0.92, 1.0), trans);
+        color += multi.xxx * float3(0.25, 0.18, 0.08);
+    }
+    else if (mode == 13)
+    {
+        float aerialAlpha = saturate(density.a);
+        float aerialLight = dot(saturate(density.rgb), float3(0.25, 0.45, 0.30));
+        color = float3(aerialLight * 0.7, aerialLight, aerialLight * 1.25) + aerialAlpha.xxx * float3(0.05, 0.18, 0.34);
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);
