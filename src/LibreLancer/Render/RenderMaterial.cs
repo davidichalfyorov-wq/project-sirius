@@ -169,6 +169,7 @@ namespace LibreLancer.Render
         public static Vector4 VolumetricFogSettings;
         public static Texture3D? AtmosphereTransmittance;
         public static Texture3D? AtmosphereMultiScattering;
+        public static Texture3D? AtmosphereSkyView;
         public static Vector4 AtmosphereLutSettings;
         public static Texture3D? AtmosphereAerial;
         public static Vector4 AtmosphereAerialSettings;
@@ -269,10 +270,12 @@ namespace LibreLancer.Render
             AtmosphereCloudShellSettings = settings;
         }
 
-        public static void SetAtmosphereLutSource(Texture3D? transmittance, Texture3D? multiScattering)
+        public static void SetAtmosphereLutSource(Texture3D? transmittance, Texture3D? multiScattering,
+            Texture3D? skyView = null)
         {
             AtmosphereTransmittance = transmittance;
             AtmosphereMultiScattering = multiScattering;
+            AtmosphereSkyView = skyView;
             AtmosphereLutSettings = new Vector4(
                 transmittance != null && multiScattering != null ? 1f : 0f,
                 0f,
@@ -336,9 +339,10 @@ namespace LibreLancer.Render
                 rstate.Textures[12] = AtmosphereMultiScattering;
                 rstate.Samplers[12] = SamplerState.LinearClamp;
             }
-            if (AtmosphereCloudShell != null)
+            var aux = AtmosphereCloudShell ?? AtmosphereSkyView;
+            if (aux != null)
             {
-                rstate.Textures[13] = AtmosphereCloudShell;
+                rstate.Textures[13] = aux;
                 rstate.Samplers[13] = SamplerState.LinearClamp;
             }
         }

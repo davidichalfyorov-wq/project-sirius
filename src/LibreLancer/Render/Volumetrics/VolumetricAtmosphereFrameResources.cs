@@ -77,7 +77,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             }
         }
 
-        global::LibreLancer.Render.RenderMaterial.SetAtmosphereLutSource(Transmittance, MultiScattering);
+        global::LibreLancer.Render.RenderMaterial.SetAtmosphereLutSource(Transmittance, MultiScattering, SkyView);
         global::LibreLancer.Render.RenderMaterial.SetAtmosphereAerialSource(
             AerialPerspective,
             new System.Numerics.Vector4(features.AtmosphereAerialPerspective ? 1f : 0f,

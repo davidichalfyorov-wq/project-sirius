@@ -60,7 +60,7 @@ namespace LibreLancer.Render.Materials
                     AtmosphereLutSettings.X,
                     AtmosphereCloudShellSettings.X,
                     AtmosphereCloudShellSettings.Y,
-                    0f)
+                    AtmosphereCloudShell == null && AtmosphereSkyView != null ? 1f : 0f)
             };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
