@@ -114,6 +114,10 @@ public class DevHudOverlay
                 Line(FormattableString.Invariant($"vol memory {froxels.EstimatedBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightGreen);
             }
             Line($"vol op     {froxels.LastOperation}", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            if (VolumetricNebulaFrameResources.LastImportedDensitySource != "off")
+            {
+                Line($"vol openvdb {VolumetricNebulaFrameResources.LastImportedDensitySource}", Color4.LightGreen);
+            }
             if (froxels.NearDetail)
             {
                 Line($"vol near detail {froxels.NearDetailSummary}", Color4.LightGreen);
@@ -195,6 +199,7 @@ public class DevHudOverlay
             Line($"vol reproj {(features.VolumetricReprojection ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol noise  {(features.VolumetricBlueNoise ? VolumetricNebulaFrameResources.LastBlueNoiseSource : "off")}",
                 features.VolumetricBlueNoise ? Color4.LightYellow : Color4.LightSkyBlue);
+            Line($"vol openvdb {VolumetricNebulaFrameResources.LastImportedDensitySource}", Color4.LightSkyBlue);
             Line($"vol near   {(features.VolumetricNearCascade ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol ship   {(features.VolumetricShipDisplacement ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"atmo luts  {(features.AtmosphereLuts ? "req" : "off")}", Color4.LightSkyBlue);

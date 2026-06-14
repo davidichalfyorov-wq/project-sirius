@@ -27,6 +27,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     private readonly VolumetricLightningChannelState lightningChannels = new();
     private readonly VolumetricTemporalState temporalState = new();
     private VolumetricBlueNoiseResources? blueNoise;
+    private VolumetricImportedDensityFrame importedDensity;
     private Texture2D? fallbackJitterTexture;
     private Texture3D? fallbackDisplacementTexture;
 
@@ -93,10 +94,13 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public string LightningDebugSummary { get; private set; } = string.Empty;
     public bool BlueNoiseBoundThisFrame { get; private set; }
     public string BlueNoiseSourceName { get; private set; } = "off";
+    public bool ImportedDensityReady => importedDensity.Valid;
+    public string ImportedDensitySummary => importedDensity.Valid ? importedDensity.DebugSummary : "off";
 
     public static VolumetricNebulaResourceDebug LastDebug { get; private set; } =
         VolumetricNebulaResourceDebug.Disabled("not initialized");
     public static string LastBlueNoiseSource { get; private set; } = "off";
+    public static string LastImportedDensitySource { get; private set; } = "off";
     private float lastDisplacementHistoryTime;
     private Vector3 lastWakeVelocity;
 
@@ -124,6 +128,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         if (!features.VolumetricNebula)
         {
             DisposeTextures();
+            ClearImportedDensity("off");
             LastDebug = VolumetricNebulaResourceDebug.Disabled("volumetric_nebula disabled");
             return;
         }
@@ -131,15 +136,22 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         if (!rstate.HasFeature(GraphicsFeature.Compute))
         {
             DisposeTextures();
+            ClearImportedDensity("backend has no compute feature");
             LastDebug = VolumetricNebulaResourceDebug.Disabled("backend has no compute feature");
             return;
         }
 
         if (profile is not { IsValid: true } active)
         {
+            ClearImportedDensity("waiting for active nebula profile");
             LastDebug = VolumetricNebulaResourceDebug.Waiting("waiting for active nebula profile");
             return;
         }
+        if (importedDensity.Valid && !importedDensity.MatchesProfile(active))
+        {
+            ClearImportedDensity("profile mismatch");
+        }
+        LastImportedDensitySource = importedDensity.Valid ? importedDensity.DebugSummary : "off";
 
         var desiredProfile = VolumetricNebulaQualityProfile.Create(renderWidth, renderHeight, features, active);
         var desired = desiredProfile.MainGrid;
@@ -370,6 +382,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         {
             operation += " + wake curl";
         }
+        if (importedDensity.Valid)
+        {
+            operation += " + openvdb ready";
+        }
 
         LastDebug = new VolumetricNebulaResourceDebug(
             true,
@@ -398,6 +414,25 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             MaterialFogDebugSummary,
             GpuLightningInjectedThisFrame,
             LightningDebugSummary);
+    }
+
+    public bool SetImportedDensity(VolumetricImportedDensityFrame densityFrame, NebulaVolumeProfile activeProfile)
+    {
+        if (!densityFrame.Valid || !densityFrame.MatchesProfile(activeProfile))
+        {
+            ClearImportedDensity(densityFrame.Valid ? "profile mismatch" : densityFrame.Error);
+            return false;
+        }
+
+        importedDensity = densityFrame;
+        LastImportedDensitySource = densityFrame.DebugSummary;
+        return true;
+    }
+
+    public void ClearImportedDensity(string reason = "off")
+    {
+        importedDensity = VolumetricImportedDensityFrame.Invalid(reason);
+        LastImportedDensitySource = "off";
     }
 
     public bool DrawDebugView(RenderContext rstate, RenderDebugView debugView, int renderWidth, int renderHeight)
@@ -1508,6 +1543,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         DisposeTextures();
         LastDebug = VolumetricNebulaResourceDebug.Disabled("disposed");
         LastBlueNoiseSource = "off";
+        LastImportedDensitySource = "off";
     }
 }
 
