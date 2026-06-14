@@ -84,6 +84,7 @@ public class VolumetricMaterialFogPolicyTests
         Assert.Equal(grid.FarPlane, binding.Settings.Y);
         Assert.Equal(grid.Depth, binding.Settings.Z);
         Assert.Equal(0.012f, binding.Settings.W);
+        Assert.Contains("transparent", binding.DebugSummary);
         Assert.Contains("current", binding.DebugSummary);
     }
 

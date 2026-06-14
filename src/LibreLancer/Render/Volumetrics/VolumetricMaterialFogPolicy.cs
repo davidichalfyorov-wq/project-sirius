@@ -7,8 +7,8 @@ namespace LibreLancer.Render.Volumetrics;
 /// <summary>
 /// CPU-side contract for unified material fog binding. Transparent materials
 /// may sample the volume only after the fullscreen composite has already fogged
-/// the opaque scene; otherwise particles/beams would move to the new medium
-/// while ships remain in the legacy path.
+/// the opaque scene; otherwise particles/beams would sample the new medium
+/// while the rest of the scene is still waiting for the fullscreen bridge.
 /// </summary>
 public static class VolumetricMaterialFogPolicy
 {
@@ -56,7 +56,7 @@ public static class VolumetricMaterialFogPolicy
             settings,
             "bind",
             string.Format(CultureInfo.InvariantCulture,
-                "{0} near={1:0.#} far={2:0.#} z={3:0} ext={4:0.0000}",
+                "transparent {0} near={1:0.#} far={2:0.#} z={3:0} ext={4:0.0000}",
                 source, settings.X, settings.Y, settings.Z, settings.W));
     }
 }

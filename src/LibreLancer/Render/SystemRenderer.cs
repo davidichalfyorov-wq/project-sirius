@@ -676,6 +676,20 @@ namespace LibreLancer.Render
             }
 
             OpaqueHook?.Invoke();
+
+            // With non-MSAA HDR rendering, composite the opaque scene before
+            // transparents. Transparent/additive materials then sample the
+            // same integrated medium instead of being fogged later using the
+            // opaque depth buffer behind them. The MSAA path still resolves
+            // into the HDR scene after transparents, so it keeps the legacy
+            // post-transparent composite until the renderer has a depth-safe
+            // pre-transparent MSAA resolve.
+            var compositeBeforeTransparent = Settings.SelectedMSAA <= 0;
+            if (compositeBeforeTransparent)
+            {
+                ApplyVolumetricNebulaSceneComposite(renderFeatures, hasActiveProfile, activeProfile);
+            }
+
             // Transparent Pass
             var materialFogBound = BindVolumetricMaterialFog(renderFeatures, hasActiveProfile, activeProfile);
             rstate.DepthWrite = false;
@@ -728,12 +742,10 @@ namespace LibreLancer.Render
             }
 
             rstate.EndPassTimer();
-            if (renderFeatures.VolumetricReprojection)
+            if (!compositeBeforeTransparent)
             {
-                var temporalDepth = hdrPipeline.CopySceneDepthForVolumetrics();
-                ApplyVolumetricNebulaTemporal(renderFeatures, hasActiveProfile, activeProfile, temporalDepth);
+                ApplyVolumetricNebulaSceneComposite(renderFeatures, hasActiveProfile, activeProfile);
             }
-            ApplyVolumetricNebulaComposite(renderFeatures, hasActiveProfile, activeProfile);
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.GodRaysSunTransmittance = volumetricSunTransmittance;
             hdrPipeline.End();
@@ -917,6 +929,17 @@ namespace LibreLancer.Render
             hasActiveProfile &&
             volumetricNebulaResources is { GpuIntegratedThisFrame: true, Integrated: { IsDisposed: false } } &&
             LibreLancer.Shaders.AllShaders.FroxelComposite != null;
+
+        private void ApplyVolumetricNebulaSceneComposite(RenderFeatureSet features, bool hasActiveProfile,
+            NebulaVolumeProfile activeProfile)
+        {
+            if (features.VolumetricReprojection)
+            {
+                var temporalDepth = hdrPipeline.CopySceneDepthForVolumetrics();
+                ApplyVolumetricNebulaTemporal(features, hasActiveProfile, activeProfile, temporalDepth);
+            }
+            ApplyVolumetricNebulaComposite(features, hasActiveProfile, activeProfile);
+        }
 
         private void ApplyVolumetricNebulaTemporal(RenderFeatureSet features, bool hasActiveProfile,
             NebulaVolumeProfile activeProfile, Texture2D? sceneDepth = null)
