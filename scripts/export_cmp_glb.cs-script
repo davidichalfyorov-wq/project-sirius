@@ -1,0 +1,37 @@
+// Headless cmp -> glb (geometry only, no GL / no resources needed).
+// Usage: lleditscript export_cmp_glb.cs-script input.cmp output.glb
+using System.IO;
+using LibreLancer.Utf.Cmp;
+using LibreLancer.ContentEdit;
+using LibreLancer.ContentEdit.Model;
+using SimpleMesh;
+
+ScriptUsage("input.cmp output.glb  — exports LOD0 geometry as GLTF2 binary (no textures)");
+
+var args = ParseArguments(2);
+AssertFileExists(args[0]);
+
+CmpFile cmp;
+using (var fs = File.OpenRead(args[0]))
+    cmp = new CmpFile(args[0], fs);
+
+var settings = new ModelExporterSettings {
+    IncludeLods       = false,   // LOD0 only = highest detail
+    IncludeHulls      = false,
+    IncludeHardpoints = false,
+    IncludeTextures   = false,   // resources may be null since this is false
+    IncludeWireframes = false,
+    IncludeAnimations = false,
+};
+
+var exported = ModelExporter.Export(cmp, null, settings, null);
+PrintMessages(exported);
+if (exported.IsError) {
+    Console.Error.WriteLine("Export failed.");
+    return;
+}
+
+using (var os = File.Create(args[1]))
+    exported.Data.SaveTo(os, ModelSaveFormat.GLB);
+
+Console.WriteLine($"Exported geometry -> '{args[1]}'");

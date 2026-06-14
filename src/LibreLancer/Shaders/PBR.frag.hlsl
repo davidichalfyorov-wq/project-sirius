@@ -303,7 +303,10 @@ float4 main(Input input) : SV_Target0
         irradiance *= rtao;
         prefiltered *= rtao;
 #endif
-        color += irradiance * diffuseColor;
+        // Sirius: floor the IBL diffuse ambient with the system AmbientColor so ships
+        // are not pitch-black on their unlit side in the (near-black) space probe.
+        // In a bright environment irradiance dominates; in empty space AmbientColor fills.
+        color += (irradiance + AmbientColor.xyz) * diffuseColor;
         color += prefiltered * (specularEnvironmentR0 * lutSample.x + lutSample.y);
 #ifdef DEBUG_VIEW
         debugIbl = irradiance * diffuseColor +
