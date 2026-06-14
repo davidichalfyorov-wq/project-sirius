@@ -166,6 +166,11 @@ public class RenderContext
     public void SetIdentityCamera() => Backend.SetIdentityCamera();
     public void SetCamera(ICamera camera) => Backend.SetCamera(camera);
 
+    /// <summary>Sets the previous-frame main-camera ViewProjection for motion
+    /// vectors (graphics phase 0.2). Call before the main-camera SetCamera.</summary>
+    public void SetPrevViewProjection(Matrix4x4 viewProjection) =>
+        Backend.SetPrevViewProjection(viewProjection);
+
     public Renderer2D Renderer2D { get; }
 
     private IRenderContext impl;

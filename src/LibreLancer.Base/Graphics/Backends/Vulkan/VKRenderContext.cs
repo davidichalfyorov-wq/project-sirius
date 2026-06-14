@@ -3372,6 +3372,10 @@ internal unsafe partial class VKRenderContext : IRenderContext
         public Matrix4x4 ViewProjection;
         public Vector3 CameraPosition;
         private float _padding;
+        // Previous-frame main-camera VP for motion vectors (graphics phase
+        // 0.2). Same depth convention as ViewProjection (remapped in
+        // SetPrevViewProjection). Zero until the engine sets it.
+        public Matrix4x4 PrevViewProjection;
     }
 
     private CameraMatrices cameraMatrices;
@@ -3396,6 +3400,16 @@ internal unsafe partial class VKRenderContext : IRenderContext
         cameraMatrices.Projection = camera.Projection * DepthZeroToOne;
         cameraMatrices.ViewProjection = camera.ViewProjection * DepthZeroToOne;
         cameraMatrices.CameraPosition = camera.Position;
+    }
+
+    public void SetPrevViewProjection(Matrix4x4 viewProjection)
+    {
+        // Apply the SAME depth remap as SetCamera's ViewProjection so previous
+        // and current VP share the backend convention; motion vectors compare
+        // mul(worldPos, ViewProjection) against mul(worldPos, PrevViewProjection)
+        // (graphics phase 0.2). Called immediately before the main-camera
+        // SetCamera, whose tag bump flushes this field into the cbuffer.
+        cameraMatrices.PrevViewProjection = viewProjection * DepthZeroToOne;
     }
 
     public void SetIdentityCamera()

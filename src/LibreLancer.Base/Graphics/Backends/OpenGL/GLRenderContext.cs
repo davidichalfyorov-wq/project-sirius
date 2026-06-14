@@ -288,6 +288,9 @@ internal class GLRenderContext : IRenderContext
         public Matrix4x4 ViewProjection;
         public Vector3 CameraPosition;
         private float _padding;
+        // Previous-frame main-camera VP for motion vectors (graphics phase
+        // 0.2). GL uses engine matrices unchanged (no depth remap).
+        public Matrix4x4 PrevViewProjection;
     }
     private ulong cameraTag;
     private ulong setCameraTag = 0;
@@ -302,6 +305,14 @@ internal class GLRenderContext : IRenderContext
         matrices.Projection = camera.Projection;
         matrices.ViewProjection = camera.ViewProjection;
         matrices.CameraPosition = camera.Position;
+    }
+
+    public void SetPrevViewProjection(Matrix4x4 viewProjection)
+    {
+        // GL convention matches the engine matrices (no depth remap), so store
+        // as-is (motion vectors, graphics phase 0.2). Called before the
+        // main-camera SetCamera, whose tag bump flushes the cbuffer.
+        matrices.PrevViewProjection = viewProjection;
     }
 
     public void SetIdentityCamera()

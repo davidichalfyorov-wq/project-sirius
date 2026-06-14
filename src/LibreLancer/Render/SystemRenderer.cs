@@ -55,6 +55,11 @@ namespace LibreLancer.Render
         private readonly RigidModel?[] starSphereLayerModels = new RigidModel?[3];
         private StarsphereCubemapRenderer? cubemapStarspheres;
         private bool useSystemCubemapStarspheres;
+
+        // Motion vectors (graphics phase 0.2): previous frame's main-camera VP,
+        // shifted each frame just before the opaque/G-buffer pass.
+        private Matrix4x4 prevMainViewProjection = Matrix4x4.Identity;
+        private bool hasPrevMainViewProjection;
         public LineRenderer DebugRenderer;
         public Action? OpaqueHook;
         public Action? PhysicsHook;
@@ -612,6 +617,19 @@ namespace LibreLancer.Render
             // Actual Drawing
 
             Beams.Begin(Commands, resman, camera);
+
+            // Motion vectors (graphics phase 0.2): publish the previous frame's
+            // main-camera VP, then re-bind the main camera so its tag bump
+            // flushes PrevViewProjection into the cbuffer for the opaque/
+            // G-buffer pass. First frame uses prev=current => zero motion.
+            // Runs unconditionally (independent of the shadow-pass re-bind);
+            // byte-neutral when the G-buffer is off (no non-GBUFFER shader
+            // reads PrevViewProjection).
+            rstate.SetPrevViewProjection(
+                hasPrevMainViewProjection ? prevMainViewProjection : camera.ViewProjection);
+            rstate.SetCamera(camera);
+            prevMainViewProjection = camera.ViewProjection;
+            hasPrevMainViewProjection = true;
 
             // G-buffer MRT (graphics phase 0.1): opaque geometry renders
             // IMMEDIATELY inside obj.Draw / AsteroidFields.Draw

@@ -91,6 +91,11 @@ internal interface IRenderContext
     /// shared with the blit path.</summary>
     void SetGBufferTargets(IRenderTarget2D[]? extras) { }
 
+    /// <summary>Sets the previous-frame main-camera ViewProjection in the
+    /// camera cbuffer for motion vectors (graphics phase 0.2). Call before the
+    /// main-camera SetCamera. Default no-op for backends without history.</summary>
+    void SetPrevViewProjection(System.Numerics.Matrix4x4 viewProjection) { }
+
     /// <summary>Read the current backbuffer contents (screenshots).</summary>
     void ReadBackBuffer(int width, int height, Bgra8[] destination);
 
