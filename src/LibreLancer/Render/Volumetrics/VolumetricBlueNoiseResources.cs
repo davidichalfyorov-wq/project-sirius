@@ -107,6 +107,11 @@ public sealed class VolumetricBlueNoiseAsset
             error = "manifest is missing data/path";
             return false;
         }
+        if (!IsSafeRelativeAssetPath(data))
+        {
+            error = "blue-noise data path must be a safe relative asset path";
+            return false;
+        }
         if (!TryReadInt(values, "width", out var width) || width <= 0)
         {
             error = "manifest is missing a positive width";
@@ -131,9 +136,7 @@ public sealed class VolumetricBlueNoiseAsset
         var source = values.TryGetValue("source", out var sourceName) && !string.IsNullOrWhiteSpace(sourceName)
             ? sourceName
             : $"imported-{width}x{height}-{format.ToString().ToLowerInvariant()}";
-        var resolvedData = Path.IsPathRooted(data)
-            ? data
-            : Path.GetFullPath(Path.Combine(baseDirectory, data));
+        var resolvedData = Path.GetFullPath(Path.Combine(baseDirectory, data));
         desc = new VolumetricBlueNoiseAssetDesc(resolvedData, width, height, format, frames, isStbn, source);
         return true;
     }
@@ -237,6 +240,28 @@ public sealed class VolumetricBlueNoiseAsset
                 format = default;
                 return false;
         }
+    }
+
+    private static bool IsSafeRelativeAssetPath(string value)
+    {
+        var path = value.Trim();
+        if (path.Length == 0 ||
+            path.StartsWith('/') ||
+            path.StartsWith('\\') ||
+            path.Contains('\\') ||
+            path.Contains(':'))
+        {
+            return false;
+        }
+
+        foreach (var segment in path.Split('/'))
+        {
+            if (segment.Length == 0 || segment == "." || segment == "..")
+            {
+                return false;
+            }
+        }
+        return true;
     }
 }
 

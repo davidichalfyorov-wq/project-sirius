@@ -29,6 +29,25 @@ public class VolumetricBlueNoiseAssetTests
         Assert.Equal("test-stbn", desc.SourceName);
     }
 
+    [Theory]
+    [InlineData("/tmp/stbn.raw")]
+    [InlineData("C:/temp/stbn.raw")]
+    [InlineData("../stbn.raw")]
+    [InlineData("noise/../stbn.raw")]
+    [InlineData("noise\\stbn.raw")]
+    public void RejectsUnsafeRawDataPaths(string dataPath)
+    {
+        var text = $"""
+                    data = {dataPath}
+                    width = 64
+                    height = 64
+                    format = rgba8
+                    """;
+
+        Assert.False(VolumetricBlueNoiseAsset.TryParseManifest(text, "/tmp/noise", out _, out var error));
+        Assert.Contains("data path", error);
+    }
+
     [Fact]
     public void RgbaPayloadConvertsToEnginePackedBgraUint()
     {

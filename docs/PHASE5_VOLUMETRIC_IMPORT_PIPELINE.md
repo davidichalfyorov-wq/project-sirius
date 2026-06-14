@@ -58,6 +58,13 @@ Rules for the OpenVDB layer:
   imported density sources: `vol_nebula_density`, `vol_nebula_light`,
   `vol_nebula_integrate`, `vol_nebula_composite`.
 
+The same portability rule applies to optional blue-noise/STBN jitter sidecars:
+the sidecar manifest itself may be selected by a developer path, but its
+`data`/`path` payload entry must stay project-relative and must not use absolute
+paths, Windows drive prefixes, backslashes, `.` segments, or `..` traversal.
+This keeps temporal-noise assets reproducible in CI and on other developer
+machines.
+
 Initial OpenVDB PR scope should be importer-only:
 
 ```text
