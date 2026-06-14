@@ -37,13 +37,13 @@ public readonly record struct VolumetricNebulaQualityProfile(
             main.BytesPerVolume() * 6 + near.BytesPerVolume() * 5);
         return q switch
         {
-            0 => Make("low", q, main, near, profile, performance, historyWeight: 0.88f, densityOctaves: 3, detailOctaves: 1,
+            0 => Make("low", q, main, near, profile, features, performance, historyWeight: 0.88f, densityOctaves: 3, detailOctaves: 1,
                 selfShadowSteps: 3, localLightBudget: 2, lightningBudget: 1, blueNoiseFrameModulo: 8),
-            1 => Make("medium", q, main, near, profile, performance, historyWeight: 0.90f, densityOctaves: 4, detailOctaves: 2,
+            1 => Make("medium", q, main, near, profile, features, performance, historyWeight: 0.90f, densityOctaves: 4, detailOctaves: 2,
                 selfShadowSteps: 4, localLightBudget: 4, lightningBudget: 2, blueNoiseFrameModulo: 16),
-            3 => Make("ultra", q, main, near, profile, performance, historyWeight: 0.94f, densityOctaves: 6, detailOctaves: 4,
+            3 => Make("ultra", q, main, near, profile, features, performance, historyWeight: 0.94f, densityOctaves: 6, detailOctaves: 4,
                 selfShadowSteps: 8, localLightBudget: 12, lightningBudget: 6, blueNoiseFrameModulo: 32),
-            _ => Make("high", q, main, near, profile, performance, historyWeight: 0.92f, densityOctaves: 5, detailOctaves: 3,
+            _ => Make("high", q, main, near, profile, features, performance, historyWeight: 0.92f, densityOctaves: 5, detailOctaves: 3,
                 selfShadowSteps: 6, localLightBudget: 8, lightningBudget: 4, blueNoiseFrameModulo: 16)
         };
     }
@@ -54,6 +54,7 @@ public readonly record struct VolumetricNebulaQualityProfile(
         FroxelGridDesc main,
         FroxelGridDesc near,
         NebulaVolumeProfile profile,
+        global::LibreLancer.Render.RenderFeatureSet features,
         VolumetricNebulaPerformanceProfile performance,
         float historyWeight,
         int densityOctaves,
