@@ -13,6 +13,28 @@ namespace LibreLancer.Render.Volumetrics;
 /// </summary>
 public static class VolumetricOpenVdbImport
 {
+    private static readonly string[] ForbiddenPlacementKeys =
+    [
+        "position",
+        "position_meters",
+        "world_position",
+        "world_position_meters",
+        "zone_position",
+        "zone_position_meters",
+        "translation",
+        "translation_meters",
+        "translate",
+        "offset",
+        "offset_meters",
+        "rotation",
+        "rotation_degrees",
+        "orientation",
+        "transform",
+        "transform_matrix",
+        "world_transform",
+        "zone_transform"
+    ];
+
     public static VolumetricOpenVdbImportResult ParseManifest(IEnumerable<string> lines)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -33,6 +55,15 @@ public static class VolumetricOpenVdbImport
             values[line[..split].Trim()] = line[(split + 1)..].Trim();
         }
 
+        foreach (var key in ForbiddenPlacementKeys)
+        {
+            if (values.ContainsKey(key))
+            {
+                return VolumetricOpenVdbImportResult.Invalid(
+                    $"OpenVDB manifest may not override canonical nebula placement with '{key}'");
+            }
+        }
+
         var metadata = new VolumetricOpenVdbImportMetadata(
             DataPath: Get(values, "data"),
             GridName: Get(values, "grid", "density"),
@@ -47,6 +78,8 @@ public static class VolumetricOpenVdbImport
             DensityMax: ParseFloat(values, "density_max", 1f),
             DensityMultiplier: ParseFloat(values, "density_multiplier", 1f),
             AxisConvention: Get(values, "axis", Get(values, "axis_convention", "freelancer_y_up")),
+            BoundsMode: Get(values, "bounds", Get(values, "bounds_mode", "zone_local")),
+            PlacementMode: Get(values, "placement", Get(values, "placement_mode", "zone_locked")),
             CanonicalSystem: Get(values, "canonical_system"),
             CanonicalNebula: Get(values, "canonical_nebula"),
             Source: Get(values, "source"),
@@ -133,6 +166,14 @@ public static class VolumetricOpenVdbImport
         {
             return VolumetricOpenVdbImportResult.Invalid("unsupported axis convention");
         }
+        if (!IsSupportedBoundsMode(metadata.BoundsMode))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("unsupported bounds mode");
+        }
+        if (!IsSupportedPlacementMode(metadata.PlacementMode))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("OpenVDB import placement must be zone_locked");
+        }
         if (!metadata.PreserveZoneTransform)
         {
             return VolumetricOpenVdbImportResult.Invalid("OpenVDB import must preserve canonical zone transform");
@@ -193,6 +234,18 @@ public static class VolumetricOpenVdbImport
         var axis = value.Trim().Replace("-", "_").ToLowerInvariant();
         return axis is "freelancer_y_up" or "y_up" or "z_up";
     }
+
+    private static bool IsSupportedBoundsMode(string value)
+    {
+        var bounds = value.Trim().Replace("-", "_").ToLowerInvariant();
+        return bounds is "zone_local" or "zone_normalized" or "local_bounds" or "unit_cube";
+    }
+
+    private static bool IsSupportedPlacementMode(string value)
+    {
+        var placement = value.Trim().Replace("-", "_").ToLowerInvariant();
+        return placement is "zone_locked" or "canonical_zone";
+    }
 }
 
 public readonly record struct VolumetricOpenVdbImportMetadata(
@@ -209,6 +262,8 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
     float DensityMax,
     float DensityMultiplier,
     string AxisConvention,
+    string BoundsMode,
+    string PlacementMode,
     string CanonicalSystem,
     string CanonicalNebula,
     string Source,
@@ -217,7 +272,7 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
 {
     public string DebugSummary =>
         FormattableString.Invariant(
-            $"{GridName} {Width}x{Height}x{Depth} voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} lock={(PreserveZoneTransform ? "zone" : "off")}");
+            $"{GridName} {Width}x{Height}x{Depth} voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} bounds={BoundsMode} placement={PlacementMode} lock={(PreserveZoneTransform ? "zone" : "off")}");
 }
 
 public readonly record struct VolumetricOpenVdbImportResult(

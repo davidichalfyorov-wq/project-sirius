@@ -33,6 +33,10 @@ Rules for the OpenVDB layer:
 - Imported volumes must preserve existing Freelancer nebula zone positions and
   bounds. They may add internal density/detail, but must not move canonical
   nebula placement.
+- Manifest files may describe density-space bounds, but must not contain world
+  placement overrides such as `world_position_meters`, `offset_meters`,
+  `rotation_degrees`, or custom transform matrices. The renderer gets placement
+  exclusively from the original Freelancer zone.
 - Every imported volume needs source metadata: source DCC, source file, scale,
   density range, axis convention, license/owner, and profile nickname.
 - The fallback path must always be procedural `NebulaVolumeProfile` density, so
@@ -82,6 +86,8 @@ density_min = 0.02
 density_max = 0.85
 density_multiplier = 0.75
 axis = z_up
+bounds = zone_local
+placement = zone_locked
 canonical_system = Li01
 canonical_nebula = li01_badlands
 source = blender_openvdb_export
@@ -89,9 +95,11 @@ license = project-owned
 preserve_zone_transform = true
 ```
 
-`canonical_system`, `canonical_nebula`, and `preserve_zone_transform = true`
-are safety fields. They let the importer reject authored volumes that would move
-Freelancer's original nebula placement. `density_min` and `density_max` define
-the authored scalar range; the runtime bridge computes a normalized density
-scale/bias from those values and keeps procedural density as the fallback when
-the imported asset is unavailable.
+`canonical_system`, `canonical_nebula`, `placement = zone_locked`, and
+`preserve_zone_transform = true` are safety fields. They let the importer reject
+authored volumes that would move Freelancer's original nebula placement.
+`bounds = zone_local` means the authored density is fitted inside the canonical
+zone transform instead of carrying its own world transform. `density_min` and
+`density_max` define the authored scalar range; the runtime bridge computes a
+normalized density scale/bias from those values and keeps procedural density as
+the fallback when the imported asset is unavailable.

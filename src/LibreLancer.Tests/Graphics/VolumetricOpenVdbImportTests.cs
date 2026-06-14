@@ -23,6 +23,8 @@ public class VolumetricOpenVdbImportTests
             "density_max = 0.75",
             "density_multiplier = 0.85",
             "axis = z_up",
+            "bounds = zone_local",
+            "placement = zone_locked",
             "profile = li01_badlands_art",
             "canonical_system = Li01",
             "canonical_nebula = li01_badlands",
@@ -39,10 +41,13 @@ public class VolumetricOpenVdbImportTests
         Assert.Equal(64, result.Metadata.Depth);
         Assert.Equal("li01_badlands_art", result.Metadata.ProfileNickname);
         Assert.Equal("z_up", result.Metadata.AxisConvention);
+        Assert.Equal("zone_local", result.Metadata.BoundsMode);
+        Assert.Equal("zone_locked", result.Metadata.PlacementMode);
         Assert.Equal(0.05f, result.Metadata.DensityMin);
         Assert.Equal(0.75f, result.Metadata.DensityMax);
         Assert.True(result.Metadata.PreserveZoneTransform);
         Assert.Contains("lock=zone", result.Metadata.DebugSummary);
+        Assert.Contains("placement=zone_locked", result.Metadata.DebugSummary);
     }
 
     [Fact]
@@ -72,6 +77,66 @@ public class VolumetricOpenVdbImportTests
 
         Assert.False(result.Valid);
         Assert.Contains("budget", result.Error);
+    }
+
+    [Fact]
+    public void RejectsManifestsThatTryToOverrideWorldPlacement()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "world_position_meters = 12000, 0, -5000"
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("canonical nebula placement", result.Error);
+    }
+
+    [Fact]
+    public void RejectsManifestsThatTryToRotateTheCanonicalZone()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "rotation_degrees = 0, 45, 0"
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("canonical nebula placement", result.Error);
+    }
+
+    [Fact]
+    public void RejectsUnlockedPlacementModes()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "placement = world_authored"
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("zone_locked", result.Error);
+    }
+
+    [Fact]
+    public void RejectsUnsupportedBoundsModes()
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "bounds = world_bounds"
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("bounds mode", result.Error);
     }
 
     [Fact]
