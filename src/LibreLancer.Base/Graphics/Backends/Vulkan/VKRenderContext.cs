@@ -2828,7 +2828,13 @@ internal unsafe partial class VKRenderContext : IRenderContext
             blendAttachments[0] = blendAttachment;
             for (var i = 0; i < extraColor; i++)
             {
-                blendAttachments[i + 1] = new VkPipelineColorBlendAttachmentState { ColorWriteMask = 0xF };
+                // Mirror the primary attachment's blend. Without the
+                // independentBlend device feature all attachments must be
+                // identical (VUID-00605). The G-buffer is only meaningfully
+                // written by opaque PBR materials (primary == opaque -> RT1
+                // gets a full-mask opaque write); non-PBR draws in the pass
+                // (beams) never output SV_Target1, so RT1 is untouched there.
+                blendAttachments[i + 1] = blendAttachment;
             }
             var colorBlend = new VkPipelineColorBlendStateCreateInfo
             {
