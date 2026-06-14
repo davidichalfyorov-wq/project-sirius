@@ -181,6 +181,32 @@ public static class VolumetricOpenVdbImport
             "");
     }
 
+    public static VolumetricOpenVdbImportPlan CreateVerifiedImportPlan(
+        IEnumerable<string> lines,
+        NebulaVolumeProfile profile,
+        ReadOnlySpan<byte> payload,
+        string canonicalSystem = "")
+    {
+        var plan = CreateImportPlan(lines, profile, canonicalSystem);
+        if (!plan.Valid)
+        {
+            return plan;
+        }
+
+        var verification = VerifyContentHash(payload, plan.Metadata);
+        if (!verification.Supported)
+        {
+            return VolumetricOpenVdbImportPlan.Invalid(
+                $"OpenVDB content hash verification unsupported: {verification.Error}");
+        }
+        if (!verification.Matched)
+        {
+            return VolumetricOpenVdbImportPlan.Invalid(verification.Error);
+        }
+
+        return plan;
+    }
+
     private static VolumetricOpenVdbImportResult Validate(VolumetricOpenVdbImportMetadata metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata.DataPath))

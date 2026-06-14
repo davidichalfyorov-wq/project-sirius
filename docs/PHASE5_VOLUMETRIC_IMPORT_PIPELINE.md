@@ -48,6 +48,10 @@ Rules for the OpenVDB layer:
 - The metadata bridge can verify `sha256:` payload bytes directly. `blake3:`
   remains a valid manifest algorithm for offline import tools, but runtime code
   must report it as unsupported until a reviewed BLAKE3 implementation is added.
+- Import tools should use the verified plan path when payload bytes are
+  available: parse the manifest, enforce canonical locks, compute density
+  normalization, and reject the import unless the payload hash matches before
+  writing an engine volume/cache asset.
 - Runtime import plans require explicit canonical identity locks. A sidecar can
   be parsed for diagnostics without them, but it cannot be bound to an active
   `NebulaVolumeProfile` unless `canonical_nebula` is present, and

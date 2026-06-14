@@ -299,6 +299,74 @@ public class VolumetricOpenVdbImportTests
         Assert.Contains("offline import tool", verification.Error);
     }
 
+    [Fact]
+    public void BuildsVerifiedImportPlanOnlyWhenPayloadHashMatches()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = li01_badlands_density.vdb",
+            "grid = density",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "density_min = 0.2",
+            "density_max = 1.2",
+            "density_multiplier = 0.5",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+
+        Assert.True(plan.Valid);
+        Assert.Equal(VolumetricDensitySource.OpenVdbImported, plan.DensitySource);
+        Assert.Equal(0.5f, plan.NormalizeDensity(1.2f), 3);
+    }
+
+    [Fact]
+    public void RejectsVerifiedImportPlanWhenPayloadHashMismatches()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine,
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+
+        Assert.False(plan.Valid);
+        Assert.Contains("hash mismatch", plan.Error);
+    }
+
+    [Fact]
+    public void RejectsVerifiedImportPlanWhenRuntimeCannotVerifyHashAlgorithm()
+    {
+        var plan = VolumetricOpenVdbImport.CreateVerifiedImportPlan([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "canonical_system = Li01",
+            "canonical_nebula = li01_badlands",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            "content_hash = blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "preserve_zone_transform = true"
+        ], MakeProfile("li01_badlands"), Encoding.ASCII.GetBytes("abc"), "Li01");
+
+        Assert.False(plan.Valid);
+        Assert.Contains("unsupported", plan.Error);
+    }
+
     [Theory]
     [InlineData("width", "wide")]
     [InlineData("height", "tall")]
