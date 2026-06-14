@@ -181,6 +181,7 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricDisplacementHistory or
                 RenderDebugView.VolumetricWakeVectors or
                 RenderDebugView.VolumetricLightning or
+                RenderDebugView.VolumetricLightningMask or
                 RenderDebugView.VolumetricHistory or
                 RenderDebugView.VolumetricHistoryConfidence or
                 RenderDebugView.VolumetricJitter or

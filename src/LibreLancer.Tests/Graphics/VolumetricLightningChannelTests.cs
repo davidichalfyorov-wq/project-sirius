@@ -28,6 +28,31 @@ public class VolumetricLightningChannelTests
     }
 
     [Fact]
+    public void PulseSupportsFourFlashElectricProfiles()
+    {
+        var pulse = VolumetricLightningChannelState.EvaluatePulse(0.055f * 4.50f, 3f, 0.055f, 0.4f,
+            flashCount: 4, out _, out var flashIndex);
+
+        Assert.True(pulse > 0f);
+        Assert.Equal(3, flashIndex);
+    }
+
+    [Fact]
+    public void ArtProfilesTuneArchetypeColorAndShape()
+    {
+        var crow = VolumetricLightningArtProfile.ForArchetype("crow", 2, new Vector4(0.4f, 0.5f, 0.6f, 1f));
+        var nomad = VolumetricLightningArtProfile.ForArchetype("nomad", 2, new Vector4(0.4f, 0.5f, 0.6f, 1f));
+        var generic = VolumetricLightningArtProfile.ForArchetype("badlands", 2, new Vector4(0.4f, 0.5f, 0.6f, 1f));
+
+        Assert.Equal("crow-electric", crow.Name);
+        Assert.Equal("nomad-plasma", nomad.Name);
+        Assert.Equal("generic-nebula", generic.Name);
+        Assert.True(crow.VerticalBlend > generic.VerticalBlend);
+        Assert.True(nomad.BranchAmplitude > generic.BranchAmplitude);
+        Assert.NotEqual(crow.Color, nomad.Color);
+    }
+
+    [Fact]
     public void ChannelBuildsEightPointsInNormalizedVolume()
     {
         Span<Vector4> points = stackalloc Vector4[VolumetricLightningChannelState.MaxPoints];
@@ -59,6 +84,8 @@ public class VolumetricLightningChannelTests
         Assert.Equal(VolumetricLightningChannelState.MaxPoints, frame.PointCount);
         Assert.True(frame.Intensity > 0f);
         Assert.True(frame.Radius > 0f);
+        Assert.Equal("crow-electric", frame.ArtProfileName);
+        Assert.Contains("art=crow-electric", frame.DebugSummary);
     }
 
     private static RenderFeatureSet MakeFeatures() => new(

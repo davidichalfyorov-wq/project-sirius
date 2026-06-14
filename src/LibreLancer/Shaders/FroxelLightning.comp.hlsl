@@ -21,7 +21,7 @@ cbuffer FroxelLightningParams : register(b3, UNIFORM_SPACE)
     float4 Point7;
     float4 Params;  // x enabled, y point count, z intensity, w radius in normalized volume space
     float4 Color;   // rgb channel colour, a unused
-    float4 Params2; // x near-grid, y afterglow duration, zw reserved
+    float4 Params2; // x near-grid, y afterglow duration, z debug color mode, w reserved
 };
 
 float3 PointAt(int index)

@@ -425,6 +425,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         var debugSource = debugView switch
         {
             RenderDebugView.VolumetricLightning => Lighting,
+            RenderDebugView.VolumetricLightningMask => Lighting,
             RenderDebugView.VolumetricHistory => TemporalAppliedThisFrame ? HistoryPrevious : History,
             RenderDebugView.VolumetricHistoryConfidence => HistoryConfidence,
             RenderDebugView.VolumetricDisplacement => ShipDisplacement,
@@ -763,7 +764,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             Point7 = frame.Point7,
             Params = frame.Params,
             Color = frame.Color,
-            Params2 = new Vector4(0f, frame.AfterglowSeconds, 0f, 0f)
+            Params2 = new Vector4(0f, frame.AfterglowSeconds, (int)frame.DebugColorMode, 0f)
         };
         shader.SetUniformBlock(3, ref lightning);
         rstate.Textures[0] = Density;
@@ -1109,6 +1110,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderDebugView.VolumetricDisplacement => 4,
         RenderDebugView.VolumetricDisplacementHistory => 4,
         RenderDebugView.VolumetricLightning => 5,
+        RenderDebugView.VolumetricLightningMask => 11,
         RenderDebugView.VolumetricHistory => 6,
         RenderDebugView.VolumetricHistoryConfidence => 7,
         RenderDebugView.VolumetricNearDensity => 8,

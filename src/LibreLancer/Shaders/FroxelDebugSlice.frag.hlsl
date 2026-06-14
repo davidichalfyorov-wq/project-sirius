@@ -71,6 +71,10 @@ float4 main(Input input) : SV_Target0
     {
         color = saturate(density.rgb * 0.5 + 0.5) * saturate(0.25 + density.a);
     }
+    else if (mode == 11)
+    {
+        color = float3(saturate(density.a * gain), saturate(density.r * 0.5), saturate(density.b * 0.5));
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);

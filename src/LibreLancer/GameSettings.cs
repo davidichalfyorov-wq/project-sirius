@@ -194,6 +194,7 @@ namespace LibreLancer
                 "vol_displacement_history" or "voldisphistory" or "vol_wake_history" or "wake_history" => "vol_displacement_history",
                 "vol_wake_vectors" or "wake_vectors" or "volwakevectors" or "vol_curl" or "wake_curl" => "vol_wake_vectors",
                 "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => "vol_lightning",
+                "vol_lightning_mask" or "vollightningmask" or "lightning_mask" or "vol_lightning_debug" => "vol_lightning_mask",
                 "vol_history" or "volhistory" or "history" or "volumetric_history" => "vol_history",
                 "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => "vol_history_confidence",
                 "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => "vol_jitter",
