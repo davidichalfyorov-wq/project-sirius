@@ -312,6 +312,24 @@ public class RenderContext
     public void CopyDepth(RenderTarget2D source, Texture2D destination) =>
         impl.CopyDepthToTexture(source.Backing, destination.Backing);
 
+    /// <summary>Binds extra colour attachments (G-buffer MRT, graphics phase
+    /// 0.1) for the opaque pass; pass null to restore the single target.
+    /// Vulkan-only; other backends no-op.</summary>
+    public void SetGBufferTargets(RenderTarget2D[]? extras)
+    {
+        if (extras == null || extras.Length == 0)
+        {
+            impl.SetGBufferTargets(null);
+            return;
+        }
+        var arr = new IRenderTarget2D[extras.Length];
+        for (var i = 0; i < extras.Length; i++)
+        {
+            arr[i] = extras[i].Backing;
+        }
+        impl.SetGBufferTargets(arr);
+    }
+
     /// <summary>GPU time markers around a render pass (debug overlay).</summary>
     public void BeginPassTimer(string name) => impl.BeginPassTimer(name);
 

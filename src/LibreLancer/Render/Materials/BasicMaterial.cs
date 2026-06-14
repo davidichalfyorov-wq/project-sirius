@@ -79,7 +79,8 @@ namespace LibreLancer.Render.Materials
             RT_SHADOWS = (1 << 6),
             DEBUG_VIEW = (1 << 7),
             RTAO = (1 << 8),
-            RT_REFLECTIONS = (1 << 9)
+            RT_REFLECTIONS = (1 << 9),
+            GBUFFER = (1 << 10)
         }
 
         private Shader GetPBRShader(IVertexType vertexType, bool useIbl)
@@ -93,6 +94,11 @@ namespace LibreLancer.Render.Materials
                 caps |= PBRFeatures.RT_REFLECTIONS;
             if (DebugViewMode > 0)
                 caps |= PBRFeatures.DEBUG_VIEW;
+            // G-buffer MRT (graphics phase 0.1): PBR materials emit RT1
+            // (world-normal + roughness) ONLY during the opaque MRT pass, so
+            // the shader output count matches the bound attachment count.
+            if (GBufferActive && GBufferPassActive)
+                caps |= PBRFeatures.GBUFFER;
             if (useIbl)
                 caps |= PBRFeatures.IBL;
             if (!string.IsNullOrEmpty(RtSampler))

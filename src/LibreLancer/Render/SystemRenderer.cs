@@ -646,12 +646,31 @@ namespace LibreLancer.Render
             Polyline.EndFrame();
             // Opaque Pass
             rstate.DepthEnabled = true;
+            // G-buffer MRT (graphics phase 0.1): bind RT1 (world-normal +
+            // roughness) alongside the scene for the opaque pass only. Gated
+            // to non-MSAA (single-pass MRT incompatible with the resolve);
+            // SetGBufferTargets is a Vulkan-only no-op elsewhere, and off by
+            // default => single-attachment path stays byte-identical.
+            var gbufferNormal = RenderMaterial.GBufferActive && Settings.SelectedMSAA <= 0
+                ? hdrPipeline.CurrentGBufferNormalTarget
+                : null;
+            if (gbufferNormal != null)
+            {
+                rstate.SetGBufferTargets(new RenderTarget2D[] { gbufferNormal });
+                RenderMaterial.GBufferPassActive = true;
+            }
             Commands.DrawOpaque(rstate);
             // Mesh-shader cube fields (roadmap 7.5): immediate dispatches
             // run here, after the opaque pass settles viewport/state.
             for (var i = 0; i < AsteroidFields!.Count; i++)
             {
                 AsteroidFields[i].DrawMeshPath(resman);
+            }
+            if (gbufferNormal != null)
+            {
+                // Starsphere / transparents render single-attachment again.
+                RenderMaterial.GBufferPassActive = false;
+                rstate.SetGBufferTargets(null);
             }
 
             if ((!transitioned || !DrawNebulae) && DrawStarsphere)
@@ -757,6 +776,13 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.GodRaysSunTransmittance = volumetricSunTransmittance;
             hdrPipeline.End();
+            // G-buffer MRT visual QA (graphics phase 0.1): blit RT1 over the
+            // final frame so headless captures show the normal+roughness
+            // buffer. SIRIUS_GBUFFER_SHOW only; renders nothing otherwise.
+            if (RenderMaterial.GBufferShow && Settings.SelectedMSAA <= 0)
+            {
+                hdrPipeline.CurrentGBufferNormalTarget?.BlitToScreen();
+            }
             DrawVolumetricNebulaDebugView(renderWidth, renderHeight, renderFeatures.DebugView);
 
 

@@ -199,6 +199,21 @@ namespace LibreLancer.Render
                 _ => 0
             };
 
+        // G-buffer MRT (graphics phase 0.1). Env-gated until the settings UI
+        // lands (checklist 0.1.8); default off => renderer is byte-identical.
+        // GBufferActive binds RT1 (world-normal + roughness) in the opaque
+        // pass; GBufferShow blits RT1 over the final frame for visual QA.
+        public static readonly bool GBufferActive =
+            Environment.GetEnvironmentVariable("SIRIUS_GBUFFER") == "1";
+        public static readonly bool GBufferShow =
+            Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_SHOW") == "1";
+
+        // True only while the opaque MRT pass is recording (set by
+        // SystemRenderer). PBR materials emit the 2-output GBUFFER shader
+        // ONLY then; transparent/other passes keep the single-target shader so
+        // the output count always matches the bound attachment count.
+        public static bool GBufferPassActive;
+
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
         private unsafe struct LocalShadowBuffer
         {

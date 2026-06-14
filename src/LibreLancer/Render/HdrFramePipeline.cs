@@ -95,6 +95,12 @@ internal sealed class HdrFramePipeline : IDisposable
         public readonly int Height;
         public readonly RenderTarget2D Scene;
 
+        // G-buffer MRT (graphics phase 0.1): RT1 world-normal + roughness.
+        // Allocated only when SIRIUS_GBUFFER is set, so the default frame is
+        // byte-identical and pays no VRAM. Bound as an extra opaque-pass
+        // colour attachment by SystemRenderer; its own depth goes unused.
+        public readonly RenderTarget2D? GBufferNormal;
+
         // Mip chain from half-res down; [0] receives the bright pass and,
         // after the up walk, holds the final bloom for the tonemap
         // composite.
@@ -135,6 +141,11 @@ internal sealed class HdrFramePipeline : IDisposable
             Height = height;
             Scene = new RenderTarget2D(rstate,
                 new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
+            if (RenderMaterial.GBufferActive)
+            {
+                GBufferNormal = new RenderTarget2D(rstate,
+                    new Texture2D(rstate, width, height, false, SurfaceFormat.HdrBlendable));
+            }
         }
 
         public void DisposeBloomChain()
@@ -150,6 +161,7 @@ internal sealed class HdrFramePipeline : IDisposable
         public void Dispose()
         {
             Scene.Dispose();
+            GBufferNormal?.Dispose();
             DisposeBloomChain();
             foreach (var target in ExposureChain)
             {
@@ -178,6 +190,10 @@ internal sealed class HdrFramePipeline : IDisposable
     /// <summary>The HDR scene target of the current Begin/End frame -
     /// volumetrics copy its depth for the composite (phase 5).</summary>
     public RenderTarget2D? CurrentSceneTarget => current?.Scene;
+
+    /// <summary>G-buffer RT1 (world-normal + roughness) of the current frame,
+    /// or null when SIRIUS_GBUFFER is off (graphics phase 0.1).</summary>
+    public RenderTarget2D? CurrentGBufferNormalTarget => current?.GBufferNormal;
 
     public HdrFramePipeline(RenderContext rstate)
     {

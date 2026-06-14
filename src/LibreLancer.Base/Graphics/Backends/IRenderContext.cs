@@ -83,6 +83,14 @@ internal interface IRenderContext
     /// texture (Vulkan-only; volumetric composite input).</summary>
     void CopyDepthToTexture(IRenderTarget2D source, ITexture2D destination) { }
 
+    /// <summary>Binds extra colour attachments (G-buffer MRT, graphics phase
+    /// 0.1) alongside the current render target for the opaque pass. Pass
+    /// null/empty to restore the single-attachment path. Vulkan-only; other
+    /// backends no-op (the GBUFFER shader permutation aliases to the base
+    /// single-target shader there). Targets carry their own layout tracking,
+    /// shared with the blit path.</summary>
+    void SetGBufferTargets(IRenderTarget2D[]? extras) { }
+
     /// <summary>Read the current backbuffer contents (screenshots).</summary>
     void ReadBackBuffer(int width, int height, Bgra8[] destination);
 

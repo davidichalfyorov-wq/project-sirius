@@ -179,11 +179,16 @@ float fquadratic(float x, float3 params)
     return x * x * params.x + x * params.y + params.z;
 }
 
-float4 main(Input input) : SV_Target0
+// Shared shading body. Returns the lit HDR colour and, for the G-buffer MRT
+// path (graphics phase 0.1), exports world-space normal + perceptual
+// roughness through out params written before any early return.
+float4 ShadePBR(Input input, out float3 gbufferNormal, out float gbufferRoughness)
 {
     float3 n = getNormal(input);
     float metallic = getMetallic(input);
     float perceptualRoughness = getRoughness(input);
+    gbufferNormal = n;
+    gbufferRoughness = perceptualRoughness;
     float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
     float4 baseColor = SRGBtoLinear(DtTexture.Sample(DtSampler, GetTexCoord(0, input)) * Dc);
@@ -386,3 +391,31 @@ float4 main(Input input) : SV_Target0
     color = ApplyVolumetricFog(input.worldPosition, length(input.viewPosition.xyz), color);
     return float4(color, baseColor.a);
 }
+
+#ifdef GBUFFER
+// G-buffer MRT output (graphics phase 0.1): scene colour to RT0, encoded
+// world-normal (xyz*0.5+0.5) + perceptual roughness (w) to RT1.
+struct GBufferOutput
+{
+    float4 color : SV_Target0;
+    float4 normalRoughness : SV_Target1;
+};
+
+GBufferOutput main(Input input)
+{
+    float3 gbufferNormal;
+    float gbufferRoughness;
+    float4 lit = ShadePBR(input, gbufferNormal, gbufferRoughness);
+    GBufferOutput o;
+    o.color = lit;
+    o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
+    return o;
+}
+#else
+float4 main(Input input) : SV_Target0
+{
+    float3 gbufferNormal;
+    float gbufferRoughness;
+    return ShadePBR(input, gbufferNormal, gbufferRoughness);
+}
+#endif

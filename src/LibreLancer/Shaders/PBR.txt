@@ -10,3 +10,4 @@ vulkanfeature RT_SHADOWS 7
 vulkanfeature DEBUG_VIEW 8
 vulkanfeature RTAO 9
 vulkanfeature RT_REFLECTIONS 10
+vulkanfeature GBUFFER 11

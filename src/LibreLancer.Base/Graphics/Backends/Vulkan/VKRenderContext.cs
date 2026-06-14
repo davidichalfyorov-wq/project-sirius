@@ -346,7 +346,7 @@ internal unsafe partial class VKRenderContext : IRenderContext
         int ShaderId, int VertexHash, ushort Blend, bool DepthTest, bool DepthWrite,
         int DepthFunc, bool Cull, CullFaces CullFace, int Topology, VkFormat Color,
         bool Swapchain, bool ColorWrite,
-        int ShadingRate);
+        int ShadingRate, int ExtraColor);
 
     public static VKRenderContext? Create(IntPtr sdlWindow)
     {
@@ -1605,6 +1605,13 @@ internal unsafe partial class VKRenderContext : IRenderContext
     private VKRenderTarget2D? CurrentTarget => applied.RenderTarget as VKRenderTarget2D;
     private VKRenderTarget2D? activeTarget;
 
+    // G-buffer MRT (graphics phase 0.1): extra colour attachments bound for
+    // the opaque pass only. null => single-attachment path stays byte-
+    // identical. Targets carry their own ColorLayout (shared with the blit
+    // path), so no separate layout bookkeeping is needed.
+    private VKRenderTarget2D[]? gbufferExtra;
+    private VKRenderTarget2D[]? activeGbufferExtra;
+
     public VkExtent2D CurrentTargetExtent()
     {
         var target = renderingActive ? activeTarget : CurrentTarget;
@@ -1682,18 +1689,46 @@ internal unsafe partial class VKRenderContext : IRenderContext
             clearPending = false;
         }
 
+        // G-buffer MRT: append extra colour attachments (RT1 normal+roughness,
+        // graphics phase 0.1) when bound and rendering into an offscreen
+        // target. Each extra is moved SHADER_READ_ONLY -> COLOR and cleared so
+        // non-PBR opaque pixels read back zero.
+        var extraCount = (target != null && gbufferExtra != null) ? gbufferExtra.Length : 0;
+        var colorAttachments = stackalloc VkRenderingAttachmentInfo[1 + extraCount];
+        colorAttachments[0] = colorAttachment;
+        for (var i = 0; i < extraCount; i++)
+        {
+            var ex = gbufferExtra![i];
+            if (ex.ColorLayout != (VkImageLayout)2)
+            {
+                Barrier(CurrentCommands, ex.Texture.Image, ex.ColorLayout,
+                    (VkImageLayout)2, VkConst.AccessMemoryRead, VkConst.AccessMemoryWrite);
+                ex.ColorLayout = (VkImageLayout)2;
+            }
+            colorAttachments[i + 1] = new VkRenderingAttachmentInfo
+            {
+                SType = VkStructureType.RenderingAttachmentInfo,
+                ImageView = ex.Texture.View,
+                ImageLayout = (VkImageLayout)2,
+                LoadOp = 1, // CLEAR
+                StoreOp = 0, // STORE
+                ClearValue = new VkClearColorValue { R = 0, G = 0, B = 0, A = 0 }
+            };
+        }
+
         var renderingInfo = new VkRenderingInfo
         {
             SType = VkStructureType.RenderingInfo,
             RenderArea = new VkRect2D { Extent = extent },
             LayerCount = 1,
-            ColorAttachmentCount = 1,
-            PColorAttachments = &colorAttachment,
+            ColorAttachmentCount = (uint)(1 + extraCount),
+            PColorAttachments = colorAttachments,
             PDepthAttachment = &depthAttachment
         };
         Vk.CmdBeginRendering(CurrentCommands, &renderingInfo);
         renderingActive = true;
         activeTarget = target;
+        activeGbufferExtra = extraCount > 0 ? gbufferExtra : null;
     }
 
     private void EndRenderingIfActive()
@@ -1713,6 +1748,36 @@ internal unsafe partial class VKRenderContext : IRenderContext
             activeTarget.ColorLayout = (VkImageLayout)5;
             activeTarget = null;
         }
+        // G-buffer MRT: extra attachments become sampled sources (debug view /
+        // future GI input) - move them back to SHADER_READ_ONLY too.
+        if (activeGbufferExtra != null)
+        {
+            foreach (var ex in activeGbufferExtra)
+            {
+                Barrier(CurrentCommands, ex.Texture.Image, (VkImageLayout)2,
+                    (VkImageLayout)5, VkConst.AccessMemoryWrite, VkConst.AccessMemoryRead);
+                ex.ColorLayout = (VkImageLayout)5;
+            }
+            activeGbufferExtra = null;
+        }
+    }
+
+    public void SetGBufferTargets(IRenderTarget2D[]? extras)
+    {
+        // Switching the attachment set must restart the dynamic-rendering
+        // scope so the next draw rebuilds VkRenderingInfo with the new count.
+        EndRenderingIfActive();
+        if (extras == null || extras.Length == 0)
+        {
+            gbufferExtra = null;
+            return;
+        }
+        var arr = new VKRenderTarget2D[extras.Length];
+        for (var i = 0; i < extras.Length; i++)
+        {
+            arr[i] = (VKRenderTarget2D)extras[i];
+        }
+        gbufferExtra = arr;
     }
 
     public void BlitTargetToCurrent(VKRenderTarget2D source, Point offset)
@@ -2396,7 +2461,8 @@ internal unsafe partial class VKRenderContext : IRenderContext
             CurrentColorFormat(),
             CurrentTarget == null,
             applied.ColorWrite,
-            currentShadingRate);
+            currentShadingRate,
+            (CurrentTarget != null && gbufferExtra != null) ? gbufferExtra.Length : 0);
         if (!pipelines.TryGetValue(key, out var pipeline))
         {
             pipeline = CreatePipeline(declaration, primitive);
@@ -2754,11 +2820,21 @@ internal unsafe partial class VKRenderContext : IRenderContext
                 // Depth-only passes (glColorMask(false...) on GL).
                 blendAttachment.ColorWriteMask = 0;
             }
+            // G-buffer MRT (graphics phase 0.1): extra attachments write raw
+            // values (no blending, full mask). Their count must match the
+            // bound attachment count or vkCmdBeginRendering mismatches.
+            var extraColor = (CurrentTarget != null && gbufferExtra != null) ? gbufferExtra.Length : 0;
+            var blendAttachments = stackalloc VkPipelineColorBlendAttachmentState[1 + extraColor];
+            blendAttachments[0] = blendAttachment;
+            for (var i = 0; i < extraColor; i++)
+            {
+                blendAttachments[i + 1] = new VkPipelineColorBlendAttachmentState { ColorWriteMask = 0xF };
+            }
             var colorBlend = new VkPipelineColorBlendStateCreateInfo
             {
                 SType = VkStructureType.PipelineColorBlendStateCreateInfo,
-                AttachmentCount = 1,
-                PAttachments = &blendAttachment
+                AttachmentCount = (uint)(1 + extraColor),
+                PAttachments = blendAttachments
             };
 
             var dynamicStates = stackalloc int[2] { 0, 1 }; // VIEWPORT, SCISSOR
@@ -2769,12 +2845,17 @@ internal unsafe partial class VKRenderContext : IRenderContext
                 PDynamicStates = dynamicStates
             };
 
-            var colorFormat = CurrentColorFormat();
+            var colorFormats = stackalloc VkFormat[1 + extraColor];
+            colorFormats[0] = CurrentColorFormat();
+            for (var i = 0; i < extraColor; i++)
+            {
+                colorFormats[i + 1] = (VkFormat)VKFormats.ToVk(gbufferExtra![i].Texture.Format);
+            }
             var rendering = new VkPipelineRenderingCreateInfo
             {
                 SType = VkStructureType.PipelineRenderingCreateInfo,
-                ColorAttachmentCount = 1,
-                PColorAttachmentFormats = &colorFormat,
+                ColorAttachmentCount = (uint)(1 + extraColor),
+                PColorAttachmentFormats = colorFormats,
                 DepthAttachmentFormat = depthFormat
             };
             // VRS pipeline-tier (roadmap 7.6): the rate is STATIC pipeline
