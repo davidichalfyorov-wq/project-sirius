@@ -198,6 +198,19 @@ public class DevHudOverlay
             Line($"vol near   {(features.VolumetricNearCascade ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"vol ship   {(features.VolumetricShipDisplacement ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            if (features.AtmosphereLuts)
+            {
+                var viewport = game.RenderContext.CurrentViewport;
+                var budget = VolumetricAtmosphereLutBudget.Create(
+                    requested: true,
+                    computeSupported: game.RenderContext.HasFeature(GraphicsFeature.Compute),
+                    features.VolumetricQuality,
+                    viewport.Width,
+                    viewport.Height,
+                    cloudShellRequested: features.VolumetricQuality >= 2);
+                Line($"atmo plan  {budget.DebugSummary}",
+                    budget.Enabled ? Color4.LightYellow : Color4.Orange);
+            }
             if (features.DebugView is RenderDebugView.VolumetricDensity or
                 RenderDebugView.VolumetricTransmittance or
                 RenderDebugView.VolumetricFroxels or
