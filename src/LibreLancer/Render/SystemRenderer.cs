@@ -776,13 +776,9 @@ namespace LibreLancer.Render
             hdrPipeline.GodRaysSun = ComputeGodRaysSun();
             hdrPipeline.GodRaysSunTransmittance = volumetricSunTransmittance;
             hdrPipeline.End();
-            // G-buffer MRT visual QA (graphics phase 0.1): blit RT1 over the
-            // final frame so headless captures show the normal+roughness
-            // buffer. SIRIUS_GBUFFER_SHOW only; renders nothing otherwise.
-            if (RenderMaterial.GBufferShow && Settings.SelectedMSAA <= 0)
-            {
-                hdrPipeline.CurrentGBufferNormalTarget?.BlitToScreen();
-            }
+            // G-buffer MRT visual QA (graphics phase 0.1) is drawn inside
+            // End() via DrawGBufferDebug (Renderer2D fullscreen) - the raw
+            // RGBA16F->LDR vkCmdBlitImage path produced display garbage.
             DrawVolumetricNebulaDebugView(renderWidth, renderHeight, renderFeatures.DebugView);
 
 

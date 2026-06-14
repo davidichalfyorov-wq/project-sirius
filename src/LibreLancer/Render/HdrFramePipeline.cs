@@ -483,6 +483,7 @@ internal sealed class HdrFramePipeline : IDisposable
 
             DrawBloomDebug(targets, bloomActive);
             DrawSmaaDebug(targets);
+            DrawGBufferDebug(targets);
         }
         finally
         {
@@ -791,6 +792,24 @@ internal sealed class HdrFramePipeline : IDisposable
         var h = Math.Max(targets.Height / 4, 18);
         list.DrawImageStretched(targets.SmaaEdgesTexture, new Rectangle(8, 8, w, h), Color4.White);
         list.DrawImageStretched(targets.SmaaWeightsTexture!, new Rectangle(8 + w + 4, 8, w, h), Color4.White);
+        list.Render();
+    }
+
+    private static readonly bool debugGBuffer =
+        Environment.GetEnvironmentVariable("SIRIUS_GBUFFER_SHOW") == "1";
+
+    /// <summary>Fullscreen G-buffer RT1 (world-normal in RGB, roughness in A)
+    /// over the final image, via the proven Renderer2D path - the raw
+    /// RGBA16F-&gt;LDR vkCmdBlitImage produced display garbage (phase 0.1).</summary>
+    private void DrawGBufferDebug(SizedTargets targets)
+    {
+        if (!debugGBuffer || targets.GBufferNormal == null)
+        {
+            return;
+        }
+        var list = rstate.Renderer2D.CreateDrawList();
+        list.DrawImageStretched(targets.GBufferNormal.Texture,
+            new Rectangle(0, 0, targets.Width, targets.Height), Color4.White);
         list.Render();
     }
 
