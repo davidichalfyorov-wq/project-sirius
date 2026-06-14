@@ -2,6 +2,7 @@
 #define LL_ENABLE_MATERIAL_FOG 1
 #include "includes/Lighting.hlsl"
 #include "includes/Camera.hlsl"
+#include "includes/GBufferEncode.hlsl"
 
 Texture2D<float4> DtTexture : register(t0, TEXTURE_SPACE);
 SamplerState DtSampler : register(s0, TEXTURE_SPACE);
@@ -417,9 +418,11 @@ GBufferOutput main(Input input)
     o.color = lit;
     o.normalRoughness = float4(gbufferNormal * 0.5 + 0.5, gbufferRoughness);
     o.viewZ = input.viewPosition.z;
+    // NRD/DLSS reprojection convention (prev-cur, normalized-UV); see
+    // includes/GBufferEncode.hlsl + memory gbuffer-encoding-spec.
     float4 curClip = mul(float4(input.worldPosition, 1.0), ViewProjection);
     float4 prevClip = mul(float4(input.worldPosition, 1.0), PrevViewProjection);
-    o.motion = (curClip.xy / curClip.w) - (prevClip.xy / prevClip.w);
+    o.motion = EncodeScreenMotion(curClip, prevClip);
     return o;
 }
 #else
