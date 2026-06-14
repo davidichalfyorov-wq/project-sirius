@@ -227,6 +227,26 @@ public class VolumetricLightningChannelTests
     }
 
     [Fact]
+    public void EffectiveQualityOverrideControlsLightningBudget()
+    {
+        var state = new VolumetricLightningChannelState();
+        var features = new RenderFeatureSet(
+            RenderFeatureBits.VolumetricNebula | RenderFeatureBits.VolumetricLightningChannels,
+            3,
+            RenderDebugView.VolumetricLightning,
+            null);
+        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true);
+        var ultra = state.BuildFrame(MakeProfile(hasLightning: true), features, policy);
+        var adaptiveLow = state.BuildFrame(MakeProfile(hasLightning: true), features, policy, effectiveQuality: 0);
+
+        Assert.True(ultra.Active);
+        Assert.True(adaptiveLow.Active);
+        Assert.True(ultra.Radius > adaptiveLow.Radius);
+        Assert.True(ultra.Intensity > adaptiveLow.Intensity);
+        Assert.Contains("art=crow-electric", adaptiveLow.DebugSummary);
+    }
+
+    [Fact]
     public void FeatureSetDropsLightningPolicyWithoutParentChannelFlag()
     {
         using var _ = new CleanLightningEnvironment();

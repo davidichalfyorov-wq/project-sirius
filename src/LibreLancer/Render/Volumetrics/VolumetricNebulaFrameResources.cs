@@ -99,6 +99,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public bool ImportedDensityReady => importedDensity.Valid;
     public string ImportedDensitySummary => importedDensity.Valid ? importedDensity.DebugSummary : "off";
     public bool ImportedDensityTextureReady => importedDensityTexture != null;
+    private int EffectiveQuality => Math.Clamp(
+        mainDesc.IsValid ? mainDesc.Quality : qualityProfile.Performance.EffectiveQuality, 0, 3);
 
     public static VolumetricNebulaResourceDebug LastDebug { get; private set; } =
         VolumetricNebulaResourceDebug.Disabled("not initialized");
@@ -572,7 +574,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return false;
         }
 
-        var temporal = temporalState.BeginFrame(camera, enabled: true, features.VolumetricQuality, profile.Nickname);
+        var effectiveQuality = EffectiveQuality;
+        var temporal = temporalState.BeginFrame(camera, enabled: true, effectiveQuality, profile.Nickname);
         TemporalResetThisFrame = temporal.Reset;
         TemporalJitter = temporal.Jitter;
         TemporalFrameIndex = temporal.FrameIndex;
@@ -599,7 +602,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                 GridSize = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, temporal.FrameIndex),
                 TemporalParams = new Vector4(temporal.HistoryWeight, temporal.ClampSigma, temporal.Reset ? 1f : 0f, 0f),
                 JitterParams = new Vector4(temporal.Jitter.X, temporal.Jitter.Y,
-                    features.VolumetricQuality, jitterActive ? 1f : 0f),
+                    effectiveQuality, jitterActive ? 1f : 0f),
                 ReprojectionParams = new Vector4(useReprojection ? 1f : 0f, temporal.DepthToleranceMeters,
                     mainDesc.NearPlane, mainDesc.FarPlane),
                 RejectParams = new Vector4(temporal.ReprojectionRejectStrength,
@@ -735,7 +738,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             ? Math.Clamp(totalTimeSeconds - lastDisplacementHistoryTime, 1f / 240f, 0.25f)
             : 1f / 60f;
         lastDisplacementHistoryTime = totalTimeSeconds;
-        var historyProfile = VolumetricWakeHistoryProfile.ForQuality(features.VolumetricQuality, dt, true);
+        var historyProfile = VolumetricWakeHistoryProfile.ForQuality(EffectiveQuality, dt, true);
         var shader = AllShaders.FroxelDisplacementHistory.Get(0);
         var uniforms = new FroxelDisplacementHistoryParams
         {
@@ -787,7 +790,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return false;
         }
 
-        var profile = VolumetricWakeCurlProfile.ForQuality(features.VolumetricQuality, true, lastWakeVelocity);
+        var profile = VolumetricWakeCurlProfile.ForQuality(EffectiveQuality, true, lastWakeVelocity);
         var shader = AllShaders.FroxelWakeCurl.Get(0);
         var uniforms = new FroxelWakeCurlParams
         {
@@ -823,7 +826,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
 
         var frame = lightningChannels.BuildFrame(profile, features,
-            VolumetricLightningPolicy.FromFeatures(features, totalTimeSeconds));
+            VolumetricLightningPolicy.FromFeatures(features, totalTimeSeconds), EffectiveQuality);
         LightningDebugSummary = frame.DebugSummary;
         if (!frame.Active)
         {
@@ -922,7 +925,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             VolumetricNearDensityTuning.Disabled, null, null, importedDensityTexture, importedDensityActive);
         if (NearAllocated)
         {
-            var tuning = VolumetricNearDensityTuning.ForProfile(profile, features.VolumetricQuality,
+            var tuning = VolumetricNearDensityTuning.ForProfile(profile, EffectiveQuality,
                 features.VolumetricNearDetail);
             var displacementSource = WakeHistoryUpdatedThisFrame
                 ? ShipDisplacementHistoryPrevious
@@ -1133,7 +1136,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             return false;
         }
 
-        var intensity = features.VolumetricQuality switch
+        var intensity = EffectiveQuality switch
         {
             0 => 0.35f,
             1 => 0.50f,

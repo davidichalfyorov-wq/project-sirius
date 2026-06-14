@@ -20,7 +20,7 @@ public sealed class VolumetricLightningChannelState
     }
 
     public VolumetricLightningChannelFrame BuildFrame(NebulaVolumeProfile profile, RenderFeatureSet features,
-        VolumetricLightningPolicy policy)
+        VolumetricLightningPolicy policy, int? effectiveQuality = null)
     {
         if (!policy.Enabled || !profile.HasLightning)
         {
@@ -28,7 +28,8 @@ public sealed class VolumetricLightningChannelState
         }
 
         var seed = StableHash(profile.Nickname) ^ StableHash(profile.Archetype) ^ policy.SeedSalt;
-        var art = VolumetricLightningArtProfile.ForNebula(profile, features.VolumetricQuality);
+        var art = VolumetricLightningArtProfile.ForNebula(profile,
+            Math.Clamp(effectiveQuality ?? features.VolumetricQuality, 0, 3));
         var intensity = EvaluatePulse(policy.TimeSeconds, art.Timing.IntervalSeconds, art.Timing.FlashSeconds,
             art.Timing.AfterglowSeconds, art.FlashCount, out var phase, out var flashIndex);
         if (intensity <= 0.0001f)

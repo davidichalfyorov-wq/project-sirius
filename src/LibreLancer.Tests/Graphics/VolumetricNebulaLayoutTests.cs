@@ -50,11 +50,20 @@ public class VolumetricNebulaLayoutTests
         Assert.True(profile.Performance.AdaptiveApplied);
         Assert.Equal(3, profile.Performance.RequestedQuality);
         Assert.True(profile.Performance.EffectiveQuality < profile.Performance.RequestedQuality);
+        Assert.Equal(0, profile.Performance.EffectiveQuality);
         Assert.Equal(profile.Performance.EffectiveQuality, profile.MainGrid.Quality);
         Assert.Contains("adaptive", profile.Name);
         Assert.True(profile.Performance.EstimatedBytes > 0);
         Assert.Contains("q3->q", profile.Performance.DebugSummary);
         Assert.True(profile.Density.SupportsOpenVdbImport);
+        Assert.Equal(3, profile.Density.BaseOctaves);
+        Assert.Equal(1, profile.Density.DetailOctaves);
+        Assert.Equal(8, profile.Jitter.FrameModulo);
+        Assert.Equal(3, profile.Lighting.SelfShadowSteps);
+        Assert.Equal(2, profile.Lighting.LocalLightBudget);
+        Assert.Equal(1, profile.Lighting.LightningChannelBudget);
+        Assert.Equal(6, profile.Displacement.MaxCapsules);
+        Assert.Equal(1.75f, profile.Displacement.MaxWakeSeconds);
     }
 
     [Fact]
