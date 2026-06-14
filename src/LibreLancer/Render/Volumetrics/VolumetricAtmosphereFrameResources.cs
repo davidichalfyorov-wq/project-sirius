@@ -127,6 +127,10 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         }
 
         var shader = AllShaders.FroxelDebugSlice.Get(0);
+        var oldTexture0 = rstate.Textures[0];
+        var oldSampler0 = rstate.Samplers[0];
+        var oldTexture1 = rstate.Textures[1];
+        var oldSampler1 = rstate.Samplers[1];
         rstate.Textures[0] = source;
         rstate.Samplers[0] = SamplerState.LinearClamp;
         rstate.Textures[1] = paired;
@@ -168,6 +172,10 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             rstate.Cull = oldCull;
             rstate.DepthEnabled = oldDepth;
             rstate.BlendMode = oldBlend;
+            rstate.Textures[0] = oldTexture0;
+            rstate.Samplers[0] = oldSampler0;
+            rstate.Textures[1] = oldTexture1;
+            rstate.Samplers[1] = oldSampler1;
         }
         return true;
     }

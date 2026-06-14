@@ -455,6 +455,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             ? NearIntegrated
             : Integrated;
         var debugGrid = nearDebug && nearDesc.IsValid ? nearDesc : mainDesc;
+        var oldTexture0 = rstate.Textures[0];
+        var oldSampler0 = rstate.Samplers[0];
+        var oldTexture1 = rstate.Textures[1];
+        var oldSampler1 = rstate.Samplers[1];
         rstate.Textures[0] = debugSource;
         rstate.Samplers[0] = SamplerState.LinearClamp;
         rstate.Textures[1] = integratedSource;
@@ -486,6 +490,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             rstate.Cull = oldCull;
             rstate.DepthEnabled = oldDepth;
             rstate.BlendMode = oldBlend;
+            rstate.Textures[0] = oldTexture0;
+            rstate.Samplers[0] = oldSampler0;
+            rstate.Textures[1] = oldTexture1;
+            rstate.Samplers[1] = oldSampler1;
         }
         return true;
     }
