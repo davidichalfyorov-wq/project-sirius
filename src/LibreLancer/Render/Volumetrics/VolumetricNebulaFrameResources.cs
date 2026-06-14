@@ -89,6 +89,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public bool WakeCurlUpdatedThisFrame { get; private set; }
     public string WakeCurlDebugSummary { get; private set; } = string.Empty;
     public bool MaterialFogBoundThisFrame { get; private set; }
+    public string MaterialFogDebugSummary { get; private set; } = string.Empty;
     public string LightningDebugSummary { get; private set; } = string.Empty;
     public bool BlueNoiseBoundThisFrame { get; private set; }
     public string BlueNoiseSourceName { get; private set; } = "off";
@@ -231,6 +232,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         WakeCurlUpdatedThisFrame = false;
         WakeCurlDebugSummary = string.Empty;
         MaterialFogBoundThisFrame = false;
+        MaterialFogDebugSummary = features.VolumetricMaterialFog ? "waiting transparent pass" : "off";
         GpuLightningInjectedThisFrame = false;
         LightningDebugSummary = string.Empty;
         BlueNoiseBoundThisFrame = false;
@@ -392,6 +394,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             WakeCurlDebugSummary,
             LastDebug.GodRaysApplied,
             LastDebug.GodRaySummary,
+            MaterialFogBoundThisFrame,
+            MaterialFogDebugSummary,
             GpuLightningInjectedThisFrame,
             LightningDebugSummary);
     }
@@ -1097,19 +1101,39 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     internal bool BindMaterialFog(global::LibreLancer.Render.RenderFeatureSet features, NebulaVolumeProfile profile)
     {
         MaterialFogBoundThisFrame = false;
-        if (!features.VolumetricMaterialFog || !GpuIntegratedThisFrame || Integrated is not { IsDisposed: false })
+        var integratedAvailable = GpuIntegratedThisFrame && Integrated is { IsDisposed: false };
+        var historyAvailable = HistoryPrevious is { IsDisposed: false };
+        var binding = VolumetricMaterialFogPolicy.Evaluate(
+            features.VolumetricMaterialFog,
+            CompositeAppliedThisFrame,
+            integratedAvailable,
+            TemporalAppliedThisFrame,
+            historyAvailable,
+            mainDesc,
+            profile.CoreExtinction);
+        MaterialFogDebugSummary = binding.DebugSummary;
+        LastDebug = LastDebug with
+        {
+            MaterialFogBound = false,
+            MaterialFogSummary = MaterialFogDebugSummary
+        };
+        if (!binding.CanBind)
         {
             return false;
         }
 
-        var source = TemporalAppliedThisFrame && HistoryPrevious is { IsDisposed: false }
+        var source = binding.UsesHistory && HistoryPrevious is { IsDisposed: false }
             ? HistoryPrevious
             : Integrated;
-        var settings = VolumetricDepthMapping.MaterialFogSettings(mainDesc, profile.CoreExtinction);
         global::LibreLancer.Render.RenderMaterial.VolumetricFogActive = true;
         global::LibreLancer.Render.RenderMaterial.VolumetricFogMaterialActive = true;
-        global::LibreLancer.Render.RenderMaterial.SetVolumetricFogSource(source, settings);
+        global::LibreLancer.Render.RenderMaterial.SetVolumetricFogSource(source, binding.Settings);
         MaterialFogBoundThisFrame = true;
+        LastDebug = LastDebug with
+        {
+            MaterialFogBound = true,
+            MaterialFogSummary = MaterialFogDebugSummary
+        };
         return true;
     }
 
@@ -1436,6 +1460,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         CompositeAppliedThisFrame = false;
         DepthAwareCompositeThisFrame = false;
         MaterialFogBoundThisFrame = false;
+        MaterialFogDebugSummary = string.Empty;
         NearCompositeAppliedThisFrame = false;
         NearDetailTunedThisFrame = false;
         NearDetailSummary = string.Empty;
@@ -1501,15 +1526,17 @@ public readonly record struct VolumetricNebulaResourceDebug(
     string WakeCurlSummary,
     bool GodRaysApplied,
     string GodRaySummary,
+    bool MaterialFogBound,
+    string MaterialFogSummary,
     bool LightningUpdated,
     string LightningSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
         new(false, "not allocated", "not allocated", "off", -1, "", "", 0, reason, "vol_nebula.none", 0, false, "",
-            false, 0, "", false, "", false, "", false, "", false, "");
+            false, 0, "", false, "", false, "", false, "", false, "", false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
         new(false, "waiting", "waiting", "waiting", -1, "", "", 0, reason, "vol_nebula.waiting",
             VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "", false, 0, "", false, "", false, "",
-            false, "", false, "");
+            false, "", false, "", false, "");
 }

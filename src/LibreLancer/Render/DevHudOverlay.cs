@@ -146,6 +146,13 @@ public class DevHudOverlay
                 Line($"vol rays   {froxels.GodRaySummary}",
                     froxels.GodRaysApplied ? Color4.LightGreen : Color4.LightBlue);
             }
+            if (froxels.MaterialFogBound || !string.IsNullOrWhiteSpace(froxels.MaterialFogSummary))
+            {
+                Line($"vol matfog {(froxels.MaterialFogBound ? "bind" : "wait")}",
+                    froxels.MaterialFogBound ? Color4.LightGreen : Color4.LightBlue);
+                Line($"vol matfog {froxels.MaterialFogSummary}",
+                    froxels.MaterialFogBound ? Color4.LightGreen : Color4.LightBlue);
+            }
             if (froxels.LightningUpdated || !string.IsNullOrWhiteSpace(froxels.LightningSummary))
             {
                 Line($"vol bolt   {(froxels.LightningUpdated ? "chan" : "off")}",
