@@ -177,6 +177,7 @@ public readonly record struct VolumetricLightningPolicy(
     bool GoldenCapture,
     bool GoldenDisableRequested,
     bool Deterministic,
+    bool Replay,
     float TimeSeconds,
     int SeedSalt,
     string DebugSummary)
@@ -195,11 +196,23 @@ public readonly record struct VolumetricLightningPolicy(
             {
                 return "gold-off";
             }
-            if (Deterministic && SeedSalt != 0)
+            if (Replay && SeedSalt != 0)
             {
                 return "replay+seed";
             }
-            return Deterministic ? "replay" : "live";
+            if (Replay)
+            {
+                return "replay";
+            }
+            if (GoldenCapture && Deterministic)
+            {
+                return "golden";
+            }
+            if (Deterministic && SeedSalt != 0)
+            {
+                return "deterministic+seed";
+            }
+            return Deterministic ? "deterministic" : "live";
         }
     }
 
@@ -229,13 +242,15 @@ public readonly record struct VolumetricLightningPolicy(
             golden,
             features.VolumetricLightningGoldenDisable,
             deterministic,
+            replay,
             time,
             features.VolumetricLightningReplaySeed,
             summary);
     }
 
     public static VolumetricLightningPolicy ForTesting(float timeSeconds, bool deterministic = false,
-        bool goldenCapture = false, bool goldenDisable = false, int seedSalt = 0, bool channelsEnabled = true)
+        bool goldenCapture = false, bool goldenDisable = false, int seedSalt = 0, bool channelsEnabled = true,
+        bool replay = false)
     {
         var time = MathF.Max(0f, timeSeconds);
         return new VolumetricLightningPolicy(
@@ -243,9 +258,10 @@ public readonly record struct VolumetricLightningPolicy(
             goldenCapture,
             goldenDisable,
             deterministic,
+            replay,
             time,
             seedSalt,
-            BuildSummary(channelsEnabled, goldenCapture, goldenDisable, deterministic, deterministic, time, seedSalt));
+            BuildSummary(channelsEnabled, goldenCapture, goldenDisable, deterministic, replay, time, seedSalt));
     }
 
     private static string BuildSummary(bool channelsEnabled, bool golden, bool goldenDisable, bool deterministic,

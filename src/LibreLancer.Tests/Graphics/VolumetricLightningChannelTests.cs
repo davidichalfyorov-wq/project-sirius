@@ -141,24 +141,53 @@ public class VolumetricLightningChannelTests
         var frame = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
 
         Assert.True(policy.Enabled);
+        Assert.Equal("deterministic", policy.HudMode);
         Assert.True(frame.Active);
-        Assert.Contains("replay", frame.DebugSummary);
+        Assert.Contains("deterministic", frame.DebugSummary);
+        Assert.DoesNotContain("replay", frame.DebugSummary);
     }
 
     [Fact]
     public void ReplayTimeBuildsStableChannel()
     {
         var state = new VolumetricLightningChannelState();
-        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true, seedSalt: 77);
+        var policy = VolumetricLightningPolicy.ForTesting(0.01f, deterministic: true, seedSalt: 77,
+            replay: true);
 
         var frameA = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
         var frameB = state.BuildFrame(MakeProfile(hasLightning: true), MakeFeatures(), policy);
 
         Assert.True(frameA.Active);
+        Assert.Equal("replay+seed", policy.HudMode);
         Assert.Equal(frameA.Point0, frameB.Point0);
         Assert.Equal(frameA.Point7, frameB.Point7);
         Assert.Equal(frameA.Intensity, frameB.Intensity);
         Assert.Contains("replay", frameA.DebugSummary);
+    }
+
+    [Fact]
+    public void DeterministicPolicyIsNotReportedAsReplay()
+    {
+        var policy = VolumetricLightningPolicy.ForTesting(0.25f, deterministic: true, seedSalt: 77);
+
+        Assert.True(policy.Deterministic);
+        Assert.False(policy.Replay);
+        Assert.Equal("deterministic+seed", policy.HudMode);
+        Assert.Contains("deterministic t=0.250s seed=77", policy.DebugSummary);
+        Assert.DoesNotContain("replay", policy.DebugSummary);
+    }
+
+    [Fact]
+    public void GoldenDeterministicPolicyHasSeparateHudMode()
+    {
+        var policy = VolumetricLightningPolicy.ForTesting(0.25f, deterministic: true,
+            goldenCapture: true);
+
+        Assert.True(policy.Deterministic);
+        Assert.False(policy.Replay);
+        Assert.Equal("golden", policy.HudMode);
+        Assert.Contains("golden deterministic t=0.250s", policy.DebugSummary);
+        Assert.DoesNotContain("replay", policy.DebugSummary);
     }
 
     [Fact]
