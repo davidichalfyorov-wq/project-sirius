@@ -841,7 +841,7 @@ namespace LibreLancer.Render
 
             if (importedDensityFrame.Valid)
             {
-                volumetricNebulaResources.SetImportedDensity(importedDensityFrame, activeProfile);
+                volumetricNebulaResources.SetImportedDensity(importedDensityFrame, activeProfile, canonicalSystem);
             }
             else
             {

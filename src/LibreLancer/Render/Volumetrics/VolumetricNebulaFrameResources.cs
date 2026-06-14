@@ -420,9 +420,10 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             LightningDebugSummary);
     }
 
-    public bool SetImportedDensity(VolumetricImportedDensityFrame densityFrame, NebulaVolumeProfile activeProfile)
+    public bool SetImportedDensity(VolumetricImportedDensityFrame densityFrame, NebulaVolumeProfile activeProfile,
+        string canonicalSystem = "")
     {
-        if (!densityFrame.Valid || !densityFrame.MatchesProfile(activeProfile))
+        if (!densityFrame.Valid || !densityFrame.MatchesProfile(activeProfile, canonicalSystem))
         {
             ClearImportedDensity(densityFrame.Valid ? "profile mismatch" : densityFrame.Error);
             return false;

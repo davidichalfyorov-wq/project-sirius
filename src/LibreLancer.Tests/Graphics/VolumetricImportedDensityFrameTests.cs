@@ -129,21 +129,40 @@ public class VolumetricImportedDensityFrameTests
         Assert.Equal("off", VolumetricNebulaFrameResources.LastImportedDensitySource);
     }
 
-    private static VolumetricEngineVolumeRuntimeLoadResult BuildDecodedVolume(float[] samples)
+    [Fact]
+    public void FrameResourcesRejectWrongCanonicalSystemImportedDensity()
+    {
+        var profile = MakeProfile("li01_badlands");
+        var decoded = BuildDecodedVolume([0f, 0.25f, 0.5f, 1f], "Li02");
+        var frame = VolumetricImportedDensityFrame.FromRuntimeLoadResult(decoded, profile, "Li02");
+        using var resources = new VolumetricNebulaFrameResources();
+        resources.ClearImportedDensity();
+
+        var accepted = resources.SetImportedDensity(frame, profile, "Li01");
+
+        Assert.True(frame.Valid);
+        Assert.False(accepted);
+        Assert.False(resources.ImportedDensityReady);
+        Assert.Equal("off", resources.ImportedDensitySummary);
+        Assert.Equal("off", VolumetricNebulaFrameResources.LastImportedDensitySource);
+    }
+
+    private static VolumetricEngineVolumeRuntimeLoadResult BuildDecodedVolume(float[] samples,
+        string canonicalSystem = "Li01")
     {
         var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
-            MakeSmallVerifiedManifestLines(samples.Length),
+            MakeSmallVerifiedManifestLines(samples.Length, canonicalSystem),
             MakeProfile("li01_badlands"),
             Encoding.ASCII.GetBytes("abc"),
             Float32Bytes(samples),
-            "Li01",
+            canonicalSystem,
             VolumetricEngineVolumeFormat.DensityR8UNorm);
 
         Assert.True(packed.Valid);
         return VolumetricEngineVolumeRuntime.DecodeDenseArtifact(
             packed.Artifact,
             MakeProfile("li01_badlands"),
-            "Li01");
+            canonicalSystem);
     }
 
     private static NebulaVolumeProfile MakeProfile(string nickname) =>
@@ -177,7 +196,7 @@ public class VolumetricImportedDensityFrameTests
             HasLightning: false,
             ExclusionCount: 0);
 
-    private static string[] MakeSmallVerifiedManifestLines(int width) =>
+    private static string[] MakeSmallVerifiedManifestLines(int width, string canonicalSystem = "Li01") =>
     [
         "data = artist_exports/tmp/li01_badlands_density.vdb",
         "grid = density",
@@ -187,7 +206,7 @@ public class VolumetricImportedDensityFrameTests
         "density_min = 0",
         "density_max = 1",
         "density_multiplier = 1",
-        "canonical_system = Li01",
+        $"canonical_system = {canonicalSystem}",
         "canonical_nebula = li01_badlands",
         "source = blender_openvdb_export",
         "source_file = art/li01/badlands_density.blend",
