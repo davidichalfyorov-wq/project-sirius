@@ -613,6 +613,22 @@ namespace LibreLancer.Render
 
             Beams.Begin(Commands, resman, camera);
 
+            // G-buffer MRT (graphics phase 0.1): opaque geometry renders
+            // IMMEDIATELY inside obj.Draw / AsteroidFields.Draw
+            // (CommandBuffer.AddCommand is immediate-mode) - NOT in the later
+            // no-op Commands.DrawOpaque - so RT1 and the GBUFFER shader flag
+            // must wrap THIS loop, or the gbuffer never captures anything.
+            // Gated to non-MSAA; default off => byte-identical. Non-PBR draws
+            // (beams) leave RT1 cleared; transparent draws are deferred.
+            var gbufferNormal = RenderMaterial.GBufferActive && Settings.SelectedMSAA <= 0
+                ? hdrPipeline.CurrentGBufferNormalTarget
+                : null;
+            if (gbufferNormal != null)
+            {
+                rstate.SetGBufferTargets(new RenderTarget2D[] { gbufferNormal });
+                RenderMaterial.GBufferPassActive = true;
+            }
+
             foreach (var obj in objects)
             {
                 obj.Draw(camera, Commands, SystemLighting, nr!);
@@ -621,6 +637,13 @@ namespace LibreLancer.Render
             Beams.End();
             for (var i = 0; i < AsteroidFields!.Count; i++)
                 AsteroidFields[i].Draw(resman, SystemLighting, Commands, nr!);
+
+            if (gbufferNormal != null)
+            {
+                // Nebula / starsphere / transparents render single-attachment.
+                RenderMaterial.GBufferPassActive = false;
+                rstate.SetGBufferTargets(null);
+            }
 
             // The volumetric path REPLACES the legacy billboard nebula
             // (exterior puffs, fill quad, interior puffs): drawing both
@@ -646,31 +669,12 @@ namespace LibreLancer.Render
             Polyline.EndFrame();
             // Opaque Pass
             rstate.DepthEnabled = true;
-            // G-buffer MRT (graphics phase 0.1): bind RT1 (world-normal +
-            // roughness) alongside the scene for the opaque pass only. Gated
-            // to non-MSAA (single-pass MRT incompatible with the resolve);
-            // SetGBufferTargets is a Vulkan-only no-op elsewhere, and off by
-            // default => single-attachment path stays byte-identical.
-            var gbufferNormal = RenderMaterial.GBufferActive && Settings.SelectedMSAA <= 0
-                ? hdrPipeline.CurrentGBufferNormalTarget
-                : null;
-            if (gbufferNormal != null)
-            {
-                rstate.SetGBufferTargets(new RenderTarget2D[] { gbufferNormal });
-                RenderMaterial.GBufferPassActive = true;
-            }
             Commands.DrawOpaque(rstate);
             // Mesh-shader cube fields (roadmap 7.5): immediate dispatches
             // run here, after the opaque pass settles viewport/state.
             for (var i = 0; i < AsteroidFields!.Count; i++)
             {
                 AsteroidFields[i].DrawMeshPath(resman);
-            }
-            if (gbufferNormal != null)
-            {
-                // Starsphere / transparents render single-attachment again.
-                RenderMaterial.GBufferPassActive = false;
-                rstate.SetGBufferTargets(null);
             }
 
             if ((!transitioned || !DrawNebulae) && DrawStarsphere)
