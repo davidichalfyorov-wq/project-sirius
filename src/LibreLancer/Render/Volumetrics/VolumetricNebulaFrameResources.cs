@@ -34,6 +34,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public Texture3D? History { get; private set; }
     public Texture3D? HistoryPrevious { get; private set; }
     public Texture3D? HistoryConfidence { get; private set; }
+    public Texture3D? NearDensity { get; private set; }
+    public Texture3D? NearLighting { get; private set; }
+    public Texture3D? NearIntegrated { get; private set; }
+    public Texture3D? NearHistory { get; private set; }
+    public Texture3D? NearHistoryConfidence { get; private set; }
     private Texture2D? fallbackDepthTexture;
 
     public VolumetricNebulaQualityProfile QualityProfile => qualityProfile;
@@ -41,7 +46,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public FroxelGridDesc NearDesc => nearDesc;
     public bool Allocated => Density != null && Lighting != null && Integrated != null &&
                              History != null && HistoryPrevious != null && HistoryConfidence != null;
-    public long EstimatedBytes => Allocated ? mainDesc.BytesPerVolume() * 6 : 0;
+    public bool NearAllocated => NearDensity != null && NearLighting != null &&
+                                 NearIntegrated != null && NearHistory != null && NearHistoryConfidence != null;
+    public long EstimatedBytes => Allocated
+        ? mainDesc.BytesPerVolume() * 6 + (NearAllocated ? nearDesc.BytesPerVolume() * 5 : 0)
+        : 0;
     public string ActiveProfile => activeProfile;
     public bool GpuIdentityClearedThisFrame { get; private set; }
     public bool GpuDensityInjectedThisFrame { get; private set; }
@@ -57,6 +66,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public bool CompositeAppliedThisFrame { get; private set; }
     public bool DepthAwareCompositeThisFrame { get; private set; }
     public bool NearCompositeAppliedThisFrame { get; private set; }
+    public bool NearDetailTunedThisFrame { get; private set; }
+    public string NearDetailSummary { get; private set; } = string.Empty;
     public bool MaterialFogBoundThisFrame { get; private set; }
     public string LightningDebugSummary { get; private set; } = string.Empty;
     public bool BlueNoiseBoundThisFrame { get; private set; }
@@ -100,7 +111,12 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         var desiredProfile = VolumetricNebulaQualityProfile.Create(renderWidth, renderHeight, features, active);
         var desired = desiredProfile.MainGrid;
         var desiredNear = desiredProfile.NearGrid;
-        var needsAllocate = !Allocated || desired != mainDesc || allocatedQuality != desired.Quality;
+        var wantsNear = features.VolumetricNearCascade;
+        var needsAllocate = !Allocated ||
+                            desired != mainDesc ||
+                            allocatedQuality != desired.Quality ||
+                            wantsNear != NearAllocated ||
+                            (wantsNear && desiredNear != nearDesc);
 
         if (needsAllocate)
         {
@@ -120,8 +136,17 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                 History = CreateVolume(rstate, "history", desired);
                 HistoryPrevious = CreateVolume(rstate, "history.previous", desired);
                 HistoryConfidence = CreateVolume(rstate, "history.confidence", desired);
+                if (wantsNear)
+                {
+                    NearDensity = CreateVolume(rstate, "near.density", desiredNear);
+                    NearLighting = CreateVolume(rstate, "near.lighting", desiredNear);
+                    NearIntegrated = CreateVolume(rstate, "near.integrated", desiredNear);
+                    NearHistory = CreateVolume(rstate, "near.history", desiredNear);
+                    NearHistoryConfidence = CreateVolume(rstate, "near.history.confidence", desiredNear);
+                }
                 generation++;
                 UploadIdentity(HistoryPrevious);
+                UploadIdentity(NearHistory);
             }
             finally
             {
@@ -139,6 +164,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         CompositeAppliedThisFrame = false;
         DepthAwareCompositeThisFrame = false;
         NearCompositeAppliedThisFrame = false;
+        NearDetailTunedThisFrame = false;
+        NearDetailSummary = string.Empty;
         MaterialFogBoundThisFrame = false;
         GpuLightningInjectedThisFrame = false;
         LightningDebugSummary = string.Empty;
@@ -231,7 +258,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
                     ? (needsAllocate ? "allocated + GPU identity clear" : "GPU identity clear")
                     : (needsAllocate ? "allocated + identity upload fallback" : "identity clear marker"),
             mainDesc.DebugName,
-            VolumetricNebulaPassDeclaration.CanonicalOrder.Count);
+            VolumetricNebulaPassDeclaration.CanonicalOrder.Count,
+            NearDetailTunedThisFrame,
+            NearDetailSummary);
     }
 
     public bool DrawDebugView(RenderContext rstate, RenderDebugView debugView, int renderWidth, int renderHeight)
@@ -253,21 +282,32 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
 
         var shader = AllShaders.FroxelDebugSlice.Get(0);
+        var nearDebug = debugView is RenderDebugView.VolumetricNear or RenderDebugView.VolumetricNearDensity;
+        if (nearDebug && !NearAllocated)
+        {
+            return false;
+        }
         var debugSource = debugView switch
         {
             RenderDebugView.VolumetricLightning => Lighting,
             RenderDebugView.VolumetricHistory => TemporalAppliedThisFrame ? HistoryPrevious : History,
             RenderDebugView.VolumetricHistoryConfidence => HistoryConfidence,
+            RenderDebugView.VolumetricNearDensity => NearDensity,
+            RenderDebugView.VolumetricNear => NearDensity,
             _ => Density
         };
+        var integratedSource = debugView == RenderDebugView.VolumetricNear && NearIntegrated != null
+            ? NearIntegrated
+            : Integrated;
+        var debugGrid = nearDebug && nearDesc.IsValid ? nearDesc : mainDesc;
         rstate.Textures[0] = debugSource;
         rstate.Samplers[0] = SamplerState.LinearClamp;
-        rstate.Textures[1] = Integrated;
+        rstate.Textures[1] = integratedSource;
         rstate.Samplers[1] = SamplerState.LinearClamp;
         var sliceParams = new FroxelDebugSliceParams
         {
             SliceParams = new Vector4(0.5f, mode == 2 ? 1f : 4f, mode, 1f),
-            GridParams = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, generation)
+            GridParams = new Vector4(debugGrid.Width, debugGrid.Height, debugGrid.Depth, generation)
         };
         shader.SetUniformBlock(3, ref sliceParams);
 
@@ -437,27 +477,37 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
 
         var shader = AllShaders.FroxelClear.Get(0);
+        ClearIdentityGridGpu(rstate, shader, mainDesc, Density!, Lighting!, Integrated!, History!, HistoryConfidence!);
+        if (NearAllocated)
+        {
+            ClearIdentityGridGpu(rstate, shader, nearDesc, NearDensity!, NearLighting!, NearIntegrated!, NearHistory!, NearHistoryConfidence!);
+        }
+        GpuIdentityClearedThisFrame = true;
+        return true;
+    }
+
+    private static void ClearIdentityGridGpu(RenderContext rstate, Shader shader, FroxelGridDesc grid,
+        Texture3D density, Texture3D lighting, Texture3D integrated, Texture3D history, Texture3D confidence)
+    {
         var clear = new FroxelClearParams
         {
-            GridSize = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, 0f),
-            ClearParams = new Vector4(mainDesc.Quality, mainDesc.NearPlane, mainDesc.FarPlane, 0f)
+            GridSize = new Vector4(grid.Width, grid.Height, grid.Depth, 0f),
+            ClearParams = new Vector4(grid.Quality, grid.NearPlane, grid.FarPlane, 0f)
         };
         shader.SetUniformBlock(3, ref clear);
-        rstate.SetStorageImage(0, Density);
-        rstate.SetStorageImage(1, Lighting);
-        rstate.SetStorageImage(2, Integrated);
-        rstate.SetStorageImage(3, History);
-        rstate.SetStorageImage(4, HistoryConfidence);
+        rstate.SetStorageImage(0, density);
+        rstate.SetStorageImage(1, lighting);
+        rstate.SetStorageImage(2, integrated);
+        rstate.SetStorageImage(3, history);
+        rstate.SetStorageImage(4, confidence);
         rstate.Shader = shader;
-        rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height), GroupCount(mainDesc.Depth));
+        rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
         rstate.BarrierComputeToGraphics();
         rstate.SetStorageImage(0, null);
         rstate.SetStorageImage(1, null);
         rstate.SetStorageImage(2, null);
         rstate.SetStorageImage(3, null);
         rstate.SetStorageImage(4, null);
-        GpuIdentityClearedThisFrame = true;
-        return true;
     }
 
     private bool InjectDensityGpu(RenderContext rstate, NebulaVolumeProfile profile,
@@ -471,9 +521,31 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
 
         var shader = AllShaders.FroxelInject.Get(0);
         var jitterTexture = BindJitterTexture(rstate, features.VolumetricBlueNoise, out var jitterActive);
+        DispatchInjectGrid(rstate, shader, mainDesc, Density!, profile, totalTimeSeconds, jitterTexture, jitterActive,
+            VolumetricNearDensityTuning.Disabled);
+        if (NearAllocated)
+        {
+            var tuning = VolumetricNearDensityTuning.ForProfile(profile, features.VolumetricQuality,
+                features.VolumetricNearDetail);
+            DispatchInjectGrid(rstate, shader, nearDesc, NearDensity!, profile, totalTimeSeconds, jitterTexture,
+                jitterActive, tuning);
+            NearDetailTunedThisFrame = tuning.Enabled;
+            NearDetailSummary = tuning.DebugSummary;
+        }
+        rstate.Textures[3] = null;
+        rstate.SetStorageImage(0, null);
+        GpuDensityInjectedThisFrame = true;
+        return true;
+    }
+
+    private static void DispatchInjectGrid(RenderContext rstate, Shader shader, FroxelGridDesc grid,
+        Texture3D density, NebulaVolumeProfile profile, float totalTimeSeconds, Texture2D jitterTexture,
+        bool jitterActive, VolumetricNearDensityTuning nearTuning)
+    {
         var inject = new FroxelInjectParams
         {
-            GridSize = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, 0f),
+            GridSize = new Vector4(grid.Width, grid.Height, grid.Depth,
+                grid.Kind == FroxelGridKind.Near ? 1f : 0f),
             ZonePositionRadius = new Vector4(profile.Position, MathF.Max(profile.BoundsRadius, 1f)),
             ZoneSizeEdge = new Vector4(
                 MathF.Max(profile.Size.X, 1f),
@@ -494,19 +566,17 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             ColorParams = new Vector4(profile.FogColor.R, profile.FogColor.G, profile.FogColor.B,
                 profile.HasLightning ? 1f : 0f),
             JitterParams = new Vector4(jitterActive ? 1f : 0f, VolumetricBlueNoiseResources.TextureSize,
-                MathF.Floor(totalTimeSeconds * 30f), 0f)
+                MathF.Floor(totalTimeSeconds * 30f), grid.Kind == FroxelGridKind.Near ? 1f : 0f),
+            NearDetailParams = nearTuning.ShaderDetailParams,
+            NearDustParams = nearTuning.ShaderDustParams
         };
         shader.SetUniformBlock(3, ref inject);
         rstate.Textures[3] = jitterTexture;
         rstate.Samplers[3] = SamplerState.PointClamp;
-        rstate.SetStorageImage(0, Density);
+        rstate.SetStorageImage(0, density);
         rstate.Shader = shader;
-        rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height), GroupCount(mainDesc.Depth));
+        rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
         rstate.BarrierComputeToCompute();
-        rstate.Textures[3] = null;
-        rstate.SetStorageImage(0, null);
-        GpuDensityInjectedThisFrame = true;
-        return true;
     }
 
     private bool InjectLightingGpu(RenderContext rstate, NebulaVolumeProfile profile, Vector3 sunDirection,
@@ -528,29 +598,41 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
 
         var shader = AllShaders.FroxelLight.Get(0);
+        DispatchLightGrid(rstate, shader, mainDesc, Density!, Lighting!, profile, sunDirection, totalTimeSeconds);
+        if (NearAllocated)
+        {
+            DispatchLightGrid(rstate, shader, nearDesc, NearDensity!, NearLighting!, profile, sunDirection, totalTimeSeconds);
+        }
+        rstate.Textures[0] = null;
+        rstate.SetStorageImage(1, null);
+        GpuLightingInjectedThisFrame = true;
+        return true;
+    }
+
+    private static void DispatchLightGrid(RenderContext rstate, Shader shader, FroxelGridDesc grid,
+        Texture3D density, Texture3D lighting, NebulaVolumeProfile profile, Vector3 sunDirection,
+        float totalTimeSeconds)
+    {
         var light = new FroxelLightParams
         {
-            GridSize = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, 0f),
+            GridSize = new Vector4(grid.Width, grid.Height, grid.Depth,
+                grid.Kind == FroxelGridKind.Near ? 1f : 0f),
             SunDirectionPhase = new Vector4(sunDirection, profile.PhaseGForward),
             PhaseParams = new Vector4(profile.PhaseGBackward, profile.PhaseBlend, profile.PowderFactor,
                 profile.GodRayStrength),
             LightColorIntensity = new Vector4(profile.Albedo.R, profile.Albedo.G, profile.Albedo.B, 1f),
             AmbientDensity = new Vector4(profile.Ambient.R, profile.Ambient.G, profile.Ambient.B,
                 Math.Clamp(profile.Coverage, 0f, 1f)),
-            TimeParams = new Vector4(totalTimeSeconds, mainDesc.NearPlane, mainDesc.FarPlane,
+            TimeParams = new Vector4(totalTimeSeconds, grid.NearPlane, grid.FarPlane,
                 profile.HasLightning ? 1f : 0f)
         };
         shader.SetUniformBlock(3, ref light);
-        rstate.Textures[0] = Density;
+        rstate.Textures[0] = density;
         rstate.Samplers[0] = SamplerState.LinearClamp;
-        rstate.SetStorageImage(1, Lighting);
+        rstate.SetStorageImage(1, lighting);
         rstate.Shader = shader;
-        rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height), GroupCount(mainDesc.Depth));
+        rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
         rstate.BarrierComputeToCompute();
-        rstate.Textures[0] = null;
-        rstate.SetStorageImage(1, null);
-        GpuLightingInjectedThisFrame = true;
-        return true;
     }
 
     private bool IntegrateScatteringGpu(RenderContext rstate, NebulaVolumeProfile profile)
@@ -562,31 +644,43 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
 
         var shader = AllShaders.FroxelIntegrate.Get(0);
-        var integrate = new FroxelIntegrateParams
+        DispatchIntegrateGrid(rstate, shader, mainDesc, Density!, Lighting!, Integrated!, History!, profile);
+        if (NearAllocated)
         {
-            GridSize = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, 0f),
-            DepthParams = new Vector4(mainDesc.NearPlane, mainDesc.FarPlane,
-                MathF.Max(profile.CoreExtinction, 1e-7f), MathF.Max(profile.EdgeExtinction, 1e-7f)),
-            HistoryParams = new Vector4(0f, 2f, profile.GodRayStrength, profile.PowderFactor),
-            AlbedoParams = new Vector4(profile.Albedo.R, profile.Albedo.G, profile.Albedo.B,
-                Math.Clamp(profile.Coverage, 0f, 1f))
-        };
-        shader.SetUniformBlock(3, ref integrate);
-        rstate.Textures[0] = Density;
-        rstate.Samplers[0] = SamplerState.LinearClamp;
-        rstate.Textures[1] = Lighting;
-        rstate.Samplers[1] = SamplerState.LinearClamp;
-        rstate.SetStorageImage(2, Integrated);
-        rstate.SetStorageImage(3, History);
-        rstate.Shader = shader;
-        rstate.DispatchCompute(GroupCount(mainDesc.Width), GroupCount(mainDesc.Height), GroupCount(mainDesc.Depth));
-        rstate.BarrierComputeToGraphics();
+            DispatchIntegrateGrid(rstate, shader, nearDesc, NearDensity!, NearLighting!, NearIntegrated!, NearHistory!,
+                profile);
+        }
         rstate.Textures[0] = null;
         rstate.Textures[1] = null;
         rstate.SetStorageImage(2, null);
         rstate.SetStorageImage(3, null);
         GpuIntegratedThisFrame = true;
         return true;
+    }
+
+    private static void DispatchIntegrateGrid(RenderContext rstate, Shader shader, FroxelGridDesc grid,
+        Texture3D density, Texture3D lighting, Texture3D integrated, Texture3D history, NebulaVolumeProfile profile)
+    {
+        var integrate = new FroxelIntegrateParams
+        {
+            GridSize = new Vector4(grid.Width, grid.Height, grid.Depth,
+                grid.Kind == FroxelGridKind.Near ? 1f : 0f),
+            DepthParams = new Vector4(grid.NearPlane, grid.FarPlane,
+                MathF.Max(profile.CoreExtinction, 1e-7f), MathF.Max(profile.EdgeExtinction, 1e-7f)),
+            HistoryParams = new Vector4(0f, 2f, profile.GodRayStrength, profile.PowderFactor),
+            AlbedoParams = new Vector4(profile.Albedo.R, profile.Albedo.G, profile.Albedo.B,
+                Math.Clamp(profile.Coverage, 0f, 1f))
+        };
+        shader.SetUniformBlock(3, ref integrate);
+        rstate.Textures[0] = density;
+        rstate.Samplers[0] = SamplerState.LinearClamp;
+        rstate.Textures[1] = lighting;
+        rstate.Samplers[1] = SamplerState.LinearClamp;
+        rstate.SetStorageImage(2, integrated);
+        rstate.SetStorageImage(3, history);
+        rstate.Shader = shader;
+        rstate.DispatchCompute(GroupCount(grid.Width), GroupCount(grid.Height), GroupCount(grid.Depth));
+        rstate.BarrierComputeToGraphics();
     }
 
     internal bool CompositeIntoHdr(global::LibreLancer.Render.HdrFramePipeline hdr,
@@ -618,7 +712,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         var settings = new Vector4(intensity, slice, scatterGain, 1f);
         var gridParams = new Vector4(mainDesc.Width, mainDesc.Height, mainDesc.Depth, 0f);
         var depthParams = VolumetricDepthMapping.DepthParams(mainDesc, enabled: true);
-        Texture3D? nearSource = null;
+        Texture3D? nearSource = NearAllocated && NearIntegrated is { IsDisposed: false } ? NearIntegrated : null;
         var nearEnabled = VolumetricNearCascadeMath.CanCompositeNear(features, hasNearIntegrated: nearSource != null);
         var nearParams = VolumetricNearCascadeMath.ShaderParams(nearDesc, nearEnabled);
         if (!Matrix4x4.Invert(camera.Projection, out var inverseProjection))
@@ -674,7 +768,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderDebugView.VolumetricLightning => 5,
         RenderDebugView.VolumetricHistory => 6,
         RenderDebugView.VolumetricHistoryConfidence => 7,
-        RenderDebugView.VolumetricNear => 8,
+        RenderDebugView.VolumetricNearDensity => 8,
+        RenderDebugView.VolumetricNear => 9,
         _ => 0
     };
 
@@ -697,6 +792,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         public Vector4 EffectParams;
         public Vector4 ColorParams;
         public Vector4 JitterParams;
+        public Vector4 NearDetailParams;
+        public Vector4 NearDustParams;
     }
 
     private struct FroxelLightParams
@@ -776,6 +873,14 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         Integrated!.SetData(identity);
         History!.SetData(identity);
         UploadIdentity(HistoryPrevious);
+        if (NearAllocated)
+        {
+            ClearVolume(NearDensity);
+            ClearVolume(NearLighting);
+            ClearVolume(NearHistoryConfidence);
+            UploadIdentity(NearIntegrated);
+            UploadIdentity(NearHistory);
+        }
     }
 
     private static void UploadIdentity(Texture3D? texture)
@@ -793,6 +898,16 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
             identity[i + 3] = HalfOne;
         }
         texture.SetData(identity);
+    }
+
+    private static void ClearVolume(Texture3D? texture)
+    {
+        if (texture == null)
+        {
+            return;
+        }
+        var zeros = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
+        texture.SetData(zeros);
     }
 
     private static Texture2D CreateFallbackDepthTexture(RenderContext rstate)
@@ -838,6 +953,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         History?.Dispose();
         HistoryPrevious?.Dispose();
         HistoryConfidence?.Dispose();
+        NearDensity?.Dispose();
+        NearLighting?.Dispose();
+        NearIntegrated?.Dispose();
+        NearHistory?.Dispose();
+        NearHistoryConfidence?.Dispose();
         fallbackDepthTexture?.Dispose();
         blueNoise?.Dispose();
         fallbackJitterTexture?.Dispose();
@@ -847,6 +967,11 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         History = null;
         HistoryPrevious = null;
         HistoryConfidence = null;
+        NearDensity = null;
+        NearLighting = null;
+        NearIntegrated = null;
+        NearHistory = null;
+        NearHistoryConfidence = null;
         fallbackDepthTexture = null;
         blueNoise = null;
         fallbackJitterTexture = null;
@@ -868,6 +993,8 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         DepthAwareCompositeThisFrame = false;
         MaterialFogBoundThisFrame = false;
         NearCompositeAppliedThisFrame = false;
+        NearDetailTunedThisFrame = false;
+        NearDetailSummary = string.Empty;
         LightningDebugSummary = string.Empty;
         BlueNoiseBoundThisFrame = false;
         BlueNoiseSourceName = "off";
@@ -908,11 +1035,14 @@ public readonly record struct VolumetricNebulaResourceDebug(
     long EstimatedBytes,
     string LastOperation,
     string DebugName,
-    int PassSlotCount)
+    int PassSlotCount,
+    bool NearDetail,
+    string NearDetailSummary)
 {
     public static VolumetricNebulaResourceDebug Disabled(string reason) =>
-        new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0);
+        new(false, "not allocated", "not allocated", "off", -1, "", 0, reason, "vol_nebula.none", 0, false, "");
 
     public static VolumetricNebulaResourceDebug Waiting(string reason) =>
-        new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting", VolumetricNebulaPassDeclaration.CanonicalOrder.Count);
+        new(false, "waiting", "waiting", "waiting", -1, "", 0, reason, "vol_nebula.waiting",
+            VolumetricNebulaPassDeclaration.CanonicalOrder.Count, false, "");
 }

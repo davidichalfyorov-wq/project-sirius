@@ -59,6 +59,14 @@ float4 main(Input input) : SV_Target0
     {
         color = float3(density.r, density.g, density.b);
     }
+    else if (mode == 8)
+    {
+        color = float3(pow(saturate(density.r), 0.55), saturate(density.w), saturate(density.g * 8000.0));
+    }
+    else if (mode == 9)
+    {
+        color = saturate(integrated.rgb * gain + (1.0 - integrated.a).xxx * 0.35);
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);

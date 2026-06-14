@@ -10,6 +10,7 @@ public readonly record struct VolumetricNebulaFrameDebug(
     string ProfileNickname,
     int Quality,
     bool NearCascade,
+    bool NearDetail,
     bool ShipDisplacement,
     bool AtmosphereLuts,
     string DebugView)
@@ -25,12 +26,12 @@ public readonly record struct VolumetricNebulaFrameDebug(
         if (!requested)
         {
             return new VolumetricNebulaFrameDebug(
-                false, false, false, "disabled", "", quality, false, false, atmosphereLuts, debugView);
+                false, false, false, "disabled", "", quality, false, false, false, atmosphereLuts, debugView);
         }
         if (!rstate.HasFeature(GraphicsFeature.Compute))
         {
             return new VolumetricNebulaFrameDebug(
-                true, false, true, "backend has no compute feature", "", quality, false, false, atmosphereLuts, debugView);
+                true, false, true, "backend has no compute feature", "", quality, false, false, false, atmosphereLuts, debugView);
         }
         return new VolumetricNebulaFrameDebug(
             true,
@@ -40,6 +41,7 @@ public readonly record struct VolumetricNebulaFrameDebug(
             "",
             quality,
             rendererSettings.SelectedVolumetricNearCascade,
+            rendererSettings.SelectedVolumetricNearDetail,
             rendererSettings.SelectedVolumetricShipDisplacement,
             atmosphereLuts,
             debugView);

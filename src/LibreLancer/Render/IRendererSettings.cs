@@ -63,6 +63,9 @@ public interface IRendererSettings
     /// <summary>Composite the near froxel cascade together with the main volume. Opt-in PR-5.12 path.</summary>
     bool SelectedVolumetricNearComposite => false;
 
+    /// <summary>High-frequency near-field density/detail tuning. Opt-in PR-5.13 path.</summary>
+    bool SelectedVolumetricNearDetail => false;
+
     /// <summary>Interactive ship density displacement/wake. Stubbed until PR-5.2+.</summary>
     bool SelectedVolumetricShipDisplacement => false;
 

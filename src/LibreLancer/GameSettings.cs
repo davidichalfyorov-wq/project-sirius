@@ -109,6 +109,8 @@ namespace LibreLancer
         public bool VolumetricNearCascade = false;
         [Entry("volumetric_near_composite")]
         public bool VolumetricNearComposite = false;
+        [Entry("volumetric_near_detail")]
+        public bool VolumetricNearDetail = false;
         [Entry("volumetric_ship_displacement")]
         public bool VolumetricShipDisplacement = false;
         [Entry("volumetric_composite")]
@@ -150,6 +152,8 @@ namespace LibreLancer
         public bool Phase5NearCompositeEnabled =>
             Phase5NearCascadeEnabled && Phase5CompositeEnabled && VolumetricNearComposite;
 
+        public bool Phase5NearDetailEnabled => Phase5NearCascadeEnabled && VolumetricNearDetail;
+
         public bool Phase5ShipDisplacementEnabled => VolumetricNebulaRequested && VolumetricShipDisplacement;
 
         public bool Phase5CompositeEnabled => VolumetricNebulaRequested && VolumetricComposite;
@@ -183,6 +187,7 @@ namespace LibreLancer
                 "vol_history" or "volhistory" or "history" or "volumetric_history" => "vol_history",
                 "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => "vol_history_confidence",
                 "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => "vol_jitter",
+                "vol_near_density" or "volneardensity" or "near_density" or "neardensity" => "vol_near_density",
                 "atmosphere_luts" or "atmoluts" or "atmo_luts" => "atmosphere_luts",
                 "atmo_aerial" or "atmoaerial" or "aerial" => "atmo_aerial",
                 _ => "off"
@@ -224,6 +229,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricNebulae => VolumetricNebulaRequested;
         bool IRendererSettings.SelectedVolumetricNearCascade => VolumetricNebulaRequested && VolumetricNearCascade;
         bool IRendererSettings.SelectedVolumetricNearComposite => Phase5NearCompositeEnabled;
+        bool IRendererSettings.SelectedVolumetricNearDetail => Phase5NearDetailEnabled;
         bool IRendererSettings.SelectedVolumetricShipDisplacement => VolumetricNebulaRequested && VolumetricShipDisplacement;
         bool IRendererSettings.SelectedVolumetricComposite => VolumetricNebulaRequested && VolumetricComposite;
         bool IRendererSettings.SelectedVolumetricMaterialFog => VolumetricNebulaRequested && VolumetricMaterialFog;
@@ -294,6 +300,7 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_nebula = {(VolumetricNebulaRequested ? "true" : "false")}");
             writer.WriteLine($"volumetric_near_cascade = {(VolumetricNearCascade ? "true" : "false")}");
             writer.WriteLine($"volumetric_near_composite = {(VolumetricNearComposite ? "true" : "false")}");
+            writer.WriteLine($"volumetric_near_detail = {(VolumetricNearDetail ? "true" : "false")}");
             writer.WriteLine($"volumetric_ship_displacement = {(VolumetricShipDisplacement ? "true" : "false")}");
             writer.WriteLine($"volumetric_composite = {(VolumetricComposite ? "true" : "false")}");
             writer.WriteLine($"volumetric_material_fog = {(VolumetricMaterialFog ? "true" : "false")}");
@@ -359,6 +366,7 @@ namespace LibreLancer
                 VolumetricNebulae = VolumetricNebulae,
                 VolumetricNearCascade = VolumetricNearCascade,
                 VolumetricNearComposite = VolumetricNearComposite,
+                VolumetricNearDetail = VolumetricNearDetail,
                 VolumetricShipDisplacement = VolumetricShipDisplacement,
                 VolumetricComposite = VolumetricComposite,
                 VolumetricMaterialFog = VolumetricMaterialFog,
@@ -438,6 +446,7 @@ namespace LibreLancer
                 VolumetricNebulae = false;
                 VolumetricNearCascade = false;
                 VolumetricNearComposite = false;
+                VolumetricNearDetail = false;
                 VolumetricShipDisplacement = false;
                 VolumetricComposite = false;
                 VolumetricMaterialFog = false;
@@ -450,6 +459,7 @@ namespace LibreLancer
             {
                 VolumetricNearCascade = false;
                 VolumetricNearComposite = false;
+                VolumetricNearDetail = false;
                 VolumetricShipDisplacement = false;
                 VolumetricComposite = false;
                 VolumetricMaterialFog = false;
@@ -466,6 +476,11 @@ namespace LibreLancer
             {
                 FLLog.Info("Config", "volumetric_near_composite requires volumetric_near_cascade and volumetric_composite, disabling.");
                 VolumetricNearComposite = false;
+            }
+            if (VolumetricNearDetail && !VolumetricNearCascade)
+            {
+                FLLog.Info("Config", "volumetric_near_detail requires volumetric_near_cascade, disabling.");
+                VolumetricNearDetail = false;
             }
             if (AtmosphereLuts && !RenderContext.HasFeature(GraphicsFeature.Compute))
             {

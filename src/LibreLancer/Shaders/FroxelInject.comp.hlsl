@@ -18,6 +18,8 @@ cbuffer FroxelInjectParams : register(b3, UNIFORM_SPACE)
     float4 EffectParams;        // x: god rays, y: dust, z: ship displacement, w: profile warp
     float4 ColorParams;         // rgb: authored fog color, w: lightning profile flag
     float4 JitterParams;        // x: enabled, y: tile size, z: frame index, w: reserved
+    float4 NearDetailParams;    // x: enabled, y: base freq mul, z: detail freq mul, w: erosion boost
+    float4 NearDustParams;      // x: dust density, y: dust strength, z: contrast, w: warp boost
 };
 
 float Hash13(float3 p)
@@ -125,19 +127,28 @@ void main(uint3 id : SV_DispatchThreadID)
         float4 jitter = JitterNoise.SampleLevel(JitterSampler, frac(jitterUv), 0);
         p += (jitter.xyz - 0.5) * 0.045;
     }
-    float warpStrength = (NoiseParams.y + EffectParams.w) * (GridSize.w > 0.5 ? 1.35 : 1.0);
+    float nearDetail = (GridSize.w > 0.5 && NearDetailParams.x > 0.5) ? 1.0 : 0.0;
+    float baseMul = lerp(1.0, max(NearDetailParams.y, 0.1), nearDetail);
+    float detailMul = lerp(1.0, max(NearDetailParams.z, 0.1), nearDetail);
+    float erosionMul = lerp(1.0, max(NearDetailParams.w, 0.1), nearDetail);
+    float warpMul = lerp(1.0, max(NearDustParams.w, 0.1), nearDetail);
+    float warpStrength = (NoiseParams.y + EffectParams.w) * (GridSize.w > 0.5 ? 1.35 : 1.0) * warpMul;
     p = DomainWarp(p, warpStrength);
 
-    float baseShape = Fbm(p * 0.75);
+    float baseShape = Fbm(p * 0.75 * baseMul);
     float banks = smoothstep(1.0 - DensityParams.z, 1.0, baseShape);
-    float detail = Fbm(p * 3.15 + 19.0);
-    float cells = 1.0 - CellularDistance(p * 2.15 + 5.0);
-    float erosion = saturate(DensityParams.w);
+    float detail = Fbm(p * 3.15 * detailMul + 19.0);
+    float cells = 1.0 - CellularDistance(p * (2.15 * detailMul) + 5.0);
+    float erosion = saturate(DensityParams.w * erosionMul);
 
     float carved = saturate(banks - detail * erosion * 0.42 - cells * erosion * 0.18);
     float normalizedDensity = smoothstep(0.02, 0.72, carved) * zoneFalloff;
+    float nearDustNoise = ValueNoise(p * (9.0 * detailMul) + float3(31.0, 17.0, 7.0));
+    float dustGate = smoothstep(1.0 - saturate(NearDustParams.x), 1.0, nearDustNoise);
+    float dust = dustGate * saturate(NearDustParams.y) * zoneFalloff * nearDetail;
+    normalizedDensity = saturate(normalizedDensity * lerp(1.0, max(NearDustParams.z, 0.1), nearDetail) + dust);
     float extinction = lerp(DensityParams.y, DensityParams.x, zoneFalloff);
     float physicalExtinction = extinction * normalizedDensity;
 
-    Density[id] = float4(normalizedDensity, physicalExtinction, zoneFalloff, carved);
+    Density[id] = float4(normalizedDensity, physicalExtinction, zoneFalloff, max(carved, dust));
 }

@@ -18,7 +18,8 @@ public enum RenderFeatureBits
     VolumetricTemporal = 1 << 9,
     VolumetricReprojection = 1 << 10,
     VolumetricBlueNoise = 1 << 11,
-    VolumetricNearComposite = 1 << 12
+    VolumetricNearComposite = 1 << 12,
+    VolumetricNearDetail = 1 << 13
 }
 
 /// <summary>
@@ -45,6 +46,7 @@ public enum RenderDebugView
     VolumetricHistoryConfidence,
     VolumetricJitter,
     VolumetricNear,
+    VolumetricNearDensity,
     AtmosphereLuts,
     AtmosphereAerial
 }
@@ -69,6 +71,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricReprojection => Bits.HasFlag(RenderFeatureBits.VolumetricReprojection);
     public bool VolumetricBlueNoise => Bits.HasFlag(RenderFeatureBits.VolumetricBlueNoise);
     public bool VolumetricNearComposite => Bits.HasFlag(RenderFeatureBits.VolumetricNearComposite);
+    public bool VolumetricNearDetail => Bits.HasFlag(RenderFeatureBits.VolumetricNearDetail);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
@@ -100,6 +103,9 @@ public readonly record struct RenderFeatureSet(
         if (OverrideBool(settings.SelectedVolumetricNearComposite, "SIRIUS_VOLFOG_NEAR_COMPOSITE",
                 "SIRIUS_VOLNEAR_COMPOSITE", "SIRIUS_VOLUMETRIC_NEAR_COMPOSITE"))
             bits |= RenderFeatureBits.VolumetricNearComposite;
+        if (OverrideBool(settings.SelectedVolumetricNearDetail, "SIRIUS_VOLFOG_NEAR_DETAIL",
+                "SIRIUS_VOLNEAR_DETAIL", "SIRIUS_VOLUMETRIC_NEAR_DETAIL"))
+            bits |= RenderFeatureBits.VolumetricNearDetail;
         if (OverrideBool(settings.SelectedAtmosphereLuts, "SIRIUS_ATMOSPHERE_LUTS", "SIRIUS_ATMO_LUTS"))
             bits |= RenderFeatureBits.AtmosphereLuts;
         if (OverrideBool(settings.SelectedRenderDebugMarkers, "SIRIUS_RENDER_DEBUG_MARKERS", "SIRIUS_DEBUG_MARKERS"))
@@ -119,7 +125,8 @@ public readonly record struct RenderFeatureSet(
                       RenderFeatureBits.VolumetricTemporal |
                       RenderFeatureBits.VolumetricReprojection |
                       RenderFeatureBits.VolumetricBlueNoise |
-                      RenderFeatureBits.VolumetricNearComposite);
+                      RenderFeatureBits.VolumetricNearComposite |
+                      RenderFeatureBits.VolumetricNearDetail);
         }
         if ((bits & RenderFeatureBits.VolumetricTemporal) == 0)
         {
@@ -129,6 +136,10 @@ public readonly record struct RenderFeatureSet(
             (RenderFeatureBits.VolumetricNearCascade | RenderFeatureBits.VolumetricComposite))
         {
             bits &= ~RenderFeatureBits.VolumetricNearComposite;
+        }
+        if ((bits & RenderFeatureBits.VolumetricNearCascade) == 0)
+        {
+            bits &= ~RenderFeatureBits.VolumetricNearDetail;
         }
 
         var debugView = ParseDebugView(
@@ -178,6 +189,7 @@ public readonly record struct RenderFeatureSet(
             "vol_history_confidence" or "volconfidence" or "vol_confidence" or "history_confidence" => RenderDebugView.VolumetricHistoryConfidence,
             "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => RenderDebugView.VolumetricJitter,
             "vol_near" or "volnear" or "near" or "near_froxels" or "volumetric_near" => RenderDebugView.VolumetricNear,
+            "vol_near_density" or "volneardensity" or "near_density" or "neardensity" => RenderDebugView.VolumetricNearDensity,
             "atmoluts" or "atmosphere_luts" or "atmo_luts" => RenderDebugView.AtmosphereLuts,
             "atmo_aerial" or "atmoaerial" or "aerial" => RenderDebugView.AtmosphereAerial,
             _ => RenderDebugView.Off

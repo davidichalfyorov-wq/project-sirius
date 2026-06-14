@@ -96,7 +96,7 @@ public class DevHudOverlay
         Line(FormattableString.Invariant($"vol nebula {volStatus,8}"), vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
         if (vol.Requested || settings.Phase5DebugView != "off" || froxels.Allocated)
         {
-            Line(FormattableString.Invariant($"vol q/n/d/a {vol.Quality}/{vol.NearCascade}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
+            Line(FormattableString.Invariant($"vol q/n/nd/d/a {vol.Quality}/{vol.NearCascade}/{vol.NearDetail}/{vol.ShipDisplacement}/{vol.AtmosphereLuts}"), Color4.LightBlue);
             Line($"debug view {settings.Phase5DebugView}", Color4.LightBlue);
             Line($"vol reason {vol.Reason}", vol.LegacyFallback ? Color4.LightYellow : Color4.LightBlue);
             Line(FormattableString.Invariant($"froxels    {froxels.Dimensions}"), froxels.Allocated ? Color4.LightGreen : Color4.Orange);
@@ -110,6 +110,10 @@ public class DevHudOverlay
                 Line(FormattableString.Invariant($"vol memory {froxels.EstimatedBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightGreen);
             }
             Line($"vol op     {froxels.LastOperation}", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            if (froxels.NearDetail)
+            {
+                Line($"vol near detail {froxels.NearDetailSummary}", Color4.LightGreen);
+            }
             Line($"vol comp   {(froxels.Allocated ? (froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "hdr" : "off") : "off")}",
                 froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? Color4.LightGreen : Color4.LightBlue);
             Line($"vol depth  {(froxels.LastOperation.Contains("composite", StringComparison.OrdinalIgnoreCase) ? "copy" : "no")}",
@@ -129,6 +133,7 @@ public class DevHudOverlay
             Line($"vol nebula {(features.VolumetricNebula ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"vol comp   {(features.VolumetricComposite ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol nearc  {(features.VolumetricNearComposite ? "req" : "off")}", Color4.LightSkyBlue);
+            Line($"vol nearD  {(features.VolumetricNearDetail ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol matfog {(features.VolumetricMaterialFog ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol bolt   {(features.VolumetricLightningChannels ? "req" : "off")}", Color4.LightSkyBlue);
             Line($"vol temp   {(features.VolumetricTemporal ? (volumetricHistoryActive(froxels) ? "hist" : "req") : "off")}",
@@ -148,6 +153,7 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricHistoryConfidence or
                 RenderDebugView.VolumetricJitter or
                 RenderDebugView.VolumetricNear or
+                RenderDebugView.VolumetricNearDensity or
                 RenderDebugView.AtmosphereLuts or
                 RenderDebugView.AtmosphereAerial)
             {
