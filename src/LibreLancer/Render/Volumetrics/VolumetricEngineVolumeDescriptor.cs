@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 
@@ -103,6 +105,107 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
     public static VolumetricEngineVolumeDescriptor Invalid(string error) =>
         new(false, 0, default, 0, 0, 0, Vector2.Zero, "", "", "", "", "", "", "", error);
 
+    public static VolumetricEngineVolumeHeaderValidation ValidateHeader(
+        IEnumerable<string> lines,
+        VolumetricEngineVolumeDescriptor descriptor)
+    {
+        if (!descriptor.Valid)
+        {
+            return VolumetricEngineVolumeHeaderValidation.Invalid(
+                "cannot validate engine volume header for invalid descriptor");
+        }
+        if (!TryParseKeyValueLines(lines, out var values, out var parseError))
+        {
+            return VolumetricEngineVolumeHeaderValidation.Invalid(parseError);
+        }
+
+        var dimensions = FormattableString.Invariant(
+            $"{descriptor.Width}, {descriptor.Height}, {descriptor.Depth}");
+        var expected =
+            new (string Key, string Value)[]
+            {
+                ("magic", Magic),
+                ("version", descriptor.Version.ToString(CultureInfo.InvariantCulture)),
+                ("format", FormatToken(descriptor.Format)),
+                ("cache_key", descriptor.CacheKey),
+                ("cache", descriptor.EngineVolumePath),
+                ("manifest", descriptor.CacheManifestPath),
+                ("canonical_system", descriptor.CanonicalSystem),
+                ("canonical_nebula", descriptor.CanonicalNebula),
+                ("grid", descriptor.GridName),
+                ("dimensions", dimensions),
+                ("content_hash", descriptor.ContentHash)
+            };
+
+        foreach (var (key, expectedValue) in expected)
+        {
+            if (!values.TryGetValue(key, out var actualValue))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header missing {key}");
+            }
+            if (!string.Equals(actualValue, expectedValue, StringComparison.Ordinal))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header {key} mismatch");
+            }
+        }
+
+        var longChecks =
+            new (string Key, long Value)[]
+            {
+                ("voxel_count", descriptor.VoxelCount),
+                ("payload_bytes", descriptor.PayloadBytes)
+            };
+
+        foreach (var (key, expectedValue) in longChecks)
+        {
+            if (!values.TryGetValue(key, out var actualValue))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header missing {key}");
+            }
+            if (!long.TryParse(actualValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header invalid {key}");
+            }
+            if (parsed != expectedValue)
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header {key} mismatch");
+            }
+        }
+
+        var floatChecks =
+            new (string Key, float Value)[]
+            {
+                ("density_normalize_scale", descriptor.DensityNormalize.X),
+                ("density_normalize_bias", descriptor.DensityNormalize.Y)
+            };
+
+        foreach (var (key, expectedValue) in floatChecks)
+        {
+            if (!values.TryGetValue(key, out var actualValue))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header missing {key}");
+            }
+            if (!float.TryParse(actualValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header invalid {key}");
+            }
+            if (MathF.Abs(parsed - expectedValue) > 1e-6f)
+            {
+                return VolumetricEngineVolumeHeaderValidation.Invalid(
+                    $"engine volume header {key} mismatch");
+            }
+        }
+
+        return VolumetricEngineVolumeHeaderValidation.Ok();
+    }
+
     private static bool IsSupportedFormat(VolumetricEngineVolumeFormat format) =>
         format is VolumetricEngineVolumeFormat.DensityR8UNorm
             or VolumetricEngineVolumeFormat.DensityR16UNorm
@@ -119,6 +222,34 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
 
     private static string Fmt(float value) =>
         value.ToString("0.########", CultureInfo.InvariantCulture);
+
+    private static bool TryParseKeyValueLines(
+        IEnumerable<string> lines,
+        out Dictionary<string, string> values,
+        out string error)
+    {
+        values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in lines)
+        {
+            var line = raw.Split('#', 2)[0].Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var split = line.IndexOf('=');
+            if (split <= 0)
+            {
+                error = $"invalid engine volume header line '{raw}'";
+                return false;
+            }
+
+            values[line[..split].Trim()] = line[(split + 1)..].Trim();
+        }
+
+        error = "";
+        return true;
+    }
 }
 
 public enum VolumetricEngineVolumeFormat
@@ -126,4 +257,15 @@ public enum VolumetricEngineVolumeFormat
     DensityR8UNorm = 1,
     DensityR16UNorm = 2,
     DensityR16Float = 3
+}
+
+public readonly record struct VolumetricEngineVolumeHeaderValidation(
+    bool Valid,
+    string Error)
+{
+    public static VolumetricEngineVolumeHeaderValidation Ok() =>
+        new(true, "");
+
+    public static VolumetricEngineVolumeHeaderValidation Invalid(string error) =>
+        new(false, error);
 }

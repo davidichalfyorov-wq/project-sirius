@@ -68,6 +68,8 @@ Rules for the OpenVDB layer:
   `magic = SIRIUSVOL`, version, density format, dimensions, voxel count, payload
   byte count, cache identity, canonical locks, density normalization, and
   content hash so PR review can reason about the binary `.siriusvol` payload.
+  CI/import tooling should validate header lines against this descriptor before
+  accepting the generated cache payload.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density

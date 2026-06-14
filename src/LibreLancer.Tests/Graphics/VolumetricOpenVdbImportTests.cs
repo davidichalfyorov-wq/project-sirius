@@ -545,6 +545,9 @@ public class VolumetricOpenVdbImportTests
         Assert.Contains("payload_bytes = 1572864", lines);
         Assert.Contains("density_normalize_scale = 0.5", lines);
         Assert.Contains("density_normalize_bias = -0.1", lines);
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidateHeader(lines, descriptor);
+        Assert.True(validation.Valid);
     }
 
     [Fact]
@@ -567,6 +570,47 @@ public class VolumetricOpenVdbImportTests
 
         Assert.False(descriptor.Valid);
         Assert.Contains("unsupported engine volume format", descriptor.Error);
+    }
+
+    [Fact]
+    public void RejectsEngineVolumeDescriptorHeaderWithMismatchedPayloadBytes()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(MakeCacheArtifactPlan());
+        var lines = ReplaceLine(
+            descriptor.BuildHeaderLines(),
+            "payload_bytes = ",
+            "payload_bytes = 1");
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidateHeader(lines, descriptor);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("payload_bytes", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsEngineVolumeDescriptorHeaderWithMismatchedFormat()
+    {
+        var descriptor = VolumetricEngineVolumeDescriptor.FromOpenVdbArtifact(MakeCacheArtifactPlan());
+        var lines = ReplaceLine(
+            descriptor.BuildHeaderLines(),
+            "format = ",
+            "format = density_r8_unorm");
+
+        var validation = VolumetricEngineVolumeDescriptor.ValidateHeader(lines, descriptor);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("format", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsEngineVolumeDescriptorHeaderForInvalidDescriptor()
+    {
+        var validation = VolumetricEngineVolumeDescriptor.ValidateHeader(
+            ["magic = SIRIUSVOL"],
+            VolumetricEngineVolumeDescriptor.Invalid("bad descriptor"));
+
+        Assert.False(validation.Valid);
+        Assert.Contains("invalid descriptor", validation.Error);
     }
 
     [Fact]
