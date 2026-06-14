@@ -45,6 +45,21 @@ public class VolumetricAtmosphereLutProfileTests
     }
 
     [Fact]
+    public void CloudShellIsSparseAndQualityScaled()
+    {
+        var low = VolumetricAtmosphereCloudShellProfile.Evaluate(0.25f, -0.15f, 0.42f, 0);
+        var high = VolumetricAtmosphereCloudShellProfile.Evaluate(0.25f, -0.15f, 0.42f, 3);
+        var outer = VolumetricAtmosphereCloudShellProfile.Evaluate(0.95f, 0.95f, 0.42f, 3);
+        var highAltitude = VolumetricAtmosphereCloudShellProfile.Evaluate(0.25f, -0.15f, 1f, 3);
+
+        Assert.True(high.W >= low.W);
+        Assert.True(high.W <= 1f);
+        Assert.True(outer.W < high.W);
+        Assert.True(highAltitude.W < high.W);
+        Assert.True(high.Z >= high.X);
+    }
+
+    [Fact]
     public void DebugViewAliasSelectsAtmosphereSkyView()
     {
         using var _ = new CleanDebugEnvironment();

@@ -172,6 +172,8 @@ namespace LibreLancer.Render
         public static Vector4 AtmosphereLutSettings;
         public static Texture3D? AtmosphereAerial;
         public static Vector4 AtmosphereAerialSettings;
+        public static Texture3D? AtmosphereCloudShell;
+        public static Vector4 AtmosphereCloudShellSettings;
 
         // Ray-traced ambient occlusion (phase 4): modulates ambient/IBL
         // terms in the PBR shader while a TLAS is being built this frame.
@@ -261,6 +263,12 @@ namespace LibreLancer.Render
             AtmosphereAerialSettings = settings;
         }
 
+        public static void SetAtmosphereCloudShellSource(Texture3D? cloudShell, Vector4 settings)
+        {
+            AtmosphereCloudShell = cloudShell;
+            AtmosphereCloudShellSettings = settings;
+        }
+
         public static void SetAtmosphereLutSource(Texture3D? transmittance, Texture3D? multiScattering)
         {
             AtmosphereTransmittance = transmittance;
@@ -327,6 +335,11 @@ namespace LibreLancer.Render
             {
                 rstate.Textures[12] = AtmosphereMultiScattering;
                 rstate.Samplers[12] = SamplerState.LinearClamp;
+            }
+            if (AtmosphereCloudShell != null)
+            {
+                rstate.Textures[13] = AtmosphereCloudShell;
+                rstate.Samplers[13] = SamplerState.LinearClamp;
             }
         }
 

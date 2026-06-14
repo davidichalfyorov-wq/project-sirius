@@ -16,6 +16,13 @@
 Texture2D<float4> DtTexture : register(t0, TEXTURE_SPACE);
 SamplerState DtSampler : register(s0, TEXTURE_SPACE);
 
+Texture3D<float4> AtmoTransmittance : register(t11, TEXTURE_SPACE);
+SamplerState AtmoTransmittanceSampler : register(s11, TEXTURE_SPACE);
+Texture3D<float4> AtmoMultiScattering : register(t12, TEXTURE_SPACE);
+SamplerState AtmoMultiScatteringSampler : register(s12, TEXTURE_SPACE);
+Texture3D<float4> AtmoCloudShell : register(t13, TEXTURE_SPACE);
+SamplerState AtmoCloudShellSampler : register(s13, TEXTURE_SPACE);
+
 
 struct Input
 {
@@ -43,6 +50,7 @@ cbuffer AtmosphereParameters : register(b3, UNIFORM_SPACE)
     float ShellScale;
     float _atmoPad0;
     float4 PlanetCenter; // xyz = world center of the planet/shell
+    float4 AtmoLutParams; // x LUT active, y cloud active, z cloud strength
 };
 
 static const float ATMO_PI = 3.14159265;
@@ -164,5 +172,24 @@ float4 main(Input input) : SV_Target0
     color += Ac.rgb * tint * 0.015 * (1.0 - exp(-tau));
 
     float alpha = saturate(1.0 - exp(-tau)) * Oc;
+    if (AtmoLutParams.x > 0.5)
+    {
+        float sunT = saturate(dot(normalize(input.worldPosition - c), sunDir) * 0.5 + 0.5);
+        float3 lutUv = float3(sunT, hNorm, 0.5);
+        float4 transLut = AtmoTransmittance.SampleLevel(AtmoTransmittanceSampler, lutUv, 0.0);
+        float4 multiLut = AtmoMultiScattering.SampleLevel(AtmoMultiScatteringSampler, lutUv, 0.0);
+        color = color * lerp(float3(1.0, 1.0, 1.0), transLut.rgb, 0.10);
+        color += multiLut.rgb * inscatter * 0.018;
+    }
+    if (AtmoLutParams.y > 0.5)
+    {
+        float3 shellN = normalize(input.worldPosition - c);
+        float3 cloudUv = float3(shellN.xy * 0.5 + 0.5, hNorm);
+        float4 cloud = AtmoCloudShell.SampleLevel(AtmoCloudShellSampler, cloudUv, 0.0);
+        float cloudStrength = saturate(AtmoLutParams.z);
+        float cloudMask = cloud.a * cloudStrength;
+        color += cloud.rgb * cloudMask * (0.35 + inscatter * 2.0);
+        alpha = saturate(alpha + cloudMask * 0.08 * Oc);
+    }
     return float4(color, alpha);
 }

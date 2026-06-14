@@ -8,8 +8,8 @@ namespace LibreLancer.Render.Volumetrics;
 /// <summary>
 /// Resource owner for the Phase 5/B1 atmosphere LUT path. The textures are
 /// CPU-filled with conservative fallback profiles until compute generation
-/// lands, so enabling atmosphere_luts gives RenderDoc/HUD-visible resources
-/// without changing the current Atmosphere 2.0 visual path.
+/// lands. The active resources are bound into Atmosphere 2.0 materials when
+/// atmosphere_luts/cloud_shell are explicitly enabled.
 /// </summary>
 public sealed class VolumetricAtmosphereFrameResources : IDisposable
 {
@@ -39,6 +39,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         LastDebug = VolumetricAtmosphereResourceDebug.Disabled(reason);
         global::LibreLancer.Render.RenderMaterial.SetAtmosphereLutSource(null, null);
         global::LibreLancer.Render.RenderMaterial.SetAtmosphereAerialSource(null, System.Numerics.Vector4.Zero);
+        global::LibreLancer.Render.RenderMaterial.SetAtmosphereCloudShellSource(null, System.Numerics.Vector4.Zero);
     }
 
     public void Ensure(RenderContext rstate, global::LibreLancer.Render.RenderFeatureSet features,
@@ -81,6 +82,13 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             AerialPerspective,
             new System.Numerics.Vector4(features.AtmosphereAerialPerspective ? 1f : 0f,
                 Math.Max(1f, budget.AerialDepth * 1000f), 0f, 0f));
+        global::LibreLancer.Render.RenderMaterial.SetAtmosphereCloudShellSource(
+            CloudShell,
+            new System.Numerics.Vector4(
+                CloudShell != null ? 1f : 0f,
+                CloudShell != null ? 0.16f + Math.Clamp(budget.Quality, 0, 3) * 0.035f : 0f,
+                0f,
+                generation));
         LastDebug = new VolumetricAtmosphereResourceDebug(
             true,
             $"{budget.DebugSummary} aerial={(features.AtmosphereAerialPerspective ? "profile" : "identity")}",

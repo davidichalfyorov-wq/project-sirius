@@ -38,6 +38,7 @@ namespace LibreLancer.Render.Materials
             public float ShellScale;
             public float Pad0;
             public Vector4 PlanetCenter;
+            public Vector4 AtmoLutParams;
         }
 
         public override unsafe void Use(RenderContext rstate, IVertexType vertextype, ref Lighting lights, int userData)
@@ -54,12 +55,18 @@ namespace LibreLancer.Render.Materials
                 // The scatter shader recovers planet/shell radii from the
                 // fragment position, the center and this ratio alone.
                 ShellScale = Scale,
-                PlanetCenter = new Vector4(w.Translation, 0)
+                PlanetCenter = new Vector4(w.Translation, 0),
+                AtmoLutParams = new Vector4(
+                    AtmosphereLutSettings.X,
+                    AtmosphereCloudShellSettings.X,
+                    AtmosphereCloudShellSettings.Y,
+                    0f)
             };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
             sh.SetUniformBlock(3, ref p);
             BindTexture(rstate, 0, DtSampler, 0, DtFlags);
+            BindAtmosphereLuts(rstate);
             var normalmat = w;
             Matrix4x4.Invert(normalmat, out normalmat);
             normalmat = Matrix4x4.Transpose(normalmat);
