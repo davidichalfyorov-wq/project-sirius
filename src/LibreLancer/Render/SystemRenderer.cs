@@ -619,15 +619,14 @@ namespace LibreLancer.Render
             Beams.Begin(Commands, resman, camera);
 
             // Motion vectors (graphics phase 0.2): publish the previous frame's
-            // main-camera VP, then re-bind the main camera so its tag bump
-            // flushes PrevViewProjection into the cbuffer for the opaque/
-            // G-buffer pass. First frame uses prev=current => zero motion.
-            // Runs unconditionally (independent of the shadow-pass re-bind);
-            // byte-neutral when the G-buffer is off (no non-GBUFFER shader
-            // reads PrevViewProjection).
+            // main-camera VP into the cbuffer (SetPrevViewProjection bumps the
+            // camera tag itself, so no camera re-bind is needed - re-binding
+            // mid-frame perturbed the default render). The main camera is
+            // already bound (line 447 / shadow re-bind 521). First frame uses
+            // prev=current => zero motion. Byte-neutral when the G-buffer is
+            // off (no non-GBUFFER shader reads PrevViewProjection).
             rstate.SetPrevViewProjection(
                 hasPrevMainViewProjection ? prevMainViewProjection : camera.ViewProjection);
-            rstate.SetCamera(camera);
             prevMainViewProjection = camera.ViewProjection;
             hasPrevMainViewProjection = true;
 

@@ -3407,9 +3407,13 @@ internal unsafe partial class VKRenderContext : IRenderContext
         // Apply the SAME depth remap as SetCamera's ViewProjection so previous
         // and current VP share the backend convention; motion vectors compare
         // mul(worldPos, ViewProjection) against mul(worldPos, PrevViewProjection)
-        // (graphics phase 0.2). Called immediately before the main-camera
-        // SetCamera, whose tag bump flushes this field into the cbuffer.
+        // (graphics phase 0.2). Bump the tag so the next PushCameraBlock
+        // flushes this field WITHOUT re-binding the camera (re-binding the main
+        // camera mid-frame perturbed the default render).
         cameraMatrices.PrevViewProjection = viewProjection * DepthZeroToOne;
+        setCameraTag++;
+        setCameraTag &= 0x3FFFFFFFFFFFFFFF;
+        cameraTag = (setCameraTag << 1) | 0x1;
     }
 
     public void SetIdentityCamera()

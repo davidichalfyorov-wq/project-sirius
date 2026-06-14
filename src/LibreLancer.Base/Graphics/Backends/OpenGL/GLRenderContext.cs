@@ -310,9 +310,12 @@ internal class GLRenderContext : IRenderContext
     public void SetPrevViewProjection(Matrix4x4 viewProjection)
     {
         // GL convention matches the engine matrices (no depth remap), so store
-        // as-is (motion vectors, graphics phase 0.2). Called before the
-        // main-camera SetCamera, whose tag bump flushes the cbuffer.
+        // as-is (motion vectors, graphics phase 0.2). Bump the tag so the next
+        // shader activation flushes this field without re-binding the camera.
         matrices.PrevViewProjection = viewProjection;
+        setCameraTag++;
+        setCameraTag &= 0x3FFFFFFFFFFFFFFF;
+        cameraTag = (setCameraTag << 1) | 0x1;
     }
 
     public void SetIdentityCamera()
