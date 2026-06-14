@@ -675,6 +675,60 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void BuildsDenseEngineVolumePayloadForR8Unorm()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(4, VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var result = VolumetricEngineVolumeDescriptor.BuildDensePayload(
+            [-1f, 0.5f, 1f, 2f],
+            descriptor);
+
+        Assert.True(result.Valid);
+        Assert.Equal(new byte[] { 0, 128, 255, 255 }, result.Payload);
+        Assert.True(VolumetricEngineVolumeDescriptor.ValidatePayload(result.Payload, descriptor).Valid);
+    }
+
+    [Fact]
+    public void BuildsDenseEngineVolumePayloadForR16UnormLittleEndian()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(3, VolumetricEngineVolumeFormat.DensityR16UNorm);
+
+        var result = VolumetricEngineVolumeDescriptor.BuildDensePayload(
+            [0f, 0.5f, 1f],
+            descriptor);
+
+        Assert.True(result.Valid);
+        Assert.Equal(new byte[] { 0x00, 0x00, 0x00, 0x80, 0xFF, 0xFF }, result.Payload);
+    }
+
+    [Fact]
+    public void BuildsDenseEngineVolumePayloadForR16FloatLittleEndian()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(3, VolumetricEngineVolumeFormat.DensityR16Float);
+
+        var result = VolumetricEngineVolumeDescriptor.BuildDensePayload(
+            [0f, 0.5f, 1f],
+            descriptor);
+
+        Assert.True(result.Valid);
+        Assert.Equal(new byte[] { 0x00, 0x00, 0x00, 0x38, 0x00, 0x3C }, result.Payload);
+    }
+
+    [Fact]
+    public void RejectsDenseEngineVolumePayloadSampleCountMismatch()
+    {
+        var descriptor = MakeSmallEngineVolumeDescriptor(4, VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var result = VolumetricEngineVolumeDescriptor.BuildDensePayload(
+            [0f, 1f],
+            descriptor);
+
+        Assert.False(result.Valid);
+        Assert.Contains("sample count", result.Error);
+        Assert.Empty(result.Payload);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
@@ -1011,6 +1065,26 @@ public class VolumetricOpenVdbImportTests
             MakeProfile("li01_badlands"),
             Encoding.ASCII.GetBytes("abc"),
             "Li01");
+
+    private static VolumetricEngineVolumeDescriptor MakeSmallEngineVolumeDescriptor(
+        int width,
+        VolumetricEngineVolumeFormat format) =>
+        new(
+            Valid: true,
+            Version: VolumetricEngineVolumeDescriptor.CurrentVersion,
+            Format: format,
+            Width: width,
+            Height: 1,
+            Depth: 1,
+            DensityNormalize: new Vector2(1f, 0f),
+            CacheKey: "test_density",
+            EngineVolumePath: "volumes/openvdb/test_density.siriusvol",
+            CacheManifestPath: "volumes/openvdb/test_density.siriusvol.manifest",
+            CanonicalSystem: "Li01",
+            CanonicalNebula: "li01_badlands",
+            GridName: "density",
+            ContentHash: "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Error: "");
 
     private static string[] MakeVerifiedManifestLines() =>
     [

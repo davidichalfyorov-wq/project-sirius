@@ -128,6 +128,61 @@ public readonly record struct VolumetricEngineVolumeDescriptor(
         return VolumetricEngineVolumePayloadValidation.Ok();
     }
 
+    public static VolumetricEngineVolumePayloadBuildResult BuildDensePayload(
+        ReadOnlySpan<float> unitDensitySamples,
+        VolumetricEngineVolumeDescriptor descriptor)
+    {
+        if (!descriptor.Valid)
+        {
+            return VolumetricEngineVolumePayloadBuildResult.Invalid(
+                "cannot build engine volume payload for invalid descriptor");
+        }
+        if (unitDensitySamples.Length != descriptor.VoxelCount)
+        {
+            return VolumetricEngineVolumePayloadBuildResult.Invalid(
+                "engine volume density sample count mismatch");
+        }
+        if (descriptor.BytesPerVoxel <= 0 || descriptor.PayloadBytes <= 0)
+        {
+            return VolumetricEngineVolumePayloadBuildResult.Invalid(
+                "engine volume descriptor has invalid payload format");
+        }
+        if (descriptor.PayloadBytes > int.MaxValue)
+        {
+            return VolumetricEngineVolumePayloadBuildResult.Invalid(
+                "engine volume payload is too large for managed payload build");
+        }
+
+        var payload = new byte[checked((int)descriptor.PayloadBytes)];
+        var offset = 0;
+        for (var i = 0; i < unitDensitySamples.Length; i++)
+        {
+            var encoded = descriptor.EncodeUnitDensity(unitDensitySamples[i]);
+            switch (descriptor.Format)
+            {
+                case VolumetricEngineVolumeFormat.DensityR8UNorm:
+                    payload[offset++] = (byte)encoded;
+                    break;
+                case VolumetricEngineVolumeFormat.DensityR16UNorm:
+                case VolumetricEngineVolumeFormat.DensityR16Float:
+                    payload[offset++] = (byte)(encoded & 0xFF);
+                    payload[offset++] = (byte)((encoded >> 8) & 0xFF);
+                    break;
+                default:
+                    return VolumetricEngineVolumePayloadBuildResult.Invalid(
+                        "unsupported engine volume payload format");
+            }
+        }
+
+        var validation = ValidatePayload(payload, descriptor);
+        if (!validation.Valid)
+        {
+            return VolumetricEngineVolumePayloadBuildResult.Invalid(validation.Error);
+        }
+
+        return new VolumetricEngineVolumePayloadBuildResult(true, payload, "");
+    }
+
     public uint EncodeUnitDensity(float unitDensity) =>
         EncodeUnitDensity(unitDensity, Format);
 
@@ -322,4 +377,13 @@ public readonly record struct VolumetricEngineVolumePayloadValidation(
 
     public static VolumetricEngineVolumePayloadValidation Invalid(string error) =>
         new(false, error);
+}
+
+public readonly record struct VolumetricEngineVolumePayloadBuildResult(
+    bool Valid,
+    byte[] Payload,
+    string Error)
+{
+    public static VolumetricEngineVolumePayloadBuildResult Invalid(string error) =>
+        new(false, [], error);
 }

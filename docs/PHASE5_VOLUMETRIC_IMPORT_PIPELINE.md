@@ -71,7 +71,9 @@ Rules for the OpenVDB layer:
   CI/import tooling should validate header lines against this descriptor before
   accepting the generated cache payload. It should also validate payload byte
   count and use the descriptor's unit-density encoding rules for `r8_unorm`,
-  `r16_unorm`, and `r16_float` density payloads.
+  `r16_unorm`, and `r16_float` density payloads. Dense payload builders write
+  samples in x-major order using little-endian 16-bit values for `r16_*`
+  formats; tools should not invent alternate byte layouts.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density
