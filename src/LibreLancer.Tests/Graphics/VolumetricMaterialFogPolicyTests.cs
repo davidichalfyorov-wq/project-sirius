@@ -24,6 +24,32 @@ public class VolumetricMaterialFogPolicyTests
     }
 
     [Fact]
+    public void CompositeReadyOwnsLegacyFogForWholeFrame()
+    {
+        Assert.True(VolumetricMaterialFogPolicy.OwnsLegacyFog(compositeReady: true));
+        Assert.False(VolumetricMaterialFogPolicy.OwnsLegacyFog(compositeReady: false));
+    }
+
+    [Fact]
+    public void LegacyFogCanBeSuppressedBeforeMaterialSamplingBinds()
+    {
+        var grid = FroxelGridDesc.MainForViewport(1280, 720, 2);
+
+        var binding = VolumetricMaterialFogPolicy.Evaluate(
+            requested: false,
+            compositeApplied: true,
+            integratedAvailable: true,
+            temporalApplied: false,
+            historyAvailable: false,
+            grid,
+            meanExtinction: 0.02f);
+
+        Assert.True(VolumetricMaterialFogPolicy.OwnsLegacyFog(compositeReady: true));
+        Assert.False(binding.CanBind);
+        Assert.Equal("off", binding.Status);
+    }
+
+    [Fact]
     public void RequestedFogWaitsForComposite()
     {
         var grid = FroxelGridDesc.MainForViewport(1280, 720, 2);

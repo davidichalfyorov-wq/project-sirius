@@ -12,6 +12,8 @@ namespace LibreLancer.Render.Volumetrics;
 /// </summary>
 public static class VolumetricMaterialFogPolicy
 {
+    public static bool OwnsLegacyFog(bool compositeReady) => compositeReady;
+
     public static VolumetricMaterialFogBinding Evaluate(
         bool requested,
         bool compositeApplied,

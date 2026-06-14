@@ -446,10 +446,11 @@ namespace LibreLancer.Render
 
             rstate.SetCamera(camera);
             Commands.Camera = camera;
-            // Reset material fog before the frame's transparent pass. The
-            // Phase 5 volumetric path binds it again only after integrated
-            // froxel data and the opt-in composite/material flags are ready.
-            RenderMaterial.VolumetricFogActive = false;
+            // The fullscreen volumetric composite owns legacy fogging for the
+            // whole frame. Material sampling stays disabled until the
+            // transparent pass binds the integrated froxel source.
+            RenderMaterial.VolumetricFogActive =
+                VolumetricMaterialFogPolicy.OwnsLegacyFog(useVolumetricCompositeThisFrame);
             RenderMaterial.VolumetricFogMaterialActive = false;
             RenderMaterial.SetVolumetricFogSource(null, Vector4.Zero);
             UpdateVolumetricAtmosphereResources(renderFeatures, renderWidth, renderHeight);
