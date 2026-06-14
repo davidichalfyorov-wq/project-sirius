@@ -1011,6 +1011,120 @@ public class VolumetricOpenVdbImportTests
     }
 
     [Fact]
+    public void RuntimeLoadsEngineVolumeThroughCacheManifest()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var requestedPath = "";
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifactFromManifest(
+            packed.CacheManifestLines,
+            MakeProfile("li01_badlands"),
+            (string path, out byte[] artifact) =>
+            {
+                requestedPath = path;
+                artifact = packed.Artifact;
+                return true;
+            },
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.True(decoded.Valid);
+        Assert.Equal(packed.ArtifactPlan.EngineVolumePath, requestedPath);
+        Assert.Equal([0f, 128f / 255f, 1f], decoded.UnitDensitySamples);
+    }
+
+    [Fact]
+    public void RuntimeRejectsCacheManifestForWrongNebulaBeforeLoadingArtifact()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var loaderCalled = false;
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifactFromManifest(
+            packed.CacheManifestLines,
+            MakeProfile("li01_wrong_nebula"),
+            (string _, out byte[] artifact) =>
+            {
+                loaderCalled = true;
+                artifact = packed.Artifact;
+                return true;
+            },
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.False(decoded.Valid);
+        Assert.False(loaderCalled);
+        Assert.Contains("canonical nebula", decoded.Error);
+    }
+
+    [Fact]
+    public void RuntimeRejectsMissingCacheManifestArtifact()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifactFromManifest(
+            packed.CacheManifestLines,
+            MakeProfile("li01_badlands"),
+            (string _, out byte[] artifact) =>
+            {
+                artifact = [];
+                return false;
+            },
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.False(decoded.Valid);
+        Assert.Contains("not found", decoded.Error);
+    }
+
+    [Fact]
+    public void RuntimeRejectsCacheManifestArtifactMismatch()
+    {
+        var packed = VolumetricOpenVdbPacker.BuildDenseArtifact(
+            MakeSmallVerifiedManifestLines(3),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            Float32Bytes(0f, 0.5f, 1f),
+            "Li01",
+            VolumetricEngineVolumeFormat.DensityR8UNorm);
+        var manifest = ReplaceLine(
+            [.. packed.CacheManifestLines],
+            "cache = ",
+            "cache = volumes/openvdb/mismatched.siriusvol");
+
+        var decoded = VolumetricEngineVolumeRuntime.DecodeDenseArtifactFromManifest(
+            manifest,
+            MakeProfile("li01_badlands"),
+            (string _, out byte[] artifact) =>
+            {
+                artifact = packed.Artifact;
+                return true;
+            },
+            "Li01");
+
+        Assert.True(packed.Valid);
+        Assert.False(decoded.Valid);
+        Assert.Contains("cache path", decoded.Error);
+    }
+
+    [Fact]
     public void InvalidImportPlanDoesNotEmitCacheManifest()
     {
         var plan = VolumetricOpenVdbImportPlan.Invalid("bad manifest");
