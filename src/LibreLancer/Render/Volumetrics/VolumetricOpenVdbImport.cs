@@ -138,6 +138,10 @@ public static class VolumetricOpenVdbImport
         {
             return VolumetricOpenVdbImportResult.Invalid("missing data path");
         }
+        if (!IsSafeRelativeAssetPath(metadata.DataPath))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("OpenVDB data path must be a safe relative asset path");
+        }
         if (string.IsNullOrWhiteSpace(metadata.GridName))
         {
             return VolumetricOpenVdbImportResult.Invalid("missing grid name");
@@ -149,6 +153,10 @@ public static class VolumetricOpenVdbImport
         if (string.IsNullOrWhiteSpace(metadata.SourceFile))
         {
             return VolumetricOpenVdbImportResult.Invalid("missing source file metadata");
+        }
+        if (!IsSafeRelativeAssetPath(metadata.SourceFile))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("OpenVDB source file must be a safe relative asset path");
         }
         if (string.IsNullOrWhiteSpace(metadata.License))
         {
@@ -290,6 +298,28 @@ public static class VolumetricOpenVdbImport
         foreach (var ch in hash)
         {
             if (!Uri.IsHexDigit(ch))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool IsSafeRelativeAssetPath(string value)
+    {
+        var path = value.Trim();
+        if (path.Length == 0 ||
+            path.StartsWith('/') ||
+            path.StartsWith('\\') ||
+            path.Contains('\\') ||
+            path.Contains(':'))
+        {
+            return false;
+        }
+
+        foreach (var segment in path.Split('/'))
+        {
+            if (segment.Length == 0 || segment == "." || segment == "..")
             {
                 return false;
             }

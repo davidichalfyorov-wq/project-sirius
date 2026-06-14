@@ -45,6 +45,10 @@ Rules for the OpenVDB layer:
   missing. `content_hash` must be `sha256:<64 hex>` or `blake3:<64 hex>` so
   dense OpenVDB exports can be reproduced, reviewed, and invalidated without
   guessing which DCC cache produced them.
+- `data` and `source_file` must be portable project-relative paths. Absolute
+  paths, Windows drive paths, backslashes, empty segments, `.` segments, and
+  `..` traversal are rejected so Blender/Houdini exports remain reproducible and
+  cannot point outside the reviewed asset tree.
 - The initial runtime metadata bridge accepts at most 256^3 dense voxels before
   compression/cache conversion. Larger authored OpenVDB files should be reduced
   offline or split into reviewed tiles before the game can consume them.

@@ -194,6 +194,52 @@ public class VolumetricOpenVdbImportTests
         Assert.Contains("bounds mode", result.Error);
     }
 
+    [Theory]
+    [InlineData("/tmp/li01_badlands_density.vdb")]
+    [InlineData("C:/temp/li01_badlands_density.vdb")]
+    [InlineData("../li01_badlands_density.vdb")]
+    [InlineData("art/../li01_badlands_density.vdb")]
+    [InlineData("art\\li01_badlands_density.vdb")]
+    public void RejectsUnsafeDataPaths(string dataPath)
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            $"data = {dataPath}",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            SourceFileLine,
+            "license = project-owned",
+            ContentHashLine
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("data path", result.Error);
+    }
+
+    [Theory]
+    [InlineData("/tmp/badlands_density.blend")]
+    [InlineData("C:/art/badlands_density.blend")]
+    [InlineData("../art/badlands_density.blend")]
+    [InlineData("art/../badlands_density.blend")]
+    [InlineData("art\\li01\\badlands_density.blend")]
+    public void RejectsUnsafeSourceFilePaths(string sourceFile)
+    {
+        var result = VolumetricOpenVdbImport.ParseManifest([
+            "data = li01_badlands_density.vdb",
+            "width = 128",
+            "height = 96",
+            "depth = 64",
+            "source = blender_openvdb_export",
+            $"source_file = {sourceFile}",
+            "license = project-owned",
+            ContentHashLine
+        ]);
+
+        Assert.False(result.Valid);
+        Assert.Contains("source file", result.Error);
+    }
+
     [Fact]
     public void BuildsProfileLockedImportPlanWithDensityNormalization()
     {
