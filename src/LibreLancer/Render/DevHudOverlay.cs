@@ -114,9 +114,13 @@ public class DevHudOverlay
                 Line(FormattableString.Invariant($"vol memory {froxels.EstimatedBytes / (1024.0 * 1024.0),8:0.0} MB"), Color4.LightGreen);
             }
             Line($"vol op     {froxels.LastOperation}", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
-            if (VolumetricNebulaFrameResources.LastImportedDensitySource != "off")
+            var openVdbStatus = VolumetricNebulaFrameResources.LastImportedDensitySource;
+            if (openVdbStatus != "off")
             {
-                Line($"vol openvdb {VolumetricNebulaFrameResources.LastImportedDensitySource}", Color4.LightGreen);
+                Line($"vol openvdb {openVdbStatus}",
+                    openVdbStatus.StartsWith("openvdb ", StringComparison.OrdinalIgnoreCase)
+                        ? Color4.LightGreen
+                        : Color4.Orange);
             }
             if (froxels.NearDetail)
             {

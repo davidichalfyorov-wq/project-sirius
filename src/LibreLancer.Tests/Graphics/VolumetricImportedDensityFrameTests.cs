@@ -125,8 +125,8 @@ public class VolumetricImportedDensityFrameTests
         Assert.True(frame.Valid);
         Assert.False(accepted);
         Assert.False(resources.ImportedDensityReady);
-        Assert.Equal("off", resources.ImportedDensitySummary);
-        Assert.Equal("off", VolumetricNebulaFrameResources.LastImportedDensitySource);
+        Assert.Equal("profile mismatch", resources.ImportedDensitySummary);
+        Assert.Equal("profile mismatch", VolumetricNebulaFrameResources.LastImportedDensitySource);
     }
 
     [Fact]
@@ -143,8 +143,8 @@ public class VolumetricImportedDensityFrameTests
         Assert.True(frame.Valid);
         Assert.False(accepted);
         Assert.False(resources.ImportedDensityReady);
-        Assert.Equal("off", resources.ImportedDensitySummary);
-        Assert.Equal("off", VolumetricNebulaFrameResources.LastImportedDensitySource);
+        Assert.Equal("profile mismatch", resources.ImportedDensitySummary);
+        Assert.Equal("profile mismatch", VolumetricNebulaFrameResources.LastImportedDensitySource);
     }
 
     [Fact]
@@ -160,6 +160,19 @@ public class VolumetricImportedDensityFrameTests
         Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(canonicalSystem));
         Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(canonicalNebula));
         Assert.NotEqual(key, VolumetricNebulaFrameResources.ImportedDensityTextureKey(densityNormalize));
+    }
+
+    [Fact]
+    public void ClearImportedDensityKeepsFallbackReasonForHud()
+    {
+        using var resources = new VolumetricNebulaFrameResources();
+
+        resources.ClearImportedDensity("OpenVDB density manifest not found");
+
+        Assert.False(resources.ImportedDensityReady);
+        Assert.Equal("OpenVDB density manifest not found", resources.ImportedDensitySummary);
+        Assert.Equal("OpenVDB density manifest not found",
+            VolumetricNebulaFrameResources.LastImportedDensitySource);
     }
 
     private static VolumetricEngineVolumeRuntimeLoadResult BuildDecodedVolume(float[] samples,

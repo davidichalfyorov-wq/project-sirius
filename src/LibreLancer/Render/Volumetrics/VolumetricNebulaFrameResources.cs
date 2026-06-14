@@ -97,7 +97,9 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     public bool BlueNoiseBoundThisFrame { get; private set; }
     public string BlueNoiseSourceName { get; private set; } = "off";
     public bool ImportedDensityReady => importedDensity.Valid;
-    public string ImportedDensitySummary => importedDensity.Valid ? importedDensity.DebugSummary : "off";
+    public string ImportedDensitySummary => importedDensity.Valid
+        ? importedDensity.DebugSummary
+        : string.IsNullOrWhiteSpace(importedDensity.Error) ? "off" : importedDensity.Error;
     public bool ImportedDensityTextureReady => importedDensityTexture != null;
     private int EffectiveQuality => Math.Clamp(
         mainDesc.IsValid ? mainDesc.Quality : qualityProfile.Performance.EffectiveQuality, 0, 3);
@@ -157,7 +159,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         {
             ClearImportedDensity("profile mismatch");
         }
-        LastImportedDensitySource = importedDensity.Valid ? importedDensity.DebugSummary : "off";
+        LastImportedDensitySource = ImportedDensitySummary;
 
         var desiredProfile = VolumetricNebulaQualityProfile.Create(renderWidth, renderHeight, features, active);
         var desired = desiredProfile.MainGrid;
@@ -445,7 +447,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
     {
         importedDensity = VolumetricImportedDensityFrame.Invalid(reason);
         DisposeImportedDensityTexture();
-        LastImportedDensitySource = "off";
+        LastImportedDensitySource = ImportedDensitySummary;
     }
 
     public bool DrawDebugView(RenderContext rstate, RenderDebugView debugView, int renderWidth, int renderHeight)
