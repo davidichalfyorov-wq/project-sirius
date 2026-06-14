@@ -88,6 +88,13 @@ float4 main(Input input) : SV_Target0
         float aerialLight = dot(saturate(density.rgb), float3(0.25, 0.45, 0.30));
         color = float3(aerialLight * 0.7, aerialLight, aerialLight * 1.25) + aerialAlpha.xxx * float3(0.05, 0.18, 0.34);
     }
+    else if (mode == 14)
+    {
+        float coverage = saturate(density.a * gain);
+        float light = dot(saturate(density.rgb * gain), float3(0.30, 0.42, 0.28));
+        color = lerp(float3(0.015, 0.025, 0.045), float3(0.72, 0.82, 0.95), coverage);
+        color += light.xxx * float3(0.16, 0.18, 0.20);
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);
