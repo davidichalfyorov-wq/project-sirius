@@ -465,6 +465,9 @@ public class VolumetricOpenVdbImportTests
             artifactPlan.CacheManifestLines,
             artifactPlan.ImportPlan);
         Assert.True(validation.Valid);
+
+        var artifactValidation = VolumetricOpenVdbImport.ValidateCacheArtifactPlan(artifactPlan);
+        Assert.True(artifactValidation.Valid);
     }
 
     [Fact]
@@ -480,6 +483,39 @@ public class VolumetricOpenVdbImportTests
         Assert.Contains("hash mismatch", artifactPlan.Error);
         Assert.Equal("", artifactPlan.EngineVolumePath);
         Assert.Empty(artifactPlan.CacheManifestLines);
+    }
+
+    [Fact]
+    public void RejectsCacheArtifactPlanWithMutatedEnginePath()
+    {
+        var artifactPlan = MakeCacheArtifactPlan();
+        var mutated = artifactPlan with
+        {
+            EngineVolumePath = "artist_exports/tmp/li01_badlands_density.siriusvol"
+        };
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheArtifactPlan(mutated);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("engine path", validation.Error);
+    }
+
+    [Fact]
+    public void RejectsCacheArtifactPlanWithMutatedManifestLines()
+    {
+        var artifactPlan = MakeCacheArtifactPlan();
+        var mutated = artifactPlan with
+        {
+            CacheManifestLines = ReplaceLine(
+                artifactPlan.CacheManifestLines,
+                "content_hash = ",
+                ContentHashLine)
+        };
+
+        var validation = VolumetricOpenVdbImport.ValidateCacheArtifactPlan(mutated);
+
+        Assert.False(validation.Valid);
+        Assert.Contains("content_hash", validation.Error);
     }
 
     [Fact]
@@ -808,6 +844,13 @@ public class VolumetricOpenVdbImportTests
 
     private static VolumetricOpenVdbImportPlan MakeVerifiedImportPlan() =>
         VolumetricOpenVdbImport.CreateVerifiedImportPlan(
+            MakeVerifiedManifestLines(),
+            MakeProfile("li01_badlands"),
+            Encoding.ASCII.GetBytes("abc"),
+            "Li01");
+
+    private static VolumetricOpenVdbCacheArtifactPlan MakeCacheArtifactPlan() =>
+        VolumetricOpenVdbImport.CreateCacheArtifactPlan(
             MakeVerifiedManifestLines(),
             MakeProfile("li01_badlands"),
             Encoding.ASCII.GetBytes("abc"),

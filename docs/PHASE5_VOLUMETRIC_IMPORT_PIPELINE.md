@@ -60,6 +60,9 @@ Rules for the OpenVDB layer:
   verified import plan and payload bytes before writing files. The plan returns
   the engine `.siriusvol` path, sidecar manifest path, and manifest lines as a
   single contract so tools do not hand-roll cache naming or skip validation.
+  The artifact plan should be validated immediately before writing or accepting
+  files; engine path, sidecar path, and manifest lines must still match the
+  verified import plan.
 - Import tools should write a text cache manifest next to each generated
   `.siriusvol` asset. The manifest records cache key/path, canonical locks,
   source DCC/file/data, license, content hash, dimensions, and density

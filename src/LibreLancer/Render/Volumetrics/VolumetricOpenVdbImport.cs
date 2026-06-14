@@ -222,6 +222,69 @@ public static class VolumetricOpenVdbImport
             "");
     }
 
+    public static VolumetricOpenVdbCacheArtifactValidation ValidateCacheArtifactPlan(
+        VolumetricOpenVdbCacheArtifactPlan artifactPlan)
+    {
+        if (!artifactPlan.Valid)
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "cannot validate invalid OpenVDB cache artifact plan");
+        }
+        if (!artifactPlan.ImportPlan.Valid)
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact plan has invalid import plan");
+        }
+        if (!string.Equals(artifactPlan.EngineVolumePath, artifactPlan.ImportPlan.CacheRelativePath,
+                StringComparison.Ordinal))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact engine path mismatch");
+        }
+        if (!artifactPlan.EngineVolumePath.EndsWith(".siriusvol", StringComparison.OrdinalIgnoreCase))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact engine path must end with .siriusvol");
+        }
+        if (!IsSafeRelativeAssetPath(artifactPlan.EngineVolumePath))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact engine path must be a safe relative asset path");
+        }
+        if (!string.Equals(artifactPlan.CacheManifestPath, artifactPlan.ImportPlan.CacheManifestRelativePath,
+                StringComparison.Ordinal))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact manifest path mismatch");
+        }
+        if (!string.Equals(artifactPlan.CacheManifestPath, $"{artifactPlan.EngineVolumePath}.manifest",
+                StringComparison.Ordinal))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact manifest path must sit next to the engine volume");
+        }
+        if (!IsSafeRelativeAssetPath(artifactPlan.CacheManifestPath))
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact manifest path must be a safe relative asset path");
+        }
+        if (artifactPlan.CacheManifestLines == null || artifactPlan.CacheManifestLines.Length == 0)
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(
+                "OpenVDB cache artifact plan missing cache manifest lines");
+        }
+
+        var manifestValidation = ValidateCacheManifest(
+            artifactPlan.CacheManifestLines,
+            artifactPlan.ImportPlan);
+        if (!manifestValidation.Valid)
+        {
+            return VolumetricOpenVdbCacheArtifactValidation.Invalid(manifestValidation.Error);
+        }
+
+        return VolumetricOpenVdbCacheArtifactValidation.Ok();
+    }
+
     public static VolumetricOpenVdbCacheManifestValidation ValidateCacheManifest(
         IEnumerable<string> lines,
         VolumetricOpenVdbImportPlan plan)
@@ -788,6 +851,17 @@ public readonly record struct VolumetricOpenVdbCacheArtifactPlan(
 
     public static VolumetricOpenVdbCacheArtifactPlan Invalid(string error) =>
         new(false, default, "", "", [], error);
+}
+
+public readonly record struct VolumetricOpenVdbCacheArtifactValidation(
+    bool Valid,
+    string Error)
+{
+    public static VolumetricOpenVdbCacheArtifactValidation Ok() =>
+        new(true, "");
+
+    public static VolumetricOpenVdbCacheArtifactValidation Invalid(string error) =>
+        new(false, error);
 }
 
 public readonly record struct VolumetricOpenVdbImportPlan(
