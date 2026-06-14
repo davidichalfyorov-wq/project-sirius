@@ -55,7 +55,7 @@ float2 EncodeScreenMotion(float4 curClip, float4 prevClip)
 // Ф2.4/Ф4.2 decision. Helpers kept ready below.
 float2 OctWrap(float2 v)
 {
-    return (1.0 - abs(v.yx)) * (v.xy >= 0.0 ? 1.0 : -1.0);
+    return (1.0 - abs(v.yx)) * select(v.xy >= 0.0, float2(1.0, 1.0), float2(-1.0, -1.0));
 }
 // Unit normal [-1,1] -> octahedral [0,1] (two channels).
 float2 EncodeOctNormal(float3 n)
@@ -70,7 +70,7 @@ float3 DecodeOctNormal(float2 f)
     f = f * 2.0 - 1.0;
     float3 n = float3(f.xy, 1.0 - abs(f.x) - abs(f.y));
     float t = saturate(-n.z);
-    n.xy += n.xy >= 0.0 ? -t : t;
+    n.xy += select(n.xy >= 0.0, float2(-t, -t), float2(t, t));
     return normalize(n);
 }
 
