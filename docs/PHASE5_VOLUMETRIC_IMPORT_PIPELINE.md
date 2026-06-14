@@ -39,6 +39,11 @@ Rules for the OpenVDB layer:
   exclusively from the original Freelancer zone.
 - Every imported volume needs source metadata: source DCC, source file, scale,
   density range, axis convention, license/owner, and profile nickname.
+- Import manifests are rejected if `source` or `license` is missing. This keeps
+  generated nebula volumes reviewable before they enter the engine asset cache.
+- The initial runtime metadata bridge accepts at most 256^3 dense voxels before
+  compression/cache conversion. Larger authored OpenVDB files should be reduced
+  offline or split into reviewed tiles before the game can consume them.
 - The fallback path must always be procedural `NebulaVolumeProfile` density, so
   missing imported assets cannot break a system load.
 - RenderDoc/Vulkan debug names should stay identical between procedural and

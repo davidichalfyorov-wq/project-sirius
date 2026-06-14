@@ -13,6 +13,8 @@ namespace LibreLancer.Render.Volumetrics;
 /// </summary>
 public static class VolumetricOpenVdbImport
 {
+    public const long MaxRuntimeVoxelCount = 256L * 256L * 256L;
+
     private static readonly string[] ForbiddenPlacementKeys =
     [
         "position",
@@ -138,6 +140,14 @@ public static class VolumetricOpenVdbImport
         {
             return VolumetricOpenVdbImportResult.Invalid("missing grid name");
         }
+        if (string.IsNullOrWhiteSpace(metadata.Source))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("missing source metadata");
+        }
+        if (string.IsNullOrWhiteSpace(metadata.License))
+        {
+            return VolumetricOpenVdbImportResult.Invalid("missing license metadata");
+        }
         if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.Depth <= 0)
         {
             return VolumetricOpenVdbImportResult.Invalid("invalid dimensions");
@@ -145,6 +155,10 @@ public static class VolumetricOpenVdbImport
         if (metadata.Width > 512 || metadata.Height > 512 || metadata.Depth > 512)
         {
             return VolumetricOpenVdbImportResult.Invalid("dimensions exceed runtime import budget");
+        }
+        if (metadata.VoxelCount > MaxRuntimeVoxelCount)
+        {
+            return VolumetricOpenVdbImportResult.Invalid("voxel count exceeds runtime import budget");
         }
         if (metadata.VoxelSizeMeters <= 0f)
         {
@@ -270,9 +284,15 @@ public readonly record struct VolumetricOpenVdbImportMetadata(
     string License,
     bool PreserveZoneTransform)
 {
+    public long VoxelCount => (long)Width * Height * Depth;
+
+    public long EstimatedRawDensityBytes => VoxelCount * sizeof(float);
+
+    public float EstimatedRawDensityMiB => EstimatedRawDensityBytes / (1024f * 1024f);
+
     public string DebugSummary =>
         FormattableString.Invariant(
-            $"{GridName} {Width}x{Height}x{Depth} voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} bounds={BoundsMode} placement={PlacementMode} lock={(PreserveZoneTransform ? "zone" : "off")}");
+            $"{GridName} {Width}x{Height}x{Depth} voxels={VoxelCount} raw={EstimatedRawDensityMiB:0.##}MiB voxel={VoxelSizeMeters:0.###}m density={DensityMin:0.###}-{DensityMax:0.###}x{DensityMultiplier:0.###} axis={AxisConvention} bounds={BoundsMode} placement={PlacementMode} lock={(PreserveZoneTransform ? "zone" : "off")} source={Source} license={License}");
 }
 
 public readonly record struct VolumetricOpenVdbImportResult(
