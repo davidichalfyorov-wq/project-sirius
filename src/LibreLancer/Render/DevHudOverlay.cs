@@ -229,11 +229,15 @@ public class DevHudOverlay
                 RenderDebugView.VolumetricHistoryConfidence or
                 RenderDebugView.VolumetricJitter or
                 RenderDebugView.VolumetricNear or
-                RenderDebugView.VolumetricNearDensity or
-                RenderDebugView.AtmosphereLuts or
-                RenderDebugView.AtmosphereAerial)
+                RenderDebugView.VolumetricNearDensity)
             {
                 Line(froxels.Allocated ? "view data  allocated/stub" : "view data  not allocated", froxels.Allocated ? Color4.LightGreen : Color4.Orange);
+            }
+            if (features.DebugView is RenderDebugView.AtmosphereLuts or RenderDebugView.AtmosphereAerial)
+            {
+                var atmo = VolumetricAtmosphereFrameResources.LastDebug;
+                Line(atmo.Allocated ? "view data  atmosphere/allocated" : "view data  atmosphere/not allocated",
+                    atmo.Allocated ? Color4.LightGreen : Color4.Orange);
             }
         }
         drawList.Render();
