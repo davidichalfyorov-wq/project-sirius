@@ -114,6 +114,9 @@ public interface IRendererSettings
     /// <summary>Atmosphere LUT pipeline for planets with atmospheres. Stubbed until B1.</summary>
     bool SelectedAtmosphereLuts => false;
 
+    /// <summary>Opt-in aerial perspective sampling from the atmosphere LUT bridge.</summary>
+    bool SelectedAtmosphereAerialPerspective => false;
+
     /// <summary>Renderer debug view selector, e.g. off, voldensity, voltransmittance, froxels.</summary>
     string SelectedDebugView => "off";
 

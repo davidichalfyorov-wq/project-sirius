@@ -18,6 +18,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
 
     private bool disposed;
     private int generation;
+    private bool allocatedAerialPerspective;
     private VolumetricAtmosphereLutBudget allocatedBudget;
 
     public Texture3D? Transmittance { get; private set; }
@@ -57,13 +58,15 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             return;
         }
 
-        var needsAllocate = !Allocated || !Matches(allocatedBudget, budget);
+        var needsAllocate = !Allocated ||
+                            !Matches(allocatedBudget, budget) ||
+                            allocatedAerialPerspective != features.AtmosphereAerialPerspective;
         if (needsAllocate)
         {
             rstate.BeginPassTimer("vol_atmosphere_allocate");
             try
             {
-                Allocate(rstate, budget);
+                Allocate(rstate, budget, features.AtmosphereAerialPerspective);
             }
             finally
             {
@@ -74,10 +77,11 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         global::LibreLancer.Render.RenderMaterial.SetAtmosphereLutSource(Transmittance, MultiScattering);
         global::LibreLancer.Render.RenderMaterial.SetAtmosphereAerialSource(
             AerialPerspective,
-            new System.Numerics.Vector4(1f, Math.Max(1f, budget.AerialDepth * 1000f), 0f, 0f));
+            new System.Numerics.Vector4(features.AtmosphereAerialPerspective ? 1f : 0f,
+                Math.Max(1f, budget.AerialDepth * 1000f), 0f, 0f));
         LastDebug = new VolumetricAtmosphereResourceDebug(
             true,
-            budget.DebugSummary,
+            $"{budget.DebugSummary} aerial={(features.AtmosphereAerialPerspective ? "profile" : "identity")}",
             $"{budget.TransmittanceWidth}x{budget.TransmittanceHeight}x1 / " +
             $"{budget.MultiScatteringSize}x{budget.MultiScatteringSize}x1 / " +
             $"{budget.AerialWidth}x{budget.AerialHeight}x{budget.AerialDepth}",
@@ -148,7 +152,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         return true;
     }
 
-    private void Allocate(RenderContext rstate, VolumetricAtmosphereLutBudget budget)
+    private void Allocate(RenderContext rstate, VolumetricAtmosphereLutBudget budget, bool aerialPerspective)
     {
         DisposeTextures();
         Transmittance = new Texture3D(rstate, budget.TransmittanceWidth, budget.TransmittanceHeight, 1,
@@ -159,8 +163,16 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
             SurfaceFormat.HdrBlendable, storage: true);
         FillTransmittanceIdentity(Transmittance);
         FillZero(MultiScattering);
-        FillAerialIdentity(AerialPerspective);
+        if (aerialPerspective)
+        {
+            FillAerialPerspective(AerialPerspective, budget.Quality);
+        }
+        else
+        {
+            FillAerialIdentity(AerialPerspective);
+        }
         allocatedBudget = budget;
+        allocatedAerialPerspective = aerialPerspective;
         generation++;
     }
 
@@ -191,11 +203,41 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         texture.SetData(data);
     }
 
+    private static void FillAerialPerspective(Texture3D texture, int quality)
+    {
+        var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
+        var index = 0;
+        var invW = texture.Width > 1 ? 1f / (texture.Width - 1) : 0f;
+        var invH = texture.Height > 1 ? 1f / (texture.Height - 1) : 0f;
+        var invD = texture.Depth > 1 ? 1f / (texture.Depth - 1) : 0f;
+        for (var z = 0; z < texture.Depth; z++)
+        {
+            var distanceT = z * invD;
+            for (var y = 0; y < texture.Height; y++)
+            {
+                var screenY = y * invH;
+                for (var x = 0; x < texture.Width; x++)
+                {
+                    var screenX = x * invW;
+                    var sample = VolumetricAtmosphereAerialProfile.Evaluate(screenX, screenY, distanceT, quality);
+                    data[index++] = FloatToHalfBits(sample.X);
+                    data[index++] = FloatToHalfBits(sample.Y);
+                    data[index++] = FloatToHalfBits(sample.Z);
+                    data[index++] = FloatToHalfBits(sample.W);
+                }
+            }
+        }
+        texture.SetData(data);
+    }
+
     private static void FillZero(Texture3D texture)
     {
         var data = new ushort[checked(texture.Width * texture.Height * texture.Depth * 4)];
         texture.SetData(data);
     }
+
+    private static ushort FloatToHalfBits(float value) =>
+        BitConverter.HalfToUInt16Bits((Half)Math.Clamp(value, 0f, 1f));
 
     private void DisposeTextures()
     {
@@ -206,6 +248,7 @@ public sealed class VolumetricAtmosphereFrameResources : IDisposable
         MultiScattering = null;
         AerialPerspective = null;
         allocatedBudget = default;
+        allocatedAerialPerspective = false;
     }
 
     private void ThrowIfDisposed()

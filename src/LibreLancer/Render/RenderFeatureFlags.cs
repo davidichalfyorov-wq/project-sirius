@@ -26,7 +26,8 @@ public enum RenderFeatureBits
     VolumetricLightningDeterministic = 1 << 16,
     VolumetricLightningGoldenDisable = 1 << 17,
     VolumetricAdaptiveQuality = 1 << 18,
-    VolumetricGodRays = 1 << 19
+    VolumetricGodRays = 1 << 19,
+    AtmosphereAerialPerspective = 1 << 20
 }
 
 /// <summary>
@@ -92,6 +93,7 @@ public readonly record struct RenderFeatureSet(
     public bool VolumetricWakeCurl => Bits.HasFlag(RenderFeatureBits.VolumetricWakeCurl);
     public bool VolumetricAdaptiveQuality => Bits.HasFlag(RenderFeatureBits.VolumetricAdaptiveQuality);
     public bool AtmosphereLuts => Bits.HasFlag(RenderFeatureBits.AtmosphereLuts);
+    public bool AtmosphereAerialPerspective => Bits.HasFlag(RenderFeatureBits.AtmosphereAerialPerspective);
     public bool DebugMarkers => Bits.HasFlag(RenderFeatureBits.DebugMarkers);
     public bool CaptureTooling => Bits.HasFlag(RenderFeatureBits.CaptureTooling);
 
@@ -147,6 +149,9 @@ public readonly record struct RenderFeatureSet(
             bits |= RenderFeatureBits.VolumetricNearDetail;
         if (OverrideBool(settings.SelectedAtmosphereLuts, "SIRIUS_ATMOSPHERE_LUTS", "SIRIUS_ATMO_LUTS"))
             bits |= RenderFeatureBits.AtmosphereLuts;
+        if (OverrideBool(settings.SelectedAtmosphereAerialPerspective, "SIRIUS_ATMOSPHERE_AERIAL",
+                "SIRIUS_ATMO_AERIAL", "SIRIUS_AERIAL_PERSPECTIVE"))
+            bits |= RenderFeatureBits.AtmosphereAerialPerspective;
         if (OverrideBool(settings.SelectedRenderDebugMarkers, "SIRIUS_RENDER_DEBUG_MARKERS", "SIRIUS_DEBUG_MARKERS"))
             bits |= RenderFeatureBits.DebugMarkers;
         if (OverrideBool(settings.SelectedRenderCaptureStartup || settings.SelectedRenderCaptureNextFrame,
@@ -199,6 +204,10 @@ public readonly record struct RenderFeatureSet(
         if ((bits & RenderFeatureBits.VolumetricWakeHistory) == 0)
         {
             bits &= ~RenderFeatureBits.VolumetricWakeCurl;
+        }
+        if ((bits & RenderFeatureBits.AtmosphereLuts) == 0)
+        {
+            bits &= ~RenderFeatureBits.AtmosphereAerialPerspective;
         }
 
         var debugView = ParseDebugView(

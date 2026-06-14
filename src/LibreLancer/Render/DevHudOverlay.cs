@@ -198,6 +198,8 @@ public class DevHudOverlay
             Line($"vol near   {(features.VolumetricNearCascade ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"vol ship   {(features.VolumetricShipDisplacement ? "on/stub" : "off")}", Color4.LightSkyBlue);
             Line($"atmo luts  {(features.AtmosphereLuts ? "on/stub" : "off")}", Color4.LightSkyBlue);
+            Line($"atmo aer   {(features.AtmosphereLuts ? (features.AtmosphereAerialPerspective ? "profile" : "identity") : "off")}",
+                Color4.LightSkyBlue);
             if (features.AtmosphereLuts)
             {
                 var viewport = game.RenderContext.CurrentViewport;

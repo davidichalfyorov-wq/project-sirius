@@ -143,6 +143,8 @@ namespace LibreLancer
         public bool VolumetricAdaptiveQuality = true;
         [Entry("atmosphere_luts")]
         public bool AtmosphereLuts = false;
+        [Entry("atmosphere_aerial")]
+        public bool AtmosphereAerial = false;
         // 0 low, 1 medium, 2 high, 3 ultra. High matches the P5 baseline.
         [Entry("volumetric_quality")]
         public int VolumetricQuality = 2;
@@ -223,6 +225,7 @@ namespace LibreLancer
                 "vol_jitter" or "voljitter" or "jitter" or "vol_blue_noise" or "vol_stbn" => "vol_jitter",
                 "vol_near_density" or "volneardensity" or "near_density" or "neardensity" => "vol_near_density",
                 "atmosphere_luts" or "atmoluts" or "atmo_luts" => "atmosphere_luts",
+                "atmosphere_aerial" or "atmoaerial" or "atmo_aerial" or "aerial_perspective" => "atmosphere_aerial",
                 "atmo_aerial" or "atmoaerial" or "aerial" => "atmo_aerial",
                 _ => "off"
             };
@@ -282,6 +285,7 @@ namespace LibreLancer
         bool IRendererSettings.SelectedVolumetricBlueNoise => Phase5BlueNoiseEnabled;
         bool IRendererSettings.SelectedVolumetricAdaptiveQuality => Phase5AdaptiveQualityEnabled;
         bool IRendererSettings.SelectedAtmosphereLuts => AtmosphereLuts;
+        bool IRendererSettings.SelectedAtmosphereAerialPerspective => AtmosphereLuts && AtmosphereAerial;
         int IRendererSettings.SelectedVolumetricQuality => VolumetricQuality;
         string IRendererSettings.SelectedDebugView => DebugView;
         bool IRendererSettings.SelectedRenderDebugMarkers => RenderDebugMarkers;
@@ -361,6 +365,7 @@ namespace LibreLancer
             writer.WriteLine($"volumetric_blue_noise = {(VolumetricBlueNoise ? "true" : "false")}");
             writer.WriteLine($"volumetric_adaptive_quality = {(VolumetricAdaptiveQuality ? "true" : "false")}");
             writer.WriteLine($"atmosphere_luts = {(AtmosphereLuts ? "true" : "false")}");
+            writer.WriteLine($"atmosphere_aerial = {(AtmosphereAerial ? "true" : "false")}");
             writer.WriteLine($"volumetric_quality = {VolumetricQuality}");
             writer.WriteLine($"debug_view = {DebugView}");
             writer.WriteLine($"dev_hud = {(DevHud ? "true" : "false")}");
@@ -435,6 +440,7 @@ namespace LibreLancer
                 VolumetricBlueNoise = VolumetricBlueNoise,
                 VolumetricAdaptiveQuality = VolumetricAdaptiveQuality,
                 AtmosphereLuts = AtmosphereLuts,
+                AtmosphereAerial = AtmosphereAerial,
                 VolumetricQuality = VolumetricQuality,
                 DebugView = DebugView,
                 DevHud = DevHud,
@@ -582,6 +588,11 @@ namespace LibreLancer
             {
                 FLLog.Info("Config", "atmosphere_luts requires compute support, disabling.");
                 AtmosphereLuts = false;
+            }
+            if (AtmosphereAerial && !AtmosphereLuts)
+            {
+                FLLog.Info("Config", "atmosphere_aerial requires atmosphere_luts, disabling.");
+                AtmosphereAerial = false;
             }
             VolumetricQuality = System.Math.Clamp(VolumetricQuality, 0, 3);
             if (string.IsNullOrWhiteSpace(DebugView))
