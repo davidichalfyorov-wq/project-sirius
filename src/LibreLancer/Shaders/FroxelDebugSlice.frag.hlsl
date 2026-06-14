@@ -101,6 +101,13 @@ float4 main(Input input) : SV_Target0
         float luma = dot(sky, float3(0.2126, 0.7152, 0.0722));
         color = sky + luma.xxx * float3(0.04, 0.05, 0.08);
     }
+    else if (mode == 16)
+    {
+        float selfShadow = saturate(density.a);
+        float lightEnergy = dot(saturate(density.rgb * 2.0), float3(0.2126, 0.7152, 0.0722));
+        color = lerp(float3(0.04, 0.025, 0.018), float3(0.80, 0.90, 1.0), selfShadow);
+        color += lightEnergy.xxx * float3(0.08, 0.10, 0.13);
+    }
     else
     {
         float3 axis = float3(input.texCoord, z);

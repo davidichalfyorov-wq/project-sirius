@@ -503,6 +503,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         }
         var debugSource = debugView switch
         {
+            RenderDebugView.VolumetricSelfShadow => Lighting,
             RenderDebugView.VolumetricLightning => Lighting,
             RenderDebugView.VolumetricLightningMask => Lighting,
             RenderDebugView.VolumetricHistory => TemporalAppliedThisFrame ? HistoryPrevious : History,
@@ -529,7 +530,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         rstate.Samplers[1] = SamplerState.LinearClamp;
         var sliceParams = new FroxelDebugSliceParams
         {
-            SliceParams = new Vector4(0.5f, mode == 2 ? 1f : 4f, mode, 1f),
+            SliceParams = new Vector4(0.5f, mode is 2 or 16 ? 1f : 4f, mode, 1f),
             GridParams = new Vector4(debugGrid.Width, debugGrid.Height, debugGrid.Depth, generation)
         };
         shader.SetUniformBlock(3, ref sliceParams);
@@ -1234,6 +1235,7 @@ public sealed class VolumetricNebulaFrameResources : IDisposable
         RenderDebugView.VolumetricFroxels or RenderDebugView.VolumetricZones => 3,
         RenderDebugView.VolumetricDisplacement => 4,
         RenderDebugView.VolumetricDisplacementHistory => 4,
+        RenderDebugView.VolumetricSelfShadow => 16,
         RenderDebugView.VolumetricLightning => 5,
         RenderDebugView.VolumetricLightningMask => 11,
         RenderDebugView.VolumetricHistory => 6,

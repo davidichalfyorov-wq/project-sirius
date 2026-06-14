@@ -1068,6 +1068,7 @@ namespace LibreLancer.Render
                                   RenderDebugView.VolumetricDisplacementHistory or
                                   RenderDebugView.VolumetricWakeVectors or
                                   RenderDebugView.VolumetricGodRays or
+                                  RenderDebugView.VolumetricSelfShadow or
                                   RenderDebugView.VolumetricLightning or
                                   RenderDebugView.VolumetricLightningMask or
                                   RenderDebugView.VolumetricHistory or

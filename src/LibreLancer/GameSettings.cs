@@ -237,6 +237,7 @@ namespace LibreLancer
                 "vol_displacement_history" or "voldisphistory" or "vol_wake_history" or "wake_history" => "vol_displacement_history",
                 "vol_wake_vectors" or "wake_vectors" or "volwakevectors" or "vol_curl" or "wake_curl" => "vol_wake_vectors",
                 "vol_god_rays" or "volgodrays" or "god_rays" or "sun_burnthrough" or "vol_burnthrough" => "vol_god_rays",
+                "vol_self_shadow" or "volselfshadow" or "self_shadow" or "selfshadow" or "vol_shadowing" => "vol_self_shadow",
                 "vol_lightning" or "vollightning" or "lightning_channels" or "vol_lightning_channels" => "vol_lightning",
                 "vol_lightning_mask" or "vollightningmask" or "lightning_mask" or "vol_lightning_debug" => "vol_lightning_mask",
                 "vol_history" or "volhistory" or "history" or "volumetric_history" => "vol_history",
