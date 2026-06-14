@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using LibreLancer.Graphics;
 using LibreLancer.Graphics.Vertices;
 using LibreLancer.Resources;
+using LibreLancer.Render.Volumetrics;
 using LibreLancer.Shaders;
 using LibreLancer.Utf.Mat;
 
@@ -56,11 +57,11 @@ namespace LibreLancer.Render.Materials
                 // fragment position, the center and this ratio alone.
                 ShellScale = Scale,
                 PlanetCenter = new Vector4(w.Translation, 0),
-                AtmoLutParams = new Vector4(
-                    AtmosphereLutSettings.X,
-                    AtmosphereCloudShellSettings.X,
+                AtmoLutParams = VolumetricAtmosphereAuxBinding.BuildLutParams(
+                    AtmosphereLutSettings.X > 0f,
+                    AtmosphereCloudShell != null && AtmosphereCloudShellSettings.X > 0f,
                     AtmosphereCloudShellSettings.Y,
-                    AtmosphereCloudShell == null && AtmosphereSkyView != null ? 1f : 0f)
+                    AtmosphereSkyView != null)
             };
             if (GetTexture(0, DtSampler) == null)
                 p.Oc = 0;
