@@ -269,6 +269,17 @@ namespace LibreLancer
                         saveBytes = System.Text.Encoding.ASCII.GetBytes(text);
                         FLLog.Info("Autoplay", $"Spawn override: {spawnParts[0]} / {spawnParts[1]}");
                     }
+                    // SIRIUS_SHIP="<archetype>" swaps the player ship archetype
+                    // in the fresh save so the golden pose frames any hull for
+                    // per-ship PBR-wire FLIP tests (e.g. li_elite, li_freighter).
+                    if (Environment.GetEnvironmentVariable("SIRIUS_SHIP") is { Length: > 0 } shipOverride)
+                    {
+                        var text = System.Text.Encoding.ASCII.GetString(saveBytes);
+                        text = System.Text.RegularExpressions.Regex.Replace(
+                            text, @"(?m)^ship_archetype = .*$", "ship_archetype = " + shipOverride.Trim());
+                        saveBytes = System.Text.Encoding.ASCII.GetBytes(text);
+                        FLLog.Info("Autoplay", $"Ship override: {shipOverride.Trim()}");
+                    }
                     embeddedServer.StartFromSave("EXE\\newplayer.fl", saveBytes);
                     state.Game.ChangeState(new NetWaitState(session, state.Game));
                 });
