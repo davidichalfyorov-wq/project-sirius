@@ -164,10 +164,38 @@ namespace LibreLancer.Render
             if (Settings.SelectedIbl)
             {
                 var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+                // Ф2.0.3: warm star key for the coloured hemispheric ambient.
+                // Brightest directional = the visible sun; light TRAVELS along
+                // Direction, so the sun sits at -Direction. Magnitude from env
+                // SIRIUS_IBL_STARKEY (default 0 = bitwise-neutral probe).
+                var starKeyEnv = System.Environment.GetEnvironmentVariable("SIRIUS_IBL_STARKEY");
+                var starKeyMag = !string.IsNullOrWhiteSpace(starKeyEnv)
+                    && float.TryParse(starKeyEnv, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var skv) && skv > 0f
+                    ? skv : 0f;
+                Vector3? starKeyDir = null;
+                var starKeyWarm = Vector3.Zero;
+                if (starKeyMag > 0f)
+                {
+                    DynamicLight? brightest = null;
+                    float bestLum = 0f;
+                    foreach (var dl in SystemLighting.Lights)
+                    {
+                        if (dl.Light.Kind != LightKind.Directional) continue;
+                        var lum = dl.Light.Color.R + dl.Light.Color.G + dl.Light.Color.B;
+                        if (lum > bestLum) { bestLum = lum; brightest = dl; }
+                    }
+                    if (brightest != null && brightest.Light.Direction.LengthSquared() > 1e-6f)
+                    {
+                        starKeyDir = -Vector3.Normalize(brightest.Light.Direction);
+                        var c = brightest.Light.Color;
+                        starKeyWarm = new Vector3(c.R, c.G, c.B);
+                    }
+                }
                 SystemLighting.Ibl = EnvironmentProbe.Build(rstate, resman,
                     system.StarsNebulaCubemap ?? system.StarsComplexCubemap ?? system.StarsBasicCubemap,
-                    system.AmbientColor);
-                FLLog.Info("IBL", $"Environment probe for {system.Nickname} built in {loadTimer.ElapsedMilliseconds} ms");
+                    system.AmbientColor, starKeyDir, starKeyWarm, starKeyMag);
+                FLLog.Info("IBL", $"Environment probe for {system.Nickname} built in {loadTimer.ElapsedMilliseconds} ms (starkey {starKeyMag:0.##})");
             }
 
             StarSphereModels = starSphereRenderData.ToArray();

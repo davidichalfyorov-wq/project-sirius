@@ -57,7 +57,8 @@ public sealed class EnvironmentProbe : IDisposable
 
     /// <summary>Builds the probe; null only on unexpected read errors.</summary>
     public static EnvironmentProbe Build(RenderContext rstate, ResourceManager resources,
-        string? cubemapPath, Color3f ambientFallback)
+        string? cubemapPath, Color3f ambientFallback,
+        Vector3? starKeyDir = null, Vector3 starKeyWarm = default, float starKeyMag = 0f)
     {
         Vector3[][] faces;
         if (!string.IsNullOrWhiteSpace(cubemapPath) && resources.ResourceExists(cubemapPath))
@@ -75,6 +76,17 @@ public sealed class EnvironmentProbe : IDisposable
         else
         {
             faces = AmbientFaces(ambientFallback);
+        }
+
+        // Ф2.0.3: colored hemispheric ambient. A warm key toward the sun would
+        // only re-light the already-direct-lit side; anti-blackness needs the
+        // SHADOW faces (pointing away from the sun) to integrate a non-zero
+        // COOL fill. So inject a smooth warm->cool gradient into the linear
+        // faces before convolution. starKeyMag == 0 (default) => no change =>
+        // bitwise-neutral probe.
+        if (starKeyMag > 0f && starKeyDir is Vector3 sunDir && sunDir.LengthSquared() > 1e-6f)
+        {
+            InjectAmbientGradient(faces, Vector3.Normalize(sunDir), starKeyWarm, starKeyMag);
         }
 
         var specular = new TextureCube(rstate, SpecularSize, true, SurfaceFormat.Bgra8);
@@ -117,6 +129,33 @@ public sealed class EnvironmentProbe : IDisposable
             Array.Fill(faces[face], linear);
         }
         return faces;
+    }
+
+    /// <summary>
+    /// Ф2.0.3: adds a smooth warm->cool hemispheric ambient to the linear
+    /// faces. <paramref name="sunDir"/> points TOWARD the star; texels facing
+    /// it get the (hue-preserved) warm key, texels facing away get a cool blue
+    /// fill, everywhere non-zero so the irradiance convolution lifts the
+    /// shadow side out of pure black. Magnitude is the peak added radiance.
+    /// </summary>
+    private static void InjectAmbientGradient(Vector3[][] faces, Vector3 sunDir, Vector3 warm, float mag)
+    {
+        var wmax = MathF.Max(warm.X, MathF.Max(warm.Y, MathF.Max(warm.Z, 1e-4f)));
+        var warmN = warm / wmax;                          // hue preserved, peak ~1
+        var cool = new Vector3(0.30f, 0.45f, 0.85f);      // cool blue fill
+        for (var face = 0; face < 6; face++)
+        {
+            var f = faces[face];
+            for (var y = 0; y < SpecularSize; y++)
+            {
+                for (var x = 0; x < SpecularSize; x++)
+                {
+                    var dir = TexelDirection(face, x, y, SpecularSize);
+                    var t = Math.Clamp(Vector3.Dot(dir, sunDir) * 0.5f + 0.5f, 0f, 1f);
+                    f[y * SpecularSize + x] += (cool * (1f - t) + warmN * t) * mag;
+                }
+            }
+        }
     }
 
     /// <summary>DXT cubemap faces decoded and box-reduced to SpecularSize, linear floats.</summary>
