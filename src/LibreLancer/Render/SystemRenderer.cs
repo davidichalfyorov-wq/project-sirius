@@ -164,15 +164,11 @@ namespace LibreLancer.Render
             if (Settings.SelectedIbl)
             {
                 var loadTimer = System.Diagnostics.Stopwatch.StartNew();
-                // Ф2.0.3: warm star key for the coloured hemispheric ambient.
-                // Brightest directional = the visible sun; light TRAVELS along
-                // Direction, so the sun sits at -Direction. Magnitude from env
-                // SIRIUS_IBL_STARKEY (default 0 = bitwise-neutral probe).
-                var starKeyEnv = System.Environment.GetEnvironmentVariable("SIRIUS_IBL_STARKEY");
-                var starKeyMag = !string.IsNullOrWhiteSpace(starKeyEnv)
-                    && float.TryParse(starKeyEnv, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var skv) && skv > 0f
-                    ? skv : 0f;
+                // Ф2.0.3/2.0.4: warm star key for the coloured hemispheric
+                // ambient. Magnitude from SIRIUS_IBL_STARKEY env (testing) else
+                // GameSettings.IblStarKey (production default on). 0 = neutral.
+                var starKeyMag = IblEnvFloat("SIRIUS_IBL_STARKEY")
+                    ?? (game.GetService<GameSettings>()?.IblStarKey ?? 0f);
                 Vector3? starKeyDir = null;
                 var starKeyWarm = Vector3.Zero;
                 if (starKeyMag > 0f)
@@ -246,6 +242,17 @@ namespace LibreLancer.Render
         {
             useSystemCubemapStarspheres = false;
             Array.Clear(starSphereLayerModels, 0, starSphereLayerModels.Length);
+        }
+
+        // Ф2.0.4: parse a non-negative float env override (null if unset/bad),
+        // so SIRIUS_IBL_* can override the GameSettings IBL knobs for testing.
+        private static float? IblEnvFloat(string name)
+        {
+            var s = System.Environment.GetEnvironmentVariable(name);
+            return !string.IsNullOrWhiteSpace(s)
+                && float.TryParse(s, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0f
+                ? v : (float?)null;
         }
 
         public void LoadLights(StarSystem system)
@@ -543,6 +550,10 @@ namespace LibreLancer.Render
             RenderMaterial.RtShadowsActive = false;
             RenderMaterial.RtaoActive = false;
             RenderMaterial.RtReflectionsActive = false;
+            // Ф2.0.2/2.0.4: push the IBL intensity multiplier every frame from
+            // SIRIUS_IBL_INTENSITY env (testing) else GameSettings (1 = neutral).
+            RenderMaterial.IblIntensity = IblEnvFloat("SIRIUS_IBL_INTENSITY")
+                ?? (game.GetService<GameSettings>()?.IblIntensity ?? 1f);
             // Space scenes only: a loaded star system marks a real space
             // scene (THN sets light their own way and the cascade fit around
             // their cameras self-shadows everything). NOT HasSunRenderer():

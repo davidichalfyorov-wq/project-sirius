@@ -199,19 +199,12 @@ namespace LibreLancer.Render
                 _ => 0
             };
 
-        // Ф2.0.2: IBL probe intensity multiplier (anti-blackness of ships).
-        // SIRIUS_IBL_INTENSITY env, default 1 = bitwise-neutral. Applied
-        // post-sample in linear (PBR.frag.hlsl) so the sRGB-8bit probe store
-        // does not clamp the boost. INI key + low/med/high/ultra tier = Ф2.0.4.
-        public static readonly float IblIntensity = ParseIblIntensity();
-        private static float ParseIblIntensity()
-        {
-            var s = Environment.GetEnvironmentVariable("SIRIUS_IBL_INTENSITY");
-            return !string.IsNullOrWhiteSpace(s)
-                && float.TryParse(s, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0f
-                ? v : 1f;
-        }
+        // Ф2.0.2: IBL probe intensity multiplier (anti-blackness of ships),
+        // applied post-sample in linear (PBR.frag.hlsl) so the sRGB-8bit probe
+        // store does not clamp the boost. 1 = bitwise-neutral. SystemRenderer
+        // pushes this each frame from SIRIUS_IBL_INTENSITY env or GameSettings
+        // (Ф2.0.4); the static default keeps non-system paths neutral.
+        public static float IblIntensity = 1f;
 
         // G-buffer MRT (graphics phase 0.1). Env-gated until the settings UI
         // lands (checklist 0.1.8); default off => renderer is byte-identical.

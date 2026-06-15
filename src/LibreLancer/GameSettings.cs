@@ -90,6 +90,15 @@ namespace LibreLancer
         public string PostAA = "fxaa";
         [Entry("ibl")]
         public bool Ibl = true;
+        // Ф2.0.2: post-sample IBL intensity multiplier (1 = neutral). Tunable
+        // strength of the environment ambient on PBR surfaces.
+        [Entry("ibl_intensity")]
+        public float IblIntensity = 1.0f;
+        // Ф2.0.3: coloured hemispheric ambient strength (warm star key + cool
+        // fill) injected into the probe. >0 lifts ship shadow sides out of
+        // black; default on for visibility. 0 = neutral (pure starsphere probe).
+        [Entry("ibl_starkey")]
+        public float IblStarKey = 0.35f;
         [Entry("shadows")]
         public bool Shadows = true;
         // Phase 4 ray-traced sun shadows; requires ray query support.
