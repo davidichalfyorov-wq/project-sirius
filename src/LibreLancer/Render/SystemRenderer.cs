@@ -177,19 +177,35 @@ namespace LibreLancer.Render
                 var starKeyWarm = Vector3.Zero;
                 if (starKeyMag > 0f)
                 {
-                    DynamicLight? brightest = null;
-                    float bestLum = 0f;
+                    // Pick the sun = warmest-bright light (highest red channel)
+                    // that has a USABLE direction. A directional with a real
+                    // direction wins; but Freelancer suns are often a
+                    // DYNAMIC_DIRECTION directional (Direction == 0 at load),
+                    // so fall back to a light's world Position (point suns).
+                    float bestRed = 0f;
                     foreach (var dl in SystemLighting.Lights)
                     {
-                        if (dl.Light.Kind != LightKind.Directional) continue;
-                        var lum = dl.Light.Color.R + dl.Light.Color.G + dl.Light.Color.B;
-                        if (lum > bestLum) { bestLum = lum; brightest = dl; }
-                    }
-                    if (brightest != null && brightest.Light.Direction.LengthSquared() > 1e-6f)
-                    {
-                        starKeyDir = -Vector3.Normalize(brightest.Light.Direction);
-                        var c = brightest.Light.Color;
-                        starKeyWarm = new Vector3(c.R, c.G, c.B);
+                        Vector3 dir;
+                        if (dl.Light.Kind == LightKind.Directional
+                            && dl.Light.Direction.LengthSquared() > 1e-6f)
+                        {
+                            dir = -Vector3.Normalize(dl.Light.Direction);
+                        }
+                        else if (dl.Light.Position.LengthSquared() > 1e-6f)
+                        {
+                            dir = Vector3.Normalize(dl.Light.Position);
+                        }
+                        else
+                        {
+                            continue; // no usable direction (e.g. zero DYNAMIC_DIRECTION)
+                        }
+                        if (dl.Light.Color.R > bestRed)
+                        {
+                            bestRed = dl.Light.Color.R;
+                            starKeyDir = dir;
+                            var c = dl.Light.Color;
+                            starKeyWarm = new Vector3(c.R, c.G, c.B);
+                        }
                     }
                 }
                 SystemLighting.Ibl = EnvironmentProbe.Build(rstate, resman,
