@@ -107,6 +107,19 @@ namespace LibreLancer.Render
                 lights.FogMode = FogModes.Linear;
                 lights.FogColor = new Color3f(fogcolor.R, fogcolor.G, fogcolor.B);
                 lights.FogRange = fogrange;
+                // Ф2.6: bathe surfaces in the nebula's visible colour so ships
+                // integrate with the fog instead of looking pasted-on against
+                // it. The nebula 'ambient' above is often dim/neutral; the fog
+                // colour is the hue the player actually sees. Default strength
+                // 0 = neutral (SIRIUS_NEBULA_IBL).
+                var nk = RenderMaterial.NebulaIblStrength;
+                if (nk > 0f)
+                {
+                    lights.Ambient = new Color3f(
+                        lights.Ambient.R + fogcolor.R * nk,
+                        lights.Ambient.G + fogcolor.G * nk,
+                        lights.Ambient.B + fogcolor.B * nk);
+                }
             }
 
             if (lightning == null || src.NumberOfTilesX != -1)

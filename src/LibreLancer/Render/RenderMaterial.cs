@@ -206,6 +206,21 @@ namespace LibreLancer.Render
         // (Ф2.0.4); the static default keeps non-system paths neutral.
         public static float IblIntensity = 1f;
 
+        // Ф2.6: nebula -> IBL. Inside a nebula the ship's ambient is bathed in
+        // the nebula's visible FOG colour (× this strength) so PBR/legacy hulls
+        // integrate with the fog instead of looking pasted-on. SIRIUS_NEBULA_IBL
+        // env, default 0 = bitwise-neutral; only affects scenes inside a nebula
+        // (the golden Li01-Manhattan pose has no nebula, so goldens unchanged).
+        public static readonly float NebulaIblStrength = ParseNebulaIbl();
+        private static float ParseNebulaIbl()
+        {
+            var s = Environment.GetEnvironmentVariable("SIRIUS_NEBULA_IBL");
+            return !string.IsNullOrWhiteSpace(s)
+                && float.TryParse(s, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0f
+                ? v : 0f;
+        }
+
         // G-buffer MRT (graphics phase 0.1). Env-gated until the settings UI
         // lands (checklist 0.1.8); default off => renderer is byte-identical.
         // GBufferActive binds RT1 (world-normal + roughness) in the opaque
